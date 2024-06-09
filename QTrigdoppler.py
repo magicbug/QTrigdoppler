@@ -303,12 +303,15 @@ class ConfigWindow(QMainWindow):
         self.radiolistcomb.addItems(['Icom 9700'])
         self.radiolistcomb.addItems(['Icom 705'])
         self.radiolistcomb.addItems(['Yaesu 818'])
+        self.radiolistcomb.addItems(['Icom 910H'])
         if configur['icom']['radio'] == '9700':
             self.radiolistcomb.setCurrentText('Icom 9700')
         elif configur['icom']['radio'] == '705':
             self.radiolistcomb.setCurrentText('Icom 705')
         elif configur['icom']['radio'] == '818':
             self.radiolistcomb.setCurrentText('Yaesu 818')
+        elif configur['icom']['radio'] == '910':
+            self.radiolistcomb.setCurrentText('Icom 910H')
         radio_layout.addWidget(self.radiolistcomb)
 
         # 1x Label CVI address
@@ -469,6 +472,8 @@ class ConfigWindow(QMainWindow):
             RADIO = configur['icom']['radio'] = '705'
         elif self.radiolistcomb.currentText() == "Yaesu 818":
             RADIO = configur['icom']['radio'] = '818'
+        elif self.radiolistcomb.currentText() == "Icom 910H":
+            RADIO = configur['icom']['radio'] = '910'
 
         if self.radidplx.isChecked():
             OPMODE = True
@@ -852,6 +857,11 @@ class MainWindow(QMainWindow):
                     cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x27\\0x15\\0x00\\0x00\\0x50\\0x00\\0x00\\0x00\\0xFD 22\n"
                     s.sendall(cmds.encode('utf-8'))
                     time.sleep(0.2)
+                elif RADIO == "910":
+                    # turn off satellite mode
+                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x07\\0x00\\0xFD 14\n"
+                    s.sendall(cmds.encode('utf-8'))
+                    time.sleep(0.2)
                 elif ( RADIO == "705" or "818" ) and OPMODE == False:
                     #check SPLIT operation
                     F_string = "s\n"
@@ -1089,7 +1099,7 @@ class Worker(QRunnable):
             self.signals.finished.emit()  # Done
 
 ## Starts here:
-if RADIO != "9700" and RADIO != "705" and RADIO != "818":
+if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
     print("***  Icom radio not supported: {badmodel}".format(badmodel=RADIO))
     sys.exit()
 
