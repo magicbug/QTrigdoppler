@@ -116,6 +116,7 @@ class Satellite:
     I = 0
     I_init = 0
     tledata = ""
+    rig_satmode = 0
 
 class ConfigWindow(QMainWindow):
     def __init__(self):
@@ -725,6 +726,11 @@ class MainWindow(QMainWindow):
                     self.my_satellite.downmode =  lineb.split(",")[3].strip()
                     self.my_satellite.upmode =  lineb.split(",")[4].strip()
                     self.my_satellite.mode =  lineb.split(",")[5].strip()
+                    #  check if frequencies are in the same band: e.g. U/U, V/V vs V/U, U/V
+                    if abs(self.my_satellite.F - self.my_satellite.I) > 10000000:
+                        self.my_satellite.rig_satmode = 1
+                    else:
+                        self.my_satellite.rig_satmode = 0
                     if self.my_satellite.noradid == 0 or self.my_satellite.F == 0 or self.my_satellite.I == 0:
                         self.Startbutton.setEnabled(False)
                     else:
@@ -840,7 +846,7 @@ class MainWindow(QMainWindow):
                 #################################
                 #       INIT RADIOS
                 #################################
-                if RADIO == "9700":
+                if RADIO == "9700" and self.my_satellite.rig_satmode == 0:
                     # turn off satellite mode
                     cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x16\\0x5A\\0x00\\0xFD 14\n"
                     s.sendall(cmds.encode('utf-8'))
@@ -857,12 +863,21 @@ class MainWindow(QMainWindow):
                     cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x27\\0x15\\0x00\\0x00\\0x50\\0x00\\0x00\\0x00\\0xFD 22\n"
                     s.sendall(cmds.encode('utf-8'))
                     time.sleep(0.2)
-                elif RADIO == "910":
+                elif RADIO == "910" and self.my_satellite.rig_satmode == 0:
                     # turn off satellite mode
                     cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x07\\0x00\\0xFD 14\n"
                     s.sendall(cmds.encode('utf-8'))
                     time.sleep(0.2)
-                elif ( RADIO == "705" or "818" ) and OPMODE == False:
+                elif RADIO == "910" and self.my_satellite.rig_satmode == 1:
+                    # turn on satellite mode
+                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x07\\0x01\\0xFD 14\n"
+                    s.sendall(cmds.encode('utf-8'))
+                    time.sleep(0.2)
+                    # turn off split
+                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x0F\\0x01\\0x00\\0xFD 14\n"
+                    s.sendall(cmds.encode('utf-8'))
+                    time.sleep(0.2)
+                elif ( RADIO == "705" or "818" ) and OPMODE == False and self.my_satellite.rig_satmode == 0:
                     #check SPLIT operation
                     F_string = "s\n"
                     s.send(bytes(F_string, 'ascii'))
