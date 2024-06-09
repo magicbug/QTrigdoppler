@@ -1044,25 +1044,43 @@ class MainWindow(QMainWindow):
                                     else:
                                         I0 -= delta_F
                                         F0 -= delta_F
-
-                    new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata),-1)
-                    if new_rx_doppler != rx_doppler:
-                        rx_doppler = new_rx_doppler
-                        F_string = "F {the_rx_doppler:.0f}\n".format(the_rx_doppler=rx_doppler)  
-                        s.send(bytes(F_string, 'ascii'))
-                        self.my_satellite.F = rx_doppler
+                    if self.my_satellite.rig_satmode == 0 and RADIO == "910":
+                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata),-1)
+                        if new_rx_doppler != rx_doppler:
+                            rx_doppler = new_rx_doppler
+                            F_string = "F Main {the_rx_doppler:.0f}\n".format(the_rx_doppler=rx_doppler)  
+                            s.send(bytes(F_string, 'ascii'))
+                            self.my_satellite.F = rx_doppler
                     
-                    new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata),-1)
-                    if new_tx_doppler != tx_doppler:
-                        tx_doppler = new_tx_doppler
-                        I_string = "I {the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
-                        if OPMODE == False:
-                            s.send(bytes(I_string, 'ascii'))
-                        else:
-                            F2_string = "F {the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
-                            s2.send(bytes(F2_string, 'ascii'))
-                        self.my_satellite.I = tx_doppler
-
+                        new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata),-1)
+                        if new_tx_doppler != tx_doppler:
+                            tx_doppler = new_tx_doppler
+                            I_string = "I Sub{the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
+                            if OPMODE == False:
+                                s.send(bytes(I_string, 'ascii'))
+                            else:
+                                F2_string = "F Main{the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
+                                s2.send(bytes(F2_string, 'ascii'))
+                            self.my_satellite.I = tx_doppler
+                    else:
+                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata),-1)
+                        if new_rx_doppler != rx_doppler:
+                            rx_doppler = new_rx_doppler
+                            F_string = "F {the_rx_doppler:.0f}\n".format(the_rx_doppler=rx_doppler)  
+                            s.send(bytes(F_string, 'ascii'))
+                            self.my_satellite.F = rx_doppler
+                    
+                        new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata),-1)
+                        if new_tx_doppler != tx_doppler:
+                            tx_doppler = new_tx_doppler
+                            I_string = "I {the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
+                            if OPMODE == False:
+                                s.send(bytes(I_string, 'ascii'))
+                            else:
+                                F2_string = "F {the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
+                                s2.send(bytes(F2_string, 'ascii'))
+                            self.my_satellite.I = tx_doppler
+                            
                     time.sleep(1)
 
         except socket.error:
