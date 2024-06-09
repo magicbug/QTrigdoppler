@@ -793,6 +793,7 @@ class MainWindow(QMainWindow):
         SEMAPHORE = INTERACTIVE = False
         self.LogText.append("Stopped")
         self.Startbutton.setEnabled(True)
+        self.combo1.setEnabled(True)
     
     def init_worker(self):
         global SEMAPHORE
@@ -810,6 +811,7 @@ class MainWindow(QMainWindow):
         self.LogText.append("RX Frequency Offset = {rxfreq_off}".format(rxfreq_off=f_cal))
         self.LogText.append("TX Frequency Offset = {txfreq_off}".format(txfreq_off=i_cal))
         self.Startbutton.setEnabled(False)
+        self.combo1.setEnabled(False)
 
         worker = Worker(self.calc_doppler)
 
