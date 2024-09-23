@@ -12,8 +12,10 @@ import time
 import re
 import urllib.request
 import traceback
+import serial
+import Hamlib
+import icom
 
-from contextlib import contextmanager
 from time import gmtime, strftime
 from datetime import datetime, timedelta
 
@@ -25,13 +27,7 @@ from PyQt5.QtCore import *
 
 C = 299792458.
 
-@contextmanager
-def socketcontext(*args, **kwargs):
-    s = socket.socket(*args, **kwargs)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    yield s
-    s.close()
+
 
 def tx_dopplercalc(ephemdata):
     global I0
@@ -44,7 +40,19 @@ def rx_dopplercalc(ephemdata):
     ephemdata.compute(myloc)
     doppler = int(F0 - ephemdata.range_velocity * F0 / C)
     return doppler
+    
+def tx_doppler_val_calc(ephemdata):
+    global I0
+    ephemdata.compute(myloc)
+    doppler = int(ephemdata.range_velocity * I0 / C)
+    return doppler
 
+def rx_doppler_val_calc(ephemdata):
+    global F0
+    ephemdata.compute(myloc)
+    doppler = int(-ephemdata.range_velocity * F0 / C)
+    return doppler
+    
 def MyError():
     print("Failed to find required file!")
     sys.exit()
@@ -60,7 +68,7 @@ except IOError:
     raise MyError()
 
 
-# EA4HCF, params from config.ini
+
 LATITUDE = configur.get('qth','latitude')
 LONGITUDE = configur.get('qth','longitude')
 ALTITUDE = configur.getfloat('qth','altitude')
@@ -103,6 +111,8 @@ myloc.elevation = ALTITUDE
 
 SEMAPHORE = True
 INTERACTIVE = False
+
+icomTrx = icom.icom('/dev/ttyUSB0', '19200', 96)
 
 class Satellite:
     name = ""
@@ -560,7 +570,7 @@ class MainWindow(QMainWindow):
         myFont.setBold(True)
 
         # 1x Label: RX freq
-        self.rxfreqtitle = QLabel("RX freq:")
+        self.rxfreqtitle = QLabel("RX:")
         self.rxfreqtitle.setFont(myFont)
         labels_layout.addWidget(self.rxfreqtitle)
 
@@ -574,9 +584,16 @@ class MainWindow(QMainWindow):
 
         self.rxfreq_onsat = QLabel("0.0")
         labels_layout.addWidget(self.rxfreq_onsat)
+        
+        # 1x Label: RX Doppler Satellite
+        self.rxdopplersat_lbl = QLabel("Doppler:")
+        labels_layout.addWidget(self.rxdopplersat_lbl)
+
+        self.rxdoppler_val = QLabel("0.0")
+        labels_layout.addWidget(self.rxdoppler_val)
 
         # 1x Label: TX freq
-        self.txfreqtitle = QLabel("TX freq:")
+        self.txfreqtitle = QLabel("TX:")
         self.txfreqtitle.setFont(myFont)
         labels_layout.addWidget(self.txfreqtitle)
 
@@ -590,6 +607,13 @@ class MainWindow(QMainWindow):
 
         self.txfreq_onsat = QLabel("0.0")
         labels_layout.addWidget(self.txfreq_onsat)
+        
+        # 1x Label: TX Doppler Satellite
+        self.txdopplersat_lbl = QLabel("Doppler:")
+        labels_layout.addWidget(self.txdopplersat_lbl)
+
+        self.txdoppler_val = QLabel("0.0")
+        labels_layout.addWidget(self.txdoppler_val)
 
         # 1x Label: RX Offset
         self.rxoffsetboxtitle = QLabel("RX Offset:")
@@ -663,7 +687,7 @@ class MainWindow(QMainWindow):
 
         self.threadpool = QThreadPool()
         self.timer = QTimer()
-        self.timer.setInterval(1000)
+        self.timer.setInterval(50)
         self.timer.timeout.connect(self.recurring_timer)
         self.timer.start()
 
@@ -786,16 +810,7 @@ class MainWindow(QMainWindow):
                 self.LogText.append("***  Warning, your TLE file is getting older: {days} days.".format(days=diff))
 
     def the_exit_button_was_clicked(self):
-        if RADIO == "705" or "818":
-            try:
-                with socketcontext(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.connect((ADDRESS, PORT))
-                    #switch off SPLIT operation
-                    F_string = "S 0 VFOB\n"
-                    s.send(bytes(F_string, 'ascii'))
-                    time.sleep(0.2)
-            except socket.error:
-                print("Failed to connect to Rigctld on {addr}:{port} exiting the application.".format(addr=ADDRESS,port=PORT))
+        icomTrx.close()
         sys.exit()
     
     def the_stop_button_was_clicked(self):
@@ -840,9 +855,6 @@ class MainWindow(QMainWindow):
         global I0
         
         try:
-            with socketcontext(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect((ADDRESS, PORT))
-
                 #################################
                 #       INIT RADIOS
                 #################################
@@ -865,18 +877,13 @@ class MainWindow(QMainWindow):
                     time.sleep(0.2)
                 elif RADIO == "910" and self.my_satellite.rig_satmode == 0:
                     # turn off satellite mode
-                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x07\\0x00\\0xFD 14\n"
-                    s.sendall(cmds.encode('utf-8'))
-                    time.sleep(0.2)
+                    # cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x07\\0x00\\0xFD 14\n"
+                    #s.sendall(cmds.encode('utf-8'))
+                    icomTrx.setSatelliteMode(0)
+                    icomTrx.setSplitOn(1)
                 elif RADIO == "910" and self.my_satellite.rig_satmode == 1:
-                    # turn on satellite mode
-                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x07\\0x01\\0xFD 14\n"
-                    s.sendall(cmds.encode('utf-8'))
-                    time.sleep(0.2)
-                    # turn off split
-                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x0F\\0x01\\0x00\\0xFD 14\n"
-                    s.sendall(cmds.encode('utf-8'))
-                    time.sleep(0.2)
+                    icomTrx.setSatelliteMode(1)
+                    icomTrx.setSplitOn(0)
                 elif ( RADIO == "705" or "818" ) and OPMODE == False and self.my_satellite.rig_satmode == 0:
                     #check SPLIT operation
                     F_string = "s\n"
@@ -896,195 +903,134 @@ class MainWindow(QMainWindow):
                 #################################
                 #       SETUP DOWNLINK & UPLINK
                 #################################
-                F_string = "m\n"
-                s.send(bytes(F_string, 'ascii'))
-                time.sleep(0.2)
-                data = s.recv(1024)
-                curr_mode = str(data)
-                print("Current mode VFO-A: ({a})".format(a=curr_mode))
+                icomTrx.setVFO("Main")
+                curr_band = int(icomTrx.getFrequency())
+                if curr_band > 400000000 and F0 < 400000000:
+                    icomTrx.setExchange()
+                elif curr_band < 200000000 and F0 > 200000000:
+                    icomTrx.setExchange()
                 
-                s.sendall(b"V VFOA\n")
-                time.sleep(0.2) 
+                icomTrx.setVFO("Main") 
                 if self.my_satellite.downmode == "FM":
-                    #set VFOA to FM mode
-                    s.sendall(b"M FM 15000\n")
-                    time.sleep(0.2)
+                    icomTrx.setMode("FM")
+                    INTERACTIVE = False
                 elif self.my_satellite.downmode == "FMN":
-                    #set VFOA to WFM mode
-                    s.sendall(b"M WFM 15000\n")
-                    time.sleep(0.2)
+                    icomTrx.setMode("FM")
+                    INTERACTIVE = False
                 elif self.my_satellite.downmode ==  "USB":
                     INTERACTIVE = True
-                    print("Set VFO A modulation to USB...")
-                    #set VFOA to USB mode
-                    s.sendall(b"M USB 3000\n")
-                    time.sleep(0.2)
-                elif (self.my_satellite.downmode == "DATA-USB" or self.my_satellite.downmode == "USB-D"):
-                    #set VFOA to Data USB mode
-                    s.sendall(b"M PKTUSB 3000\n")
-                    time.sleep(0.2)     
+                    icomTrx.setMode("USB")    
                 elif self.my_satellite.downmode == "CW":
                     INTERACTIVE = True
-                    #set VFOA to CW mode
-                    s.sendall(b"M CW 3000\n")
-                    time.sleep(0.2)
+                    icomTrx.setMode("CW") 
                 else:
                     print("*** Downlink mode not implemented yet: {bad}".format(bad=self.my_satellite.downmode))
                     sys.exit()
                 
                 if OPMODE == False:
-                    F_string = "x\n"
-                    s.send(bytes(F_string, 'ascii'))
-                    time.sleep(0.2)
-                    data = s.recv(1024)
-                    curr_mode = str(data)
-                    print("Current mode VFO-B: ({a})".format(a=curr_mode))
-
-                    s.sendall(b"V VFOB\n")
-                    time.sleep(0.2) 
+                    icomTrx.setVFO("Sub") 
                     if self.my_satellite.upmode == "FM":
-                        #set VFOB to FM mode
-                        s.sendall(b"X FM 15000\n")
-                        time.sleep(0.2)
+                        icomTrx.setMode("FM")
                     elif self.my_satellite.upmode == "FMN":
-                        s.sendall(b"X WFM 15000\n")
-                        time.sleep(0.2)
+                        icomTrx.setMode("FM")
                     elif self.my_satellite.upmode == "LSB":
-                        print("Set VFO B modulation to LSB...")
-                        #set VFOB to LSB mode
-                        s.sendall(b"X LSB 3000\n")
-                        time.sleep(0.2)
-                    elif (self.my_satellite.upmode == "DATA-USB" or self.my_satellite.upmode == "USB-D"):
-                        #set VFOB to USB mode
-                        s.sendall(b"X PKTUSB 2400\n")
-                        time.sleep(0.2)     
-                    elif self.my_satellite.upmode == "DATA-LSB":
-                        #set VFOB to LSB mode
-                        s.sendall(b"X PKTLSB 2400\n")
-                        time.sleep(0.2)    
+                        icomTrx.setMode("LSB")    
                     elif self.my_satellite.upmode == "CW":
-                        #set VFOB to CW mode
-                        s.sendall(b"X CW 3000\n")
-                        time.sleep(0.2)
+                        icomTrx.setMode("CW") 
                     else:
                         print("*** Uplink mode not implemented yet: {bad}".format(bad=self.my_satellite.upmode))
                         sys.exit()
-                else:
-                    with socketcontext(socket.AF_INET, socket.SOCK_STREAM) as s2:
-                        s2.connect((ADDRESS, PORT))
-                        
-                        F_string = "m\n"
-                        s2.send(bytes(F_string, 'ascii'))
-                        time.sleep(0.2)
-                        data = s2.recv(1024)
-                        curr_mode = str(data)
-                        print("Current mode VFO-A: ({a})".format(a=curr_mode))
-                        
-                        s2.sendall(b"V VFOA\n")
-                        time.sleep(0.2) 
-                        if self.my_satellite.downmode == "FM":
-                            #set VFOA to FM mode
-                            s2.sendall(b"M FM 15000\n")
-                            time.sleep(0.2)
-                        elif self.my_satellite.downmode == "FMN":
-                            #set VFOA to WFM mode
-                            s2.sendall(b"M WFM 15000\n")
-                            time.sleep(0.2)
-                        elif self.my_satellite.downmode ==  "USB":
-                            INTERACTIVE = True
-                            print("Set VFO A modulation to USB...")
-                            #set VFOA to USB mode
-                            s2.sendall(b"M USB 3000\n")
-                            time.sleep(0.2)
-                        elif (self.my_satellite.downmode == "DATA-USB" or self.my_satellite.downmode == "USB-D"):
-                            #set VFOA to Data USB mode
-                            s2.sendall(b"M PKTUSB 3000\n")
-                            time.sleep(0.2)     
-                        elif self.my_satellite.downmode == "CW":
-                            INTERACTIVE = True
-                            #set VFOA to CW mode
-                            s2.sendall(b"M CW 3000\n")
-                            time.sleep(0.2)
-                        else:
-                            print("*** Downlink mode not implemented yet: {bad}".format(bad=self.my_satellite.downmode))
-                            sys.exit()
 
                 print("All config done, starting doppler...")
-                s.sendall(b"V VFOA\n")
+                icomTrx.setVFO("Main") 
 
                 rx_doppler = F0
                 tx_doppler = I0
+                self.LogText.append("Start RX: {rx}".format(rx=rx_doppler))
+                self.LogText.append("Start TX: {tx}".format(tx=tx_doppler))
+                self.rxdoppler_val.setText(str(float(rx_doppler_val_calc(self.my_satellite.tledata))))
+                self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata))))
+                user_Freq = 0;
+                old_user_Freq = 0;
+                icomTrx.setVFO("Main")
+                icomTrx.setFrequency(str(int(rx_doppler)))
+                icomTrx.setVFO("SUB")
+                icomTrx.setFrequency(str(int(tx_doppler)))
 
                 while SEMAPHORE == True:
                     date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
                     myloc.date = ephem.Date(date_val)
+                    
 
                     if INTERACTIVE == True:
-                        F_string = "f\n"
-                        s.send(bytes(F_string, 'ascii'))
-                        time.sleep(0.2)
-                        data = s.recv(1024)
-                        user_Freq = float(str(data).split('\\n')[0].replace("b\'",'').replace('RPRT',''))
-
-                        if user_Freq > 0:
-                            if abs(user_Freq - self.my_satellite.F) > 100:
-                                if user_Freq > self.my_satellite.F:
-                                    delta_F = user_Freq - self.my_satellite.F
-                                    if self.my_satellite.mode == "REV":
-                                        I0 -= delta_F
-                                        F0 += delta_F
-                                    else:
-                                        I0 += delta_F
-                                        F0 += delta_F
-                                else:
-                                    delta_F = self.my_satellite.F - user_Freq
-                                    if self.my_satellite.mode == "REV":
-                                        I0 += delta_F
-                                        F0 -= delta_F
-                                    else:
-                                        I0 -= delta_F
-                                        F0 -= delta_F
-                    if self.my_satellite.rig_satmode == 0 and RADIO == "910":
-                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata),-1)
-                        if new_rx_doppler != rx_doppler:
-                            rx_doppler = new_rx_doppler
-                            F_string = "F Main {the_rx_doppler:.0f}\n".format(the_rx_doppler=rx_doppler)  
-                            s.send(bytes(F_string, 'ascii'))
-                            self.my_satellite.F = rx_doppler
-                    
-                        new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata),-1)
-                        if new_tx_doppler != tx_doppler:
-                            tx_doppler = new_tx_doppler
-                            I_string = "I Sub{the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
-                            if OPMODE == False:
-                                s.send(bytes(I_string, 'ascii'))
-                            else:
-                                F2_string = "F Main{the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
-                                s2.send(bytes(F2_string, 'ascii'))
-                            self.my_satellite.I = tx_doppler
-                    else:
-                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata),-1)
-                        if new_rx_doppler != rx_doppler:
-                            rx_doppler = new_rx_doppler
-                            F_string = "F {the_rx_doppler:.0f}\n".format(the_rx_doppler=rx_doppler)  
-                            s.send(bytes(F_string, 'ascii'))
-                            self.my_satellite.F = rx_doppler
-                    
-                        new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata),-1)
-                        if new_tx_doppler != tx_doppler:
-                            tx_doppler = new_tx_doppler
-                            I_string = "I {the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
-                            if OPMODE == False:
-                                s.send(bytes(I_string, 'ascii'))
-                            else:
-                                F2_string = "F {the_tx_doppler:.0f}\n".format(the_tx_doppler=tx_doppler)
-                                s2.send(bytes(F2_string, 'ascii'))
-                            self.my_satellite.I = tx_doppler
+                        icomTrx.setVFO("Main")
+                        try:
+                            old_user_Freq = user_Freq
+                            user_Freq = int(icomTrx.getFrequency())
+                            updated_rx = 1
+                        except:
+                            updated_rx = 0
+                            user_Freq = 0
                             
-                    time.sleep(1)
+                        if user_Freq > 0 and updated_rx == 1 and user_Freq == old_user_Freq:
+                            old_user_Freq = user_Freq
+                            if abs(user_Freq - self.my_satellite.F) > 1:
+                                if True:
+                                    if user_Freq > self.my_satellite.F:
+                                        delta_F = user_Freq - self.my_satellite.F
+                                        if self.my_satellite.mode == "REV":
+                                            I0 -= delta_F
+                                            F0 += delta_F
+                                        else:
+                                            I0 += delta_F
+                                            F0 += delta_F
+                                    else:
+                                        delta_F = self.my_satellite.F - user_Freq
+                                        if self.my_satellite.mode == "REV":
+                                            I0 += delta_F
+                                            F0 -= delta_F
+                                        else:
+                                            I0 -= delta_F
+                                            F0 -= delta_F
+                                            
+                                self.my_satellite.F = F0
+                                self.my_satellite.I = I0
+                                
+                        if updated_rx and user_Freq == old_user_Freq:#old_user_Freq == user_Freq and False:
+                            new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata))
+                            if new_rx_doppler != rx_doppler:
+                                rx_doppler = new_rx_doppler
+                                icomTrx.setVFO("Main")
+                                icomTrx.setFrequency(str(rx_doppler))
+                                self.my_satellite.F = rx_doppler
+                        
+                            new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata))
+                            if new_tx_doppler != tx_doppler:
+                                tx_doppler = new_tx_doppler
+                                icomTrx.setVFO("SUB")
+                                icomTrx.setFrequency(str(tx_doppler))
+                                self.my_satellite.I = tx_doppler
+                    # FM sats, no dial input accepted!
+                    else:
+                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata))
+                        new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata))
+                        if new_rx_doppler != rx_doppler:
+                                rx_doppler = new_rx_doppler
+                                icomTrx.setVFO("Main")
+                                icomTrx.setFrequency(str(rx_doppler))
+                                self.my_satellite.F = rx_doppler
+                        if new_tx_doppler != tx_doppler:
+                                tx_doppler = new_tx_doppler
+                                icomTrx.setVFO("SUB")
+                                icomTrx.setFrequency(str(tx_doppler))
+                                self.my_satellite.I = tx_doppler
+                    time.sleep(0.01)
+                    self.rxdoppler_val.setText(str(float(rx_doppler_val_calc(self.my_satellite.tledata))))
+                    self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata))))
+                    
 
-        except socket.error:
-            print("Failed to connect to Rigctld on {addr}:{port}.".format(addr=ADDRESS,port=PORT))
+        except:
+            print("Failed to open ICOM rig")
             sys.exit()
     
     def recurring_timer(self):
