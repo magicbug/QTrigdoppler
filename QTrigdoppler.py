@@ -87,12 +87,14 @@ if configur.get('icom', 'fullmode') == "True":
 elif configur.get('icom', 'fullmode') == "False":
     OPMODE = False
     
-useroffsets = {}
+useroffsets = []
 
+i = 0
 for (each_key, each_val) in configur.items('offset_profiles'):
     # Format SATNAME:RXoffset,TXoffset
-    useroffsets[each_val.split(':')[0]] = each_val.split(':')[1]
-
+    useroffsets += [each_val.split(',')]
+    i+=1
+print(useroffsets)
 F0=0.0
 I0=0.0
 f_cal = 0
@@ -655,6 +657,7 @@ class MainWindow(QMainWindow):
     
     def sat_changed(self, satname):
         self.LogText.clear()
+        self.my_satellite.name = satname
         #   EA4HCF: Let's use PCSat32 translation from NoradID to Sat names, boring but useful for next step.
         #   From NORAD_ID identifier, will get the SatName to search satellite frequencies in dopler file in next step.
         try:
@@ -701,7 +704,7 @@ class MainWindow(QMainWindow):
                 for lineb in sqfdata:
                     if lineb.startswith(";") == 0:
                         print(lineb)
-                        if lineb.split(",")[8].strip() == tpxname:
+                        if lineb.split(",")[8].strip() == tpxname and lineb.split(",")[0].strip() == self.my_satellite.name:
                             self.my_satellite.F = self.my_satellite.F_init = float(lineb.split(",")[1].strip())*1000
                             self.rxfreq.setText(str(self.my_satellite.F))
                             F0 = self.my_satellite.F + f_cal
@@ -725,28 +728,31 @@ class MainWindow(QMainWindow):
             raise MyError()
 
         ### This needs fixing after manual tpx selctor is updated NOT WORKING
-        if tpxname in useroffsets:
-            usrrxoffset=int(useroffsets[satname].split(',')[0])
-            usrtxoffset=int(useroffsets[satname].split(',')[1])
+        self.rxoffsetbox.setValue(0)
+        self.txoffsetbox.setValue(0)
+        for tpx in useroffsets:
+            if tpx[0] == self.my_satellite.name and tpx[1] == tpxname:
+                
+                print("custom offset found")
+                usrrxoffset=int(tpx[2])
+                usrtxoffset=int(tpx[3])
 
-            if usrrxoffset < MAX_OFFSET_RX and usrrxoffset > -MAX_OFFSET_RX:
-                self.rxoffsetbox.setMaximum(MAX_OFFSET_RX)
-                self.rxoffsetbox.setMinimum(-MAX_OFFSET_RX)
-                self.rxoffsetbox.setValue(usrrxoffset)
-            else:
-                self.LogText.append("***  ERROR: Max RX offset ({max}) not align with user offset: {value}.".format(value=usrrxoffset,max =MAX_OFFSET_RX))
-                self.rxoffsetbox.setValue(0)
-            
-            if usrtxoffset < MAX_OFFSET_TX and usrtxoffset > -MAX_OFFSET_TX:
-                self.txoffsetbox.setMaximum(MAX_OFFSET_TX)
-                self.txoffsetbox.setMinimum(-MAX_OFFSET_TX)
-                self.txoffsetbox.setValue(usrtxoffset)
-            else:
-                self.LogText.append("***  ERROR: Max TX offset ({max}) not align with user offset: {value}.".format(value=usrtxoffset,max=MAX_OFFSET_TX))
-                self.txoffsetbox.setValue(0)
-        else:
-            self.rxoffsetbox.setValue(0)
-            self.txoffsetbox.setValue(0)
+                if usrrxoffset < MAX_OFFSET_RX and usrrxoffset > -MAX_OFFSET_RX:
+                    self.rxoffsetbox.setMaximum(MAX_OFFSET_RX)
+                    self.rxoffsetbox.setMinimum(-MAX_OFFSET_RX)
+                    self.rxoffsetbox.setValue(usrrxoffset)
+                else:
+                    self.LogText.append("***  ERROR: Max RX offset ({max}) not align with user offset: {value}.".format(value=usrrxoffset,max =MAX_OFFSET_RX))
+                    self.rxoffsetbox.setValue(0)
+                
+                if usrtxoffset < MAX_OFFSET_TX and usrtxoffset > -MAX_OFFSET_TX:
+                    self.txoffsetbox.setMaximum(MAX_OFFSET_TX)
+                    self.txoffsetbox.setMinimum(-MAX_OFFSET_TX)
+                    self.txoffsetbox.setValue(usrtxoffset)
+                else:
+                    self.LogText.append("***  ERROR: Max TX offset ({max}) not align with user offset: {value}.".format(value=usrtxoffset,max=MAX_OFFSET_TX))
+                    self.txoffsetbox.setValue(0)
+                
 
         try:
             with open(TLEFILE, 'r') as f:
