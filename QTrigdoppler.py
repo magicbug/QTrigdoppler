@@ -86,13 +86,7 @@ if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
 elif configur.get('icom', 'fullmode') == "False":
     OPMODE = False
-ADDRESS = configur.get('hamlib','address')
-PORT = configur.getint('hamlib','port')
-if configur.has_option('hamlib','portfull'):
-    PORTFULL = configur.getint('hamlib','portfull')
-else:
-    PORTFULL = 5434
-
+    
 useroffsets = {}
 
 for (each_key, each_val) in configur.items('offset_profiles'):
@@ -155,11 +149,6 @@ class ConfigWindow(QMainWindow):
         global CVIADDR
         global OPMODE
 
-        # Hamlib
-        global ADDRESS
-        global PORT
-        global PORTFULL
-
         myFont=QFont()
         myFont.setBold(True)
 
@@ -176,7 +165,6 @@ class ConfigWindow(QMainWindow):
         qth_layout = QVBoxLayout()
         satellite_layout = QVBoxLayout()
         radio_layout = QVBoxLayout()
-        hamlib_layout = QVBoxLayout()
         offset_layout = QVBoxLayout()
         buttons_layout = QVBoxLayout()
 
@@ -184,7 +172,6 @@ class ConfigWindow(QMainWindow):
         uplayout.addLayout(satellite_layout)
 
         mediumlayout.addLayout(radio_layout)
-        mediumlayout.addLayout(hamlib_layout)
 
         downlayout.addLayout(offset_layout)
         downlayout.addLayout(buttons_layout)
@@ -350,49 +337,6 @@ class ConfigWindow(QMainWindow):
         self.radidplx.stateChanged.connect(self.opmode_change)
         radio_layout.addWidget(self.radidplx)
 
-        ### HamLib
-        self.haml = QLabel("HamLib Parameters")
-        self.haml.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self.haml.setFont(myFont)
-        hamlib_layout.addWidget(self.haml)
-
-        # 1x Label address address
-        self.hamladd_lbl = QLabel("HamLib IP address:")
-        self.hamladd_lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        hamlib_layout.addWidget(self.hamladd_lbl)
-
-        self.hamladd = QLineEdit()
-        self.hamladd.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self.hamladd.setMaxLength(30)
-        self.hamladd.setText(ADDRESS)
-        hamlib_layout.addWidget(self.hamladd)
-
-        # 1x Label port address
-        self.hamlport_lbl = QLabel("HamLib TCP port:")
-        self.hamlport_lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        hamlib_layout.addWidget(self.hamlport_lbl)
-
-        self.hamlport = QLineEdit()
-        self.hamlport.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self.hamlport.setMaxLength(5)
-        self.hamlport.setText(str(PORT))
-        hamlib_layout.addWidget(self.hamlport)
-
-        # 1x Label second port address
-        self.hamlport2_lbl = QLabel("HamLib second TCP port:")
-        self.hamlport2_lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        hamlib_layout.addWidget(self.hamlport2_lbl)
-
-        self.hamlport2 = QLineEdit()
-        self.hamlport2.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self.hamlport2.setMaxLength(5)
-        self.hamlport2.setText(str(PORTFULL))
-        if OPMODE == False:
-            self.hamlport2.setEnabled(False)
-        elif OPMODE == True:
-            self.hamlport2.setEnabled(True)
-        hamlib_layout.addWidget(self.hamlport2)
-
         ### Offset profiles
         self.offsets = QLabel("Offsets Profiles")
         self.offsets.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
@@ -454,10 +398,7 @@ class ConfigWindow(QMainWindow):
         global CVIADDR
         global OPMODE
 
-        # Hamlib
-        global ADDRESS
-        global PORT
-        global PORTFULL
+
 
         LATITUDE = self.qthlat.displayText()
         configur['qth']['latitude'] = str(float(self.qthlat.displayText()))
@@ -489,14 +430,10 @@ class ConfigWindow(QMainWindow):
         if self.radidplx.isChecked():
             OPMODE = True
             configur['icom']['fullmode'] = "True"
-            PORTFULL = configur['hamlib']['portfull'] = str(self.hamlport2.displayText())
         else:
             OPMODE = False
             configur['icom']['fullmode'] = "False"
-            configur.remove_option('hamlib','portfull')
         CVIADDR = configur['icom']['cviaddress'] = str(self.radicvi.displayText())
-        ADDRESS = configur['hamlib']['address'] = str(self.hamladd.displayText())
-        configur['hamlib']['port'] = str(int(self.hamlport.displayText()))
         PORT = int(self.hamlport.displayText())
 
         if self.offsetText.document().blockCount() >= 1:
@@ -565,6 +502,13 @@ class MainWindow(QMainWindow):
         self.combo1.addItems(satlist)
         self.combo1.currentTextChanged.connect(self.sat_changed) 
         combo_layout.addWidget(self.combo1)
+        
+        self.tpxtext = QLabel("Transponder:")
+        self.tpxtext.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        combo_layout.addWidget(self.tpxtext)
+        self.combo2 = QComboBox()
+        self.combo2.currentTextChanged.connect(self.tpx_changed) 
+        combo_layout.addWidget(self.combo2)
 
         myFont=QFont()
         myFont.setBold(True)
@@ -710,13 +654,6 @@ class MainWindow(QMainWindow):
             self.LogText.append("*** New TX offset: {thenew}".format(thenew=i))
     
     def sat_changed(self, satname):
-        global F0
-        global I0
-        global f_cal
-        global i_cal
-        global MAX_OFFSET_RX
-        global MAX_OFFSET_TX
-
         self.LogText.clear()
         #   EA4HCF: Let's use PCSat32 translation from NoradID to Sat names, boring but useful for next step.
         #   From NORAD_ID identifier, will get the SatName to search satellite frequencies in dopler file in next step.
@@ -737,33 +674,58 @@ class MainWindow(QMainWindow):
         #   From SatName,  will get the RX and TX frequencies.
         try:
             with open(SQFILE, 'r') as h:
-                sqfdata = h.readlines()  
-                
-            for lineb in sqfdata:
-                if re.search(satname, lineb):
-                    self.my_satellite.F = self.my_satellite.F_init = float(lineb.split(",")[1].strip())*1000
-                    self.rxfreq.setText(str(self.my_satellite.F))
-                    F0 = self.my_satellite.F + f_cal
-                    self.my_satellite.I = self.my_satellite.I_init = float(lineb.split(",")[2].strip())*1000
-                    self.txfreq.setText(str(self.my_satellite.I))
-                    I0 = self.my_satellite.I + i_cal
-                    self.my_satellite.downmode =  lineb.split(",")[3].strip()
-                    self.my_satellite.upmode =  lineb.split(",")[4].strip()
-                    self.my_satellite.mode =  lineb.split(",")[5].strip()
-                    #  check if frequencies are in the same band: e.g. U/U, V/V vs V/U, U/V
-                    if abs(self.my_satellite.F - self.my_satellite.I) > 10000000:
-                        self.my_satellite.rig_satmode = 1
-                    else:
-                        self.my_satellite.rig_satmode = 0
-                    if self.my_satellite.noradid == 0 or self.my_satellite.F == 0 or self.my_satellite.I == 0:
-                        self.Startbutton.setEnabled(False)
-                    else:
-                        self.Startbutton.setEnabled(True)
-                    break
+                sqfdata = h.readlines()
+                tpxlist=[]
+                self.combo2.clear()
+                for line in sqfdata:
+                    if line.startswith(satname):
+                        tpxlist += [str(line.split(",")[8].strip())]
+                        
+                tpxlist=list(dict.fromkeys(tpxlist))
+                self.combo2.addItems(tpxlist)  
+                    
+        except IOError:
+            raise MyError()
+            
+    def tpx_changed(self, tpxname):
+        global F0
+        global I0
+        global f_cal
+        global i_cal
+        global MAX_OFFSET_RX
+        global MAX_OFFSET_TX
+        
+        try:
+            with open(SQFILE, 'r') as h:
+                sqfdata = h.readlines()
+                for lineb in sqfdata:
+                    if lineb.startswith(";") == 0:
+                        print(lineb)
+                        if lineb.split(",")[8].strip() == tpxname:
+                            self.my_satellite.F = self.my_satellite.F_init = float(lineb.split(",")[1].strip())*1000
+                            self.rxfreq.setText(str(self.my_satellite.F))
+                            F0 = self.my_satellite.F + f_cal
+                            self.my_satellite.I = self.my_satellite.I_init = float(lineb.split(",")[2].strip())*1000
+                            self.txfreq.setText(str(self.my_satellite.I))
+                            I0 = self.my_satellite.I + i_cal
+                            self.my_satellite.downmode =  lineb.split(",")[3].strip()
+                            self.my_satellite.upmode =  lineb.split(",")[4].strip()
+                            self.my_satellite.mode =  lineb.split(",")[5].strip()
+                            #  check if frequencies are in the same band: e.g. U/U, V/V vs V/U, U/V
+                            if abs(self.my_satellite.F - self.my_satellite.I) > 10000000:
+                                self.my_satellite.rig_satmode = 1
+                            else:
+                                self.my_satellite.rig_satmode = 0
+                            if self.my_satellite.noradid == 0 or self.my_satellite.F == 0 or self.my_satellite.I == 0:
+                                self.Startbutton.setEnabled(False)
+                            else:
+                                self.Startbutton.setEnabled(True)
+                            break
         except IOError:
             raise MyError()
 
-        if satname in useroffsets:
+        ### This needs fixing after manual tpx selctor is updated NOT WORKING
+        if tpxname in useroffsets:
             usrrxoffset=int(useroffsets[satname].split(',')[0])
             usrtxoffset=int(useroffsets[satname].split(',')[1])
 
@@ -827,7 +789,6 @@ class MainWindow(QMainWindow):
         if SEMAPHORE == False:
             SEMAPHORE = True
         # Pass the function to execute
-        self.LogText.append("Connected to Rigctld on {addr}:{port}".format(addr=ADDRESS,port=PORT))
         self.LogText.append("Sat TLE data {tletext}".format(tletext=self.my_satellite.tledata))
         self.LogText.append("Tracking: {sat_name}".format(sat_name=self.my_satellite.noradid))
         self.LogText.append("Sat DownLink mode: {sat_mode_down}".format(sat_mode_down=self.my_satellite.downmode))
@@ -858,23 +819,8 @@ class MainWindow(QMainWindow):
                 #################################
                 #       INIT RADIOS
                 #################################
-                if RADIO == "9700" and self.my_satellite.rig_satmode == 0:
-                    # turn off satellite mode
-                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x16\\0x5A\\0x00\\0xFD 14\n"
-                    s.sendall(cmds.encode('utf-8'))
-                    time.sleep(0.2)
-                    #turn on scope waterfall
-                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x05\\0x01\\0x97\\0x01\\0xFD 16\n"
-                    s.sendall(cmds.encode('utf-8'))
-                    time.sleep(0.2)
-                    #show scope during TX
-                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x05\\0x01\\0x87\\0x01\\0xFD 16\n"
-                    s.sendall(cmds.encode('utf-8'))
-                    time.sleep(0.2)
-                    #set span = 5kHz
-                    cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x27\\0x15\\0x00\\0x00\\0x50\\0x00\\0x00\\0x00\\0xFD 22\n"
-                    s.sendall(cmds.encode('utf-8'))
-                    time.sleep(0.2)
+                if RADIO == "9700" and self.my_satellite.rig_satmode == 0: #not implemented yet
+                    pass
                 elif RADIO == "910" and self.my_satellite.rig_satmode == 0:
                     # turn off satellite mode
                     # cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x07\\0x00\\0xFD 14\n"
@@ -884,25 +830,14 @@ class MainWindow(QMainWindow):
                 elif RADIO == "910" and self.my_satellite.rig_satmode == 1:
                     icomTrx.setSatelliteMode(1)
                     icomTrx.setSplitOn(0)
-                elif ( RADIO == "705" or "818" ) and OPMODE == False and self.my_satellite.rig_satmode == 0:
-                    #check SPLIT operation
-                    F_string = "s\n"
-                    s.send(bytes(F_string, 'ascii'))
-                    time.sleep(0.2)
-                    data = s.recv(1024)
-                    status = str(data).split('\\n')[0].replace("b\'",'')
-
-                    if int(status) == 0:
-                        print("Setting split mode ON ({a})".format(a=status))
-                        F_string = "S 1 VFOB\n"
-                        s.send(bytes(F_string, 'ascii'))
-                        time.sleep(0.2)
-                    else:
-                        print("Split mode already ON ({a})".format(a=status))
+                elif ( RADIO == "705" or "818" ) and OPMODE == False and self.my_satellite.rig_satmode == 0: #not implemented yet
+                    pass
 
                 #################################
                 #       SETUP DOWNLINK & UPLINK
                 #################################
+                
+                # Testing current satmode config for V/ or U/V and swapping if needed
                 icomTrx.setVFO("Main")
                 curr_band = int(icomTrx.getFrequency())
                 if curr_band > 400000000 and F0 < 400000000:
