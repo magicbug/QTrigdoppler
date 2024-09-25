@@ -2,6 +2,8 @@
 #   Original from K8DP Doug Papay (v0.1)
 #
 #   Adapted v0.3 by EA4HCF Pedro Cabrera
+#
+#   v0.4 and beyond: Extended, partly rewritten and adapted from hamlib to direct radio control by DL3JOP Joshua Petry
 
 
 import ephem
@@ -12,8 +14,6 @@ import time
 import re
 import urllib.request
 import traceback
-import serial
-import Hamlib
 import icom
 
 from time import gmtime, strftime
@@ -28,25 +28,25 @@ from PyQt5.QtCore import *
 C = 299792458.
 
 
-
+### Calculates the tx doppler frequency
 def tx_dopplercalc(ephemdata):
     global I0
     ephemdata.compute(myloc)
     doppler = int(I0 + ephemdata.range_velocity * I0 / C)
     return doppler
-
+### Calculates the rx doppler frequency
 def rx_dopplercalc(ephemdata):
     global F0
     ephemdata.compute(myloc)
     doppler = int(F0 - ephemdata.range_velocity * F0 / C)
     return doppler
-    
+### Calculates the tx doppler error   
 def tx_doppler_val_calc(ephemdata):
     global I0
     ephemdata.compute(myloc)
     doppler = int(ephemdata.range_velocity * I0 / C)
     return doppler
-
+### Calculates the rx doppler error   
 def rx_doppler_val_calc(ephemdata):
     global F0
     ephemdata.compute(myloc)
@@ -57,8 +57,10 @@ def MyError():
     print("Failed to find required file!")
     sys.exit()
 
-print("QT Rigdoppler v0.3")
+print("QT Rigdoppler v0.4")
 
+
+### parsing config file
 try:
     with open('config.ini') as f:
         f.close()
@@ -67,7 +69,7 @@ try:
 except IOError:
     raise MyError()
 
-
+### config file to global vars
 
 LATITUDE = configur.get('qth','latitude')
 LONGITUDE = configur.get('qth','longitude')
@@ -79,6 +81,8 @@ MAX_OFFSET_TX = configur.getint('qth','max_offset_tx')
 TLEFILE = configur.get('satellite','tle_file')
 TLEURL = configur.get('satellite','tle_url')
 SATNAMES = configur.get('satellite','amsatnames')
+DOPPLER_THRES_FM = configur.get('satellite', 'doppler_threshold_fm')
+DOPPLER_THRES_LINEAR = configur.get('satellite', 'doppler_threshold_linear')
 SQFILE = configur.get('satellite','sqffile')
 RADIO = configur.get('icom','radio')
 CVIADDR = configur.get('icom','cviaddress')
@@ -94,21 +98,26 @@ for (each_key, each_val) in configur.items('offset_profiles'):
     # Format SATNAME:RXoffset,TXoffset
     useroffsets += [each_val.split(',')]
     i+=1
-print(useroffsets)
+
 F0=0.0
 I0=0.0
 f_cal = 0
 i_cal = 0
+doppler_thres = 0
 
 myloc = ephem.Observer()
 myloc.lon = LONGITUDE
 myloc.lat = LATITUDE
 myloc.elevation = ALTITUDE
 
-SEMAPHORE = True
+TRACKING_ACTIVE = True
 INTERACTIVE = False
+if configur['icom']['radio'] == '9700':
+    icomTrx = icom.icom('/dev/ttyUSB0', '19200', 96)
+elif configur['icom']['radio'] == '910':
+    icomTrx = icom.icom('/dev/ttyUSB0', '19200', 96)
+           
 
-icomTrx = icom.icom('/dev/ttyUSB0', '19200', 96)
 
 class Satellite:
     name = ""
@@ -139,6 +148,8 @@ class ConfigWindow(QMainWindow):
         global STEP_TX
         global MAX_OFFSET_RX
         global MAX_OFFSET_TX
+        global DOPPLER_THRES_FM
+        global DOPPLER_THRES_LINEAR
 
         # satellite
         global TLEFILE
@@ -246,6 +257,24 @@ class ConfigWindow(QMainWindow):
         self.qthmaxofftx.setMaxLength(6)
         self.qthmaxofftx.setText(str(MAX_OFFSET_TX))
         qth_layout.addWidget(self.qthmaxofftx)
+        
+        # 1x Label doppler fm threshold
+        self.doppler_fm_threshold_lbl = QLabel("Doppler threshold for FM")
+        qth_layout.addWidget(self.doppler_fm_threshold_lbl)
+
+        self.doppler_fm_threshold = QLineEdit()
+        self.doppler_fm_threshold.setMaxLength(6)
+        self.doppler_fm_threshold.setText(str(DOPPLER_THRES_FM))
+        qth_layout.addWidget(self.doppler_fm_threshold)
+        
+        # 1x Label doppler linear threshold
+        self.doppler_linear_threshold_lbl = QLabel("Doppler threshold for Linear")
+        qth_layout.addWidget(self.doppler_linear_threshold_lbl)
+
+        self.doppler_linear_threshold = QLineEdit()
+        self.doppler_linear_threshold.setMaxLength(6)
+        self.doppler_linear_threshold.setText(str(DOPPLER_THRES_LINEAR))
+        qth_layout.addWidget(self.doppler_linear_threshold)
 
         ### Satellite
         self.sat = QLabel("Satellite Parameters")
@@ -301,15 +330,15 @@ class ConfigWindow(QMainWindow):
         # 1x Select manufacturer
         self.radiolistcomb = QComboBox()
         self.radiolistcomb.addItems(['Icom 9700'])
-        self.radiolistcomb.addItems(['Icom 705'])
-        self.radiolistcomb.addItems(['Yaesu 818'])
+        #self.radiolistcomb.addItems(['Icom 705'])
+        #self.radiolistcomb.addItems(['Yaesu 818'])
         self.radiolistcomb.addItems(['Icom 910H'])
         if configur['icom']['radio'] == '9700':
             self.radiolistcomb.setCurrentText('Icom 9700')
-        elif configur['icom']['radio'] == '705':
-            self.radiolistcomb.setCurrentText('Icom 705')
-        elif configur['icom']['radio'] == '818':
-            self.radiolistcomb.setCurrentText('Yaesu 818')
+        #elif configur['icom']['radio'] == '705':
+        #    self.radiolistcomb.setCurrentText('Icom 705')
+        #elif configur['icom']['radio'] == '818':
+        #    self.radiolistcomb.setCurrentText('Yaesu 818')
         elif configur['icom']['radio'] == '910':
             self.radiolistcomb.setCurrentText('Icom 910H')
         radio_layout.addWidget(self.radiolistcomb)
@@ -352,7 +381,7 @@ class ConfigWindow(QMainWindow):
         offset_layout.addWidget(self.offsetText)
 
         for (each_key, each_val) in configur.items('offset_profiles'):
-            self.offsetText.append("{name}:{theoffsets}".format(name=each_val.split(':')[0],theoffsets=each_val.split(':')[1]))
+            self.offsetText.append(each_val)
 
         # Save Label
         self.savebutontitle = QLabel("Save configuration")
@@ -388,6 +417,8 @@ class ConfigWindow(QMainWindow):
         global STEP_TX
         global MAX_OFFSET_TX
         global MAX_OFFSET_RX
+        global DOPPLER_THRES_FM
+        global DOPPLER_THRES_LINEAR
 
         # satellite
         global TLEFILE
@@ -420,12 +451,18 @@ class ConfigWindow(QMainWindow):
         TLEURL =  configur['satellite']['tle_url'] = str(self.sattleurl.displayText())
         SATNAMES = configur['satellite']['amsatnames'] = str(self.satsatnames.displayText())
         SQFILE = configur['satellite']['sqffile'] = str(self.satsqf.displayText())
+        
+        DOPPLER_THRES_FM = int(self.doppler_fm_threshold.displayText())
+        configur['satellite']['doppler_threshold_fm'] = str(int(self.doppler_fm_threshold.displayText()))
+        DOPPLER_THRES_LINEAR = int(self.doppler_linear_threshold.displayText())
+        configur['satellite']['doppler_threshold_linear'] = str(int(self.doppler_linear_threshold.displayText()))
+        
         if self.radiolistcomb.currentText() == "Icom 9700":
             RADIO = configur['icom']['radio'] = '9700'
-        elif self.radiolistcomb.currentText() == "Icom 705":
-            RADIO = configur['icom']['radio'] = '705'
-        elif self.radiolistcomb.currentText() == "Yaesu 818":
-            RADIO = configur['icom']['radio'] = '818'
+        #elif self.radiolistcomb.currentText() == "Icom 705":
+        #    RADIO = configur['icom']['radio'] = '705'
+        #elif self.radiolistcomb.currentText() == "Yaesu 818":
+        #    RADIO = configur['icom']['radio'] = '818'
         elif self.radiolistcomb.currentText() == "Icom 910H":
             RADIO = configur['icom']['radio'] = '910'
 
@@ -436,7 +473,6 @@ class ConfigWindow(QMainWindow):
             OPMODE = False
             configur['icom']['fullmode'] = "False"
         CVIADDR = configur['icom']['cviaddress'] = str(self.radicvi.displayText())
-        PORT = int(self.hamlport.displayText())
 
         if self.offsetText.document().blockCount() >= 1:
             for i in range(0, self.offsetText.document().blockCount()):
@@ -465,7 +501,7 @@ class MainWindow(QMainWindow):
         self.my_satellite = Satellite()
 
         self.setWindowTitle("QT RigDoppler v0.3")
-        self.setGeometry(0, 0, 800, 150)
+        self.setGeometry(0, 0, 900, 150)
 
         pagelayout = QVBoxLayout()
 
@@ -511,18 +547,26 @@ class MainWindow(QMainWindow):
         self.combo2 = QComboBox()
         self.combo2.currentTextChanged.connect(self.tpx_changed) 
         combo_layout.addWidget(self.combo2)
+        
+        self.dopplerthreslabel = QLabel("Doppler threshold:")
+        combo_layout.addWidget(self.dopplerthreslabel)
+        self.dopplerthresval = QLabel("0.0")
+        combo_layout.addWidget(self.dopplerthresval)
 
         myFont=QFont()
         myFont.setBold(True)
-
+        
+        rx_labels_layout = QHBoxLayout()
         # 1x Label: RX freq
         self.rxfreqtitle = QLabel("RX:")
         self.rxfreqtitle.setFont(myFont)
-        labels_layout.addWidget(self.rxfreqtitle)
+        rx_labels_layout.addWidget(self.rxfreqtitle)
 
         self.rxfreq = QLabel("0.0")
         self.rxfreq.setFont(myFont)
-        labels_layout.addWidget(self.rxfreq)
+        rx_labels_layout.addWidget(self.rxfreq)
+        
+        labels_layout.addLayout(rx_labels_layout)
 
         # 1x Label: RX freq Satellite
         self.rxfreqsat_lbl = QLabel("RX freq on Sat:")
@@ -538,14 +582,17 @@ class MainWindow(QMainWindow):
         self.rxdoppler_val = QLabel("0.0")
         labels_layout.addWidget(self.rxdoppler_val)
 
+        tx_labels_layout = QHBoxLayout()
         # 1x Label: TX freq
         self.txfreqtitle = QLabel("TX:")
         self.txfreqtitle.setFont(myFont)
-        labels_layout.addWidget(self.txfreqtitle)
+        tx_labels_layout.addWidget(self.txfreqtitle)
 
         self.txfreq = QLabel("0.0")
         self.txfreq.setFont(myFont)
-        labels_layout.addWidget(self.txfreq)
+        tx_labels_layout.addWidget(self.txfreq)
+        
+        labels_layout.addLayout(tx_labels_layout)
 
         # 1x Label: TX freq Satellite
         self.txfreqsat_lbl = QLabel("TX freq on Sat:")
@@ -586,22 +633,22 @@ class MainWindow(QMainWindow):
         offset_layout.addWidget(self.txoffsetbox)
 
          # Start Label
-        self.butontitle = QLabel("Press start to connect to Icom radio:")
+        self.butontitle = QLabel("Press \"Start/Stop Tracking\" to start doppler correction ")
         self.butontitle.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         button_layout.addWidget(self.butontitle)
 
         # 1x QPushButton (Start)
-        self.Startbutton = QPushButton("Start")
+        self.Startbutton = QPushButton("Start Tracking")
         self.Startbutton.clicked.connect(self.init_worker)
         button_layout.addWidget(self.Startbutton)
 
         # 1x QPushButton (Stop)
-        self.Stopbutton = QPushButton("Stop")
+        self.Stopbutton = QPushButton("Stop Tracking")
         self.Stopbutton.clicked.connect(self.the_stop_button_was_clicked)
         button_layout.addWidget(self.Stopbutton)
 
         # Exit Label
-        self.exitbutontitle = QLabel("Disconect and exit:")
+        self.exitbutontitle = QLabel("Disconnect and exit:")
         self.exitbutontitle.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         button_layout.addWidget(self.exitbutontitle)
 
@@ -703,7 +750,6 @@ class MainWindow(QMainWindow):
                 sqfdata = h.readlines()
                 for lineb in sqfdata:
                     if lineb.startswith(";") == 0:
-                        print(lineb)
                         if lineb.split(",")[8].strip() == tpxname and lineb.split(",")[0].strip() == self.my_satellite.name:
                             self.my_satellite.F = self.my_satellite.F_init = float(lineb.split(",")[1].strip())*1000
                             self.rxfreq.setText(str(self.my_satellite.F))
@@ -727,13 +773,11 @@ class MainWindow(QMainWindow):
         except IOError:
             raise MyError()
 
-        ### This needs fixing after manual tpx selctor is updated NOT WORKING
         self.rxoffsetbox.setValue(0)
         self.txoffsetbox.setValue(0)
         for tpx in useroffsets:
             if tpx[0] == self.my_satellite.name and tpx[1] == tpxname:
-                
-                print("custom offset found")
+
                 usrrxoffset=int(tpx[2])
                 usrtxoffset=int(tpx[3])
 
@@ -782,18 +826,18 @@ class MainWindow(QMainWindow):
         sys.exit()
     
     def the_stop_button_was_clicked(self):
-        global SEMAPHORE
+        global TRACKING_ACTIVE
         global INTERACTIVE
-        SEMAPHORE = INTERACTIVE = False
+        TRACKING_ACTIVE = INTERACTIVE = False
         self.LogText.append("Stopped")
         self.Startbutton.setEnabled(True)
         self.combo1.setEnabled(True)
     
     def init_worker(self):
-        global SEMAPHORE
+        global TRACKING_ACTIVE
 
-        if SEMAPHORE == False:
-            SEMAPHORE = True
+        if TRACKING_ACTIVE == False:
+            TRACKING_ACTIVE = True
         # Pass the function to execute
         self.LogText.append("Sat TLE data {tletext}".format(tletext=self.my_satellite.tledata))
         self.LogText.append("Tracking: {sat_name}".format(sat_name=self.my_satellite.noradid))
@@ -813,13 +857,14 @@ class MainWindow(QMainWindow):
 
     def calc_doppler(self, progress_callback):
         global CVIADDR
-        global SEMAPHORE
+        global TRACKING_ACTIVE
         global INTERACTIVE
         global myloc
         global f_cal
         global i_cal
         global F0
         global I0
+        global doppler_thres
         
         try:
                 #################################
@@ -828,9 +873,6 @@ class MainWindow(QMainWindow):
                 if RADIO == "9700" and self.my_satellite.rig_satmode == 0: #not implemented yet
                     pass
                 elif RADIO == "910" and self.my_satellite.rig_satmode == 0:
-                    # turn off satellite mode
-                    # cmds = "W \\0xFE\\0xFE\\0x" + CVIADDR + "\\0xE2\\0x1A\\0x07\\0x00\\0xFD 14\n"
-                    #s.sendall(cmds.encode('utf-8'))
                     icomTrx.setSatelliteMode(0)
                     icomTrx.setSplitOn(1)
                 elif RADIO == "910" and self.my_satellite.rig_satmode == 1:
@@ -843,44 +885,68 @@ class MainWindow(QMainWindow):
                 #       SETUP DOWNLINK & UPLINK
                 #################################
                 
-                # Testing current satmode config for V/ or U/V and swapping if needed
-                icomTrx.setVFO("Main")
-                curr_band = int(icomTrx.getFrequency())
-                if curr_band > 400000000 and F0 < 400000000:
-                    icomTrx.setExchange()
-                elif curr_band < 200000000 and F0 > 200000000:
-                    icomTrx.setExchange()
-                
-                icomTrx.setVFO("Main") 
-                if self.my_satellite.downmode == "FM":
-                    icomTrx.setMode("FM")
-                    INTERACTIVE = False
-                elif self.my_satellite.downmode == "FMN":
-                    icomTrx.setMode("FM")
-                    INTERACTIVE = False
-                elif self.my_satellite.downmode ==  "USB":
-                    INTERACTIVE = True
-                    icomTrx.setMode("USB")    
-                elif self.my_satellite.downmode == "CW":
-                    INTERACTIVE = True
-                    icomTrx.setMode("CW") 
-                else:
-                    print("*** Downlink mode not implemented yet: {bad}".format(bad=self.my_satellite.downmode))
-                    sys.exit()
-                
-                if OPMODE == False:
-                    icomTrx.setVFO("Sub") 
+                # IC 910
+                if RADIO == "910":
+                    # Testing current satmode config for V/U or U/V and swapping if needed
+                    
+                    if self.my_satellite.rig_satmode == 1:
+                        icomTrx.setVFO("Main")
+                        curr_band = int(icomTrx.getFrequency())
+                        if curr_band > 400000000 and F0 < 400000000:
+                            icomTrx.setExchange()
+                        elif curr_band < 200000000 and F0 > 200000000:
+                            icomTrx.setExchange()
+                            
+                    if self.my_satellite.rig_satmode == 1:
+                        icomTrx.setVFO("Main")
+                    else:
+                        icomTrx.setVFO("VFOA")
+                    
+                    if self.my_satellite.downmode == "FM":
+                        icomTrx.setMode("FM")
+                        doppler_thres = DOPPLER_THRES_FM
+                        INTERACTIVE = False
+                    elif self.my_satellite.downmode == "FMN":
+                        icomTrx.setMode("FM")
+                        doppler_thres = DOPPLER_THRES_FM
+                        INTERACTIVE = False
+                    elif self.my_satellite.downmode ==  "LSB" or self.my_satellite.downmode ==  "DATA-LSB":
+                        INTERACTIVE = True
+                        icomTrx.setMode("LSB")
+                        doppler_thres = DOPPLER_THRES_LINEAR
+                    elif self.my_satellite.downmode ==  "USB" or self.my_satellite.downmode ==  "DATA-USB":
+                        INTERACTIVE = True
+                        icomTrx.setMode("USB")
+                        doppler_thres = DOPPLER_THRES_LINEAR       
+                    elif self.my_satellite.downmode == "CW":
+                        INTERACTIVE = True
+                        icomTrx.setMode("CW") 
+                        doppler_thres = DOPPLER_THRES_LINEAR
+                    else:
+                        print("*** Downlink mode not implemented yet: {bad}".format(bad=self.my_satellite.downmode))
+                        sys.exit()
+                    doppler_thres = int(doppler_thres)
+                    self.dopplerthresval.setText(str(doppler_thres) + " Hz")
+                    if self.my_satellite.rig_satmode == 1:
+                        icomTrx.setVFO("SUB")
+                    else:
+                        icomTrx.setVFO("VFOB") 
                     if self.my_satellite.upmode == "FM":
                         icomTrx.setMode("FM")
                     elif self.my_satellite.upmode == "FMN":
                         icomTrx.setMode("FM")
-                    elif self.my_satellite.upmode == "LSB":
-                        icomTrx.setMode("LSB")    
+                    elif self.my_satellite.upmode == "LSB" or self.my_satellite.downmode ==  "DATA-LSB":
+                        icomTrx.setMode("LSB")
+                    elif self.my_satellite.upmode == "USB" or self.my_satellite.downmode ==  "DATA-USB":
+                        icomTrx.setMode("USB")
                     elif self.my_satellite.upmode == "CW":
                         icomTrx.setMode("CW") 
                     else:
                         print("*** Uplink mode not implemented yet: {bad}".format(bad=self.my_satellite.upmode))
                         sys.exit()
+                elif RADIO != "910":
+                    print("*** Not implemented yet mate***")
+                    sys.exit()
 
                 print("All config done, starting doppler...")
                 icomTrx.setVFO("Main") 
@@ -893,18 +959,33 @@ class MainWindow(QMainWindow):
                 self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata))))
                 user_Freq = 0;
                 old_user_Freq = 0;
-                icomTrx.setVFO("Main")
-                icomTrx.setFrequency(str(int(rx_doppler)))
-                icomTrx.setVFO("SUB")
-                icomTrx.setFrequency(str(int(tx_doppler)))
+                
+                if self.my_satellite.rig_satmode == 1:
+                    icomTrx.setVFO("Main")
+                    icomTrx.setFrequency(str(int(rx_doppler)))
+                    icomTrx.setVFO("SUB")
+                    icomTrx.setFrequency(str(int(tx_doppler)))
+                else:
+                    icomTrx.setVFO("VFOA")
+                    icomTrx.setFrequency(str(int(rx_doppler)))
+                    icomTrx.setVFO("VFOB")
+                    icomTrx.setFrequency(str(int(tx_doppler)))
+                
 
-                while SEMAPHORE == True:
+                while TRACKING_ACTIVE == True:
                     date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
                     myloc.date = ephem.Date(date_val)
                     
 
                     if INTERACTIVE == True:
-                        icomTrx.setVFO("Main")
+                        
+                        # Set RX VFO as standard
+                        if self.my_satellite.rig_satmode == 1:
+                            icomTrx.setVFO("Main")
+                        else:
+                            icomTrx.setVFO("VFOA")
+                            
+                        # read current RX
                         try:
                             old_user_Freq = user_Freq
                             user_Freq = int(icomTrx.getFrequency())
@@ -912,9 +993,10 @@ class MainWindow(QMainWindow):
                         except:
                             updated_rx = 0
                             user_Freq = 0
-                            
+                        # check for valid received freq and if dial is not moving (last two read frequencies are the same)    
                         if user_Freq > 0 and updated_rx == 1 and user_Freq == old_user_Freq:
                             old_user_Freq = user_Freq
+                            # check if there is an offset from the dial and move up/downlink accordingly
                             if abs(user_Freq - self.my_satellite.F) > 1:
                                 if True:
                                     if user_Freq > self.my_satellite.F:
@@ -936,33 +1018,47 @@ class MainWindow(QMainWindow):
                                             
                                 self.my_satellite.F = F0
                                 self.my_satellite.I = I0
-                                
+                        
+                        # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and user_Freq == old_user_Freq:#old_user_Freq == user_Freq and False:
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata))
-                            if new_rx_doppler != rx_doppler:
+                            # if dial movement or doppler is larger than the defined threshold, a new frequecy is sent to the radio
+                            if abs(new_rx_doppler-rx_doppler) > doppler_thres:
                                 rx_doppler = new_rx_doppler
-                                icomTrx.setVFO("Main")
+                                if self.my_satellite.rig_satmode == 1:
+                                    icomTrx.setVFO("Main")
+                                else:
+                                    icomTrx.setVFO("VFOA")
                                 icomTrx.setFrequency(str(rx_doppler))
                                 self.my_satellite.F = rx_doppler
                         
                             new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata))
-                            if new_tx_doppler != tx_doppler:
+                            if abs(new_tx_doppler-tx_doppler) > doppler_thres:
                                 tx_doppler = new_tx_doppler
-                                icomTrx.setVFO("SUB")
+                                if self.my_satellite.rig_satmode == 1:
+                                    icomTrx.setVFO("SUB")
+                                else:
+                                    icomTrx.setVFO("VFOB")
                                 icomTrx.setFrequency(str(tx_doppler))
                                 self.my_satellite.I = tx_doppler
                     # FM sats, no dial input accepted!
                     else:
                         new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata))
-                        if new_rx_doppler != rx_doppler:
+                        if abs(new_rx_doppler-rx_doppler) > doppler_thres:
                                 rx_doppler = new_rx_doppler
-                                icomTrx.setVFO("Main")
+                                if self.my_satellite.rig_satmode == 1:
+                                    icomTrx.setVFO("MAIN")
+                                else:
+                                    icomTrx.setVFO("VFOA")
                                 icomTrx.setFrequency(str(rx_doppler))
                                 self.my_satellite.F = rx_doppler
-                        if new_tx_doppler != tx_doppler:
+                        if abs(new_tx_doppler-tx_doppler) > doppler_thres:
                                 tx_doppler = new_tx_doppler
-                                icomTrx.setVFO("SUB")
+                                if self.my_satellite.rig_satmode == 1:
+                                    icomTrx.setVFO("SUB")
+                                else:
+                                    icomTrx.setVFO("VFOB")
                                 icomTrx.setFrequency(str(tx_doppler))
                                 self.my_satellite.I = tx_doppler
                     time.sleep(0.01)

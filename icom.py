@@ -182,6 +182,17 @@ class icom:
             if c[0] == '0':
                 c = c[1:len(c)]
         return c
+    def setFrequencyOffUnselectVFO(self, freq):
+        freq = '0000000000' + freq
+        freq = freq[-10:]
+        b = b'\x25\x01' + bytes([int(freq[8:10], 16), int(freq[6:8], 16), int(freq[4:6], 16),
+                   int(freq[2:4], 16), int(freq[0:2], 16)])
+        returnMsg = self.__writeToIcom(b)
+        back = False
+        if len(returnMsg) > 0:
+            if returnMsg.count(b'\xfb') > 0:
+                back = True
+        return back
 
     # CI-V TRANSCEIVE have to be ON
     # function extract last frequency which is send to us when a user is dailing
