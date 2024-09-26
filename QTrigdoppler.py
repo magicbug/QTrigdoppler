@@ -110,8 +110,8 @@ myloc.lon = LONGITUDE
 myloc.lat = LATITUDE
 myloc.elevation = ALTITUDE
 
-TRACKING_ACTIVE = True
-INTERACTIVE = False
+TRACKING_ACTIVE = True # tracking on/off
+INTERACTIVE = False # read user vfo/dial input - disable for inband packet
 if configur['icom']['radio'] == '9700':
     icomTrx = icom.icom('/dev/ttyUSB0', '19200', 96)
 elif configur['icom']['radio'] == '910':
@@ -832,6 +832,7 @@ class MainWindow(QMainWindow):
         self.LogText.append("Stopped")
         self.Startbutton.setEnabled(True)
         self.combo1.setEnabled(True)
+        self.combo2.setEnabled(True)
     
     def init_worker(self):
         global TRACKING_ACTIVE
@@ -849,6 +850,7 @@ class MainWindow(QMainWindow):
         self.LogText.append("TX Frequency Offset = {txfreq_off}".format(txfreq_off=i_cal))
         self.Startbutton.setEnabled(False)
         self.combo1.setEnabled(False)
+        self.combo2.setEnabled(False)
 
         worker = Worker(self.calc_doppler)
 
@@ -970,12 +972,14 @@ class MainWindow(QMainWindow):
                     icomTrx.setFrequency(str(int(rx_doppler)))
                     icomTrx.setVFO("VFOB")
                     icomTrx.setFrequency(str(int(tx_doppler)))
+                    INTERACTIVE = False #for SSB packet sats
                 
+                # Ensure that initial frequencies are always written 
+                tracking_init = 1
 
                 while TRACKING_ACTIVE == True:
                     date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
                     myloc.date = ephem.Date(date_val)
-                    
 
                     if INTERACTIVE == True:
                         
@@ -1039,13 +1043,18 @@ class MainWindow(QMainWindow):
                                     icomTrx.setVFO("SUB")
                                 else:
                                     icomTrx.setVFO("VFOB")
+                                    # Don't switch VFO when PTT is pushed, to avoid switching VFO while TX 
+                                    while icomTrx.isPttOff == 0:
+                                        time.sleep(0.1)
+                                        
                                 icomTrx.setFrequency(str(tx_doppler))
                                 self.my_satellite.I = tx_doppler
                     # FM sats, no dial input accepted!
                     else:
                         new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata))
-                        if abs(new_rx_doppler-rx_doppler) > doppler_thres:
+                        if abs(new_rx_doppler-rx_doppler) > doppler_thres or tracking_init == 1:
+                                tracking_init = 0
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("MAIN")
@@ -1053,17 +1062,29 @@ class MainWindow(QMainWindow):
                                     icomTrx.setVFO("VFOA")
                                 icomTrx.setFrequency(str(rx_doppler))
                                 self.my_satellite.F = rx_doppler
-                        if abs(new_tx_doppler-tx_doppler) > doppler_thres:
+                                time.sleep(0.2)
+                        if abs(new_tx_doppler-tx_doppler) > doppler_thres or tracking_init == 1:
+                                tracking_init = 0
                                 tx_doppler = new_tx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("SUB")
                                 else:
+                                    # Don't switch VFO when PTT is pushed, to avoid switching VFO while TX 
+                                    while icomTrx.isPttOff == 0:
+                                        time.sleep(0.2)
+                                        print("PTT is enganged, waiting....")
                                     icomTrx.setVFO("VFOB")
                                 icomTrx.setFrequency(str(tx_doppler))
                                 self.my_satellite.I = tx_doppler
-                    time.sleep(0.01)
+                                time.sleep(0.2)
+                                if self.my_satellite.rig_satmode == 1:
+                                    icomTrx.setVFO("MAIN")
+                                else:
+                                    icomTrx.setVFO("VFOA")
                     self.rxdoppler_val.setText(str(float(rx_doppler_val_calc(self.my_satellite.tledata))))
                     self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata))))
+                    #print("hi")
+                    time.sleep(0.01)
                     
 
         except:
