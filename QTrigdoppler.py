@@ -86,6 +86,7 @@ DOPPLER_THRES_LINEAR = configur.get('satellite', 'doppler_threshold_linear')
 SQFILE = configur.get('satellite','sqffile')
 RADIO = configur.get('icom','radio')
 CVIADDR = configur.get('icom','cviaddress')
+SERIALPORT = configur.get('icom', 'serialport')
 if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
 elif configur.get('icom', 'fullmode') == "False":
@@ -113,9 +114,9 @@ myloc.elevation = ALTITUDE
 TRACKING_ACTIVE = True # tracking on/off
 INTERACTIVE = False # read user vfo/dial input - disable for inband packet
 if configur['icom']['radio'] == '9700':
-    icomTrx = icom.icom('/dev/ttyUSB0', '19200', 96)
+    icomTrx = icom.icom(SERIALPORT, '19200', 96)
 elif configur['icom']['radio'] == '910':
-    icomTrx = icom.icom('/dev/ttyUSB0', '19200', 96)
+    icomTrx = icom.icom(SERIALPORT, '19200', 96)
            
 
 
