@@ -26,7 +26,7 @@ Support files and download links:
     3) doppler.sqf (included)
 
   
-AmsatNames.txt and dopler.sqf are wide and well known files used by PCSat32 software, so can be reused in the same computer.  
+AmsatNames.txt and dopler.sqf are wide and well known files used by SatPC32 software, so can be reused in the same computer.  
 
 ## v0.4 vs v0.3 and earlier (DL3JOP modifications):
     1) Removed hamlib
@@ -87,7 +87,7 @@ Although I tested v0.4 on multiple passes in FM as well as SSB, this project is 
   - Currently there is no support to enable/change SubTones. The icom library supporst it but I'm undecided how to store the parameters. Maybe similar to the offset profiles?
   - Storing the offset profiles sometimes adds empty lines, atm I don't know why   
 
-### Roadmap:
+## Roadmap:
   - Adding support for IC-9700 (should be easy as it uses nearly the same comands as the IC-910H)
   - Adding support for FT-8xx radios. Same approch: serial driver, although that will add additonal reworks in the doppler tracking loop to account for two radios
   - Building a much nicer GUI
