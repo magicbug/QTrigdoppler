@@ -5,9 +5,9 @@ Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)
   
 RigDoppler is a very simple Python3 script to correct doppler effect in radio satellites using Icom rigs connected to a computer.
 <picture>
- <source media="(prefers-color-scheme: dark)" srcset="https://github.com/pcabreracamara/QTrigdoppler/blob/main/images/mainWindow.png">
- <source media="(prefers-color-scheme: light)" srcset="https://github.com/pcabreracamara/QTrigdoppler/blob/main/images/mainWindow.png">
- <img alt="Shows QTRigDoppler GUI." src="https://github.com/pcabreracamara/QTrigdoppler/blob/main/images/mainWindow.png">
+ <source media="(prefers-color-scheme: dark)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
+ <source media="(prefers-color-scheme: light)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
+ <img alt="Shows QTRigDoppler GUI." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
 </picture>  
   
 ## Requeriments:  
@@ -36,9 +36,9 @@ AmsatNames.txt and dopler.sqf are wide and well known files used by PCSat32 soft
     
 ## Basic Configuration:
 <picture>
- <source media="(prefers-color-scheme: dark)" srcset="https://github.com/pcabreracamara/QTrigdoppler/blob/main/images/menu_config.png">
- <source media="(prefers-color-scheme: light)" srcset="https://github.com/pcabreracamara/QTrigdoppler/blob/main/images/menu_config.png">
- <img alt="Shows the GUI for editing config." src="https://github.com/pcabreracamara/QTrigdoppler/blob/main/images/menu_config.png">
+ <source media="(prefers-color-scheme: dark)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
+ <source media="(prefers-color-scheme: light)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
+ <img alt="Shows the GUI for editing config." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
 </picture>  
     1) "Setup" menu, "Edit setup" item to review and change the parameters:. QTH Parameters
     
