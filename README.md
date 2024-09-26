@@ -1,4 +1,4 @@
-# QT RigDoppler v0.4 (stable release for IC-9100)
+# QT RigDoppler v0.4 (stable release for IC-910)
 
 Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
 Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)  
