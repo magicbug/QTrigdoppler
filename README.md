@@ -1,10 +1,13 @@
-# QT RigDoppler v0.3 (stable release for Icom 705 and 9700)
+# QT RigDoppler v0.4 (stable release for IC-9100)
 
 Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
 Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)  
 Extended and modified to v0.4 by DL3JOP Joshua Petry (@dl3jop)
   
 RigDoppler is a very simple Python3 script to correct doppler effect in radio satellites using Icom rigs connected to a computer.
+
+Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed
+
 <picture>
  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
  <source media="(prefers-color-scheme: light)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
