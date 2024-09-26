@@ -42,6 +42,8 @@ AmsatNames.txt and dopler.sqf are wide and well known files used by PCSat32 soft
  <img alt="Shows the GUI for editing config." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
 </picture>  
     1) "Setup" menu, "Edit setup" item to review and change the parameters:. QTH Parameters
+
+
     
     - Latitude, Longitude and altitude.
     - Step for RX and TX offset sliders (Hertz).
@@ -63,7 +65,9 @@ AmsatNames.txt and dopler.sqf are wide and well known files used by PCSat32 soft
 
 
         
-    2) Execute RigDoppler: python3 /path/to/QTrigdoppler.py        
+  
+  
+  2) Execute RigDoppler: python3 /path/to/QTrigdoppler.py        
         
 ## Field Tests:
 
