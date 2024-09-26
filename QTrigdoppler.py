@@ -891,7 +891,7 @@ class MainWindow(QMainWindow):
                 if RADIO == "910":
                     # Testing current satmode config for V/U or U/V and swapping if needed
                     
-                    if self.my_satellite.rig_satmode == 1:
+                    if True: #self.my_satellite.rig_satmode == 1:
                         icomTrx.setVFO("Main")
                         curr_band = int(icomTrx.getFrequency())
                         if curr_band > 400000000 and F0 < 400000000:

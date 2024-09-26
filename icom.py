@@ -1,4 +1,5 @@
 """
+Original code: https://github.com/dl7oap/gp2icom
 Created: by Andreas Puschendorf, DL7OAP
 Date    : 09/2020
 
@@ -13,6 +14,10 @@ Date    : 11/2020
 Comments: to bring ic9100 and ic9700 together in one class the CI-V adress has to be given
           162 - default for IC9700 (162 = hex A2)
           124 - default for IC9100 (124 = hex 7C)
+          
+Modified: by Joshua Petry, DL3JOP
+Date    : 09/2024
+Comments: changed to IC-910 support, 9700/9100 deprecated     
 """
 
 import serial
