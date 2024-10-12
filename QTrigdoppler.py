@@ -501,7 +501,7 @@ class MainWindow(QMainWindow):
         self.counter = 0
         self.my_satellite = Satellite()
 
-        self.setWindowTitle("QT RigDoppler v0.3")
+        self.setWindowTitle("QT RigDoppler v0.4")
         self.setGeometry(0, 0, 900, 150)
 
         pagelayout = QVBoxLayout()
@@ -962,6 +962,7 @@ class MainWindow(QMainWindow):
                 self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata))))
                 user_Freq = 0;
                 old_user_Freq = 0;
+                user_Freq_history = [0, 0, 0]
                 
                 if self.my_satellite.rig_satmode == 1:
                     icomTrx.setVFO("Main")
@@ -995,11 +996,15 @@ class MainWindow(QMainWindow):
                             old_user_Freq = user_Freq
                             user_Freq = int(icomTrx.getFrequency())
                             updated_rx = 1
+                            user_Freq_history.pop(0)
+                            user_Freq_history.append(user_Freq)
                         except:
                             updated_rx = 0
                             user_Freq = 0
+                        vfo_not_moving = user_Freq_history.count(user_Freq_history[0]) == len(user_Freq_history)
+                        print("Last n frequenncies: " +str(user_Freq_history) +" --> no change: " + str(vfo_not_moving))
                         # check for valid received freq and if dial is not moving (last two read frequencies are the same)    
-                        if user_Freq > 0 and updated_rx == 1 and user_Freq == old_user_Freq:
+                        if user_Freq > 0 and updated_rx == 1 and vfo_not_moving:
                             old_user_Freq = user_Freq
                             # check if there is an offset from the dial and move up/downlink accordingly
                             if abs(user_Freq - self.my_satellite.F) > 1:
@@ -1025,7 +1030,7 @@ class MainWindow(QMainWindow):
                                 self.my_satellite.I = I0
                         
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
-                        if updated_rx and user_Freq == old_user_Freq:#old_user_Freq == user_Freq and False:
+                        if updated_rx and vfo_not_moving:#old_user_Freq == user_Freq and False:
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata))
                             # if dial movement or doppler is larger than the defined threshold, a new frequecy is sent to the radio
                             if abs(new_rx_doppler-rx_doppler) > doppler_thres:
