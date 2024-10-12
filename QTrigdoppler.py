@@ -39,16 +39,14 @@ def rx_dopplercalc(ephemdata, freq_at_sat):
     doppler = int(freq_at_sat - ephemdata.range_velocity * freq_at_sat / C)
     return doppler
 ### Calculates the tx doppler error   
-def tx_doppler_val_calc(ephemdata):
-    global I0
+def tx_doppler_val_calc(ephemdata, freq_at_sat):
     ephemdata.compute(myloc)
-    doppler = int(ephemdata.range_velocity * I0 / C)
+    doppler = int(ephemdata.range_velocity * freq_at_sat / C)
     return doppler
 ### Calculates the rx doppler error   
-def rx_doppler_val_calc(ephemdata):
-    global F0
+def rx_doppler_val_calc(ephemdata, freq_at_sat):
     ephemdata.compute(myloc)
-    doppler = int(-ephemdata.range_velocity * F0 / C)
+    doppler = int(-ephemdata.range_velocity * freq_at_sat / C)
     return doppler
     
 def MyError():
@@ -641,11 +639,19 @@ class MainWindow(QMainWindow):
         self.Startbutton = QPushButton("Start Tracking")
         self.Startbutton.clicked.connect(self.init_worker)
         button_layout.addWidget(self.Startbutton)
+        self.Startbutton.setEnabled(False)
 
         # 1x QPushButton (Stop)
         self.Stopbutton = QPushButton("Stop Tracking")
         self.Stopbutton.clicked.connect(self.the_stop_button_was_clicked)
         button_layout.addWidget(self.Stopbutton)
+        self.Stopbutton.setEnabled(False)
+        
+        # Sync to SQF freq
+        self.syncbutton = QPushButton("Sync to SQF Frequencies")
+        self.syncbutton.clicked.connect(self.the_sync_button_was_clicked)
+        button_layout.addWidget(self.syncbutton)
+        self.syncbutton.setEnabled(False)
 
         # Exit Label
         self.exitbutontitle = QLabel("Disconnect and exit:")
@@ -682,7 +688,6 @@ class MainWindow(QMainWindow):
         self.timer = QTimer()
         self.timer.setInterval(50)
         self.timer.timeout.connect(self.recurring_timer)
-        self.timer.start()
 
     def setup_config(self, checked):
         self.cfgwindow = ConfigWindow()
@@ -767,8 +772,11 @@ class MainWindow(QMainWindow):
                                 self.my_satellite.rig_satmode = 0
                             if self.my_satellite.noradid == 0 or self.my_satellite.F == 0 or self.my_satellite.I == 0:
                                 self.Startbutton.setEnabled(False)
+                                self.Stopbutton.setEnabled(False)
+                                self.syncbutton.setEnabled(False)
                             else:
                                 self.Startbutton.setEnabled(True)
+                                self.syncbutton.setEnabled(True)
                             break
         except IOError:
             raise MyError()
@@ -812,6 +820,7 @@ class MainWindow(QMainWindow):
         if self.my_satellite.tledata == "":
             self.LogText.append("***  Satellite not found in {badfile} file.".format(badfile=TLEFILE))
             self.Startbutton.setEnabled(False)
+            self.syncbutton.setEnabled(False)
             return
         else:
             day_of_year = datetime.now().timetuple().tm_yday
@@ -820,6 +829,8 @@ class MainWindow(QMainWindow):
 
             if diff > 7:
                 self.LogText.append("***  Warning, your TLE file is getting older: {days} days.".format(days=diff))
+            
+        self.timer.start()
 
     def the_exit_button_was_clicked(self):
         icomTrx.close()
@@ -830,12 +841,19 @@ class MainWindow(QMainWindow):
         global INTERACTIVE
         TRACKING_ACTIVE = INTERACTIVE = False
         self.LogText.append("Stopped")
+        self.Stopbutton.setEnabled(False)
         self.Startbutton.setEnabled(True)
+        #self.syncbutton.setEnabled(False)
         self.combo1.setEnabled(True)
         self.combo2.setEnabled(True)
+    def the_sync_button_was_clicked(self):
+        self.my_satellite.F = self.my_satellite.F_init
+        self.my_satellite.I = self.my_satellite.I_init
     
     def init_worker(self):
         global TRACKING_ACTIVE
+        self.syncbutton.setEnabled(True)
+        self.Stopbutton.setEnabled(True)
 
         if TRACKING_ACTIVE == False:
             TRACKING_ACTIVE = True
@@ -962,8 +980,8 @@ class MainWindow(QMainWindow):
                 self.LogText.append("Start TX@sat: {tx}".format(tx=self.my_satellite.I))
                 self.LogText.append("Start RX@radio: {rx}".format(rx=F0))
                 self.LogText.append("Start TX@radio: {tx}".format(tx=I0))
-                self.rxdoppler_val.setText(str(float(rx_doppler_val_calc(self.my_satellite.tledata))))
-                self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata))))
+                self.rxdoppler_val.setText(str(float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))))
+                self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I))))
                 user_Freq = 0;
                 user_Freq_history = [0, 0, 0, 0]
                 vfo_not_moving = 0
@@ -1039,13 +1057,6 @@ class MainWindow(QMainWindow):
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F))
-                            #if vfo_not_moving_old == 0:
-                            #    new_rx_doppler = F0
-                            #    rx_doppler = new_rx_doppler # fixes random frequency jumps
-                            # if dial movement or doppler is larger than the defined threshold, a new frequecy is sent to the radio
-                            print("F0: " +str(F0))
-                            print("I0: " +str(I0))
-                            print("new_rx_doppler: " +str(new_rx_doppler))
                             if abs(new_rx_doppler-F0) > doppler_thres:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
@@ -1056,9 +1067,6 @@ class MainWindow(QMainWindow):
                                 F0 = rx_doppler
                         
                             new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I))
-                            #if vfo_not_moving_old == 0:
-                            #    new_tx_doppler = I0
-                            #    tx_doppler = new_tx_doppler
                             if abs(new_tx_doppler-I0) > doppler_thres:
                                 tx_doppler = new_tx_doppler
                                 if self.my_satellite.rig_satmode == 1:
@@ -1103,8 +1111,7 @@ class MainWindow(QMainWindow):
                                     icomTrx.setVFO("MAIN")
                                 else:
                                     icomTrx.setVFO("VFOA")
-                    self.rxdoppler_val.setText(str(float(rx_doppler_val_calc(self.my_satellite.tledata))))
-                    self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata))))
+                    
                     time.sleep(0.01)
                     
 
@@ -1113,10 +1120,14 @@ class MainWindow(QMainWindow):
             sys.exit()
     
     def recurring_timer(self):
-        self.rxfreq.setText(str(float(self.my_satellite.F)))
-        self.rxfreq_onsat.setText(str(F0))
-        self.txfreq.setText(str(float(self.my_satellite.I)))
-        self.txfreq_onsat.setText(str(I0))
+        date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
+        myloc.date = ephem.Date(date_val)
+        self.rxdoppler_val.setText(str(float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))))
+        self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I))))
+        self.rxfreq.setText(str(F0))
+        self.rxfreq_onsat.setText(str(float(self.my_satellite.F)))
+        self.txfreq.setText(str(I0))
+        self.txfreq_onsat.setText(str(float(self.my_satellite.I)))
 
 class WorkerSignals(QObject):
     finished = pyqtSignal()
