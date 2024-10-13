@@ -133,6 +133,12 @@ class Satellite:
     I_init = 0
     I_cal = 0
     new_cal = 0
+    down_doppler = 0
+    down_doppler_old = 0
+    down_doppler_rate = 0
+    up_doppler = 0
+    up_doppler_old = 0
+    up_doppler_rate = 0
     tledata = ""
     rig_satmode = 0
 
@@ -587,11 +593,24 @@ class MainWindow(QMainWindow):
         labels_layout.addWidget(self.rxfreq_onsat)
         
         # 1x Label: RX Doppler Satellite
+        rx_doppler_freq_layout = QHBoxLayout()
         self.rxdopplersat_lbl = QLabel("Doppler:")
-        labels_layout.addWidget(self.rxdopplersat_lbl)
+        rx_doppler_freq_layout.addWidget(self.rxdopplersat_lbl)
 
-        self.rxdoppler_val = QLabel("0.0")
-        labels_layout.addWidget(self.rxdoppler_val)
+        self.rxdoppler_val = QLabel("0.0 Hz")
+        rx_doppler_freq_layout.addWidget(self.rxdoppler_val)
+        
+        labels_layout.addLayout(rx_doppler_freq_layout)
+        
+        # 1x Label: RX Doppler RateSatellite
+        rx_doppler_rate_layout = QHBoxLayout()
+        self.rxdopplerratesat_lbl = QLabel("Rate:")
+        rx_doppler_rate_layout.addWidget(self.rxdopplerratesat_lbl)
+
+        self.rxdopplerrate_val = QLabel("0.0 Hz/s")
+        rx_doppler_rate_layout.addWidget(self.rxdopplerrate_val)
+        
+        labels_layout.addLayout(rx_doppler_rate_layout)
 
         tx_labels_layout = QHBoxLayout()
         # 1x Label: TX freq
@@ -612,12 +631,26 @@ class MainWindow(QMainWindow):
         self.txfreq_onsat = QLabel("0.0")
         labels_layout.addWidget(self.txfreq_onsat)
         
+        
         # 1x Label: TX Doppler Satellite
+        tx_doppler_freq_layout = QHBoxLayout()
         self.txdopplersat_lbl = QLabel("Doppler:")
-        labels_layout.addWidget(self.txdopplersat_lbl)
+        tx_doppler_freq_layout.addWidget(self.txdopplersat_lbl)
 
-        self.txdoppler_val = QLabel("0.0")
-        labels_layout.addWidget(self.txdoppler_val)
+        self.txdoppler_val = QLabel("0.0 Hz")
+        tx_doppler_freq_layout.addWidget(self.txdoppler_val)
+        
+        labels_layout.addLayout(tx_doppler_freq_layout)
+        
+        # 1x Label: TX Doppler RateSatellite
+        tx_doppler_rate_layout = QHBoxLayout()
+        self.txdopplerratesat_lbl = QLabel("Rate:")
+        tx_doppler_rate_layout.addWidget(self.txdopplerratesat_lbl)
+
+        self.txdopplerrate_val = QLabel("0.0 Hz/s")
+        tx_doppler_rate_layout.addWidget(self.txdopplerrate_val)
+        
+        labels_layout.addLayout(tx_doppler_rate_layout)
 
         # 1x Label: RX Offset
         self.rxoffsetboxtitle = QLabel("RX Offset:")
@@ -630,18 +663,6 @@ class MainWindow(QMainWindow):
         self.rxoffsetbox.setSingleStep(int(STEP_RX))
         self.rxoffsetbox.valueChanged.connect(self.rxoffset_value_changed)
         offset_layout.addWidget(self.rxoffsetbox)
-
-        # 1x Label: TX Offset
-        self.txoffsetboxtitle = QLabel("TX Offset:")
-        offset_layout.addWidget(self.txoffsetboxtitle)
-
-        # 1x QSlider (TX offset)
-        self.txoffsetbox = QSpinBox()
-        self.txoffsetbox.setMinimum(-MAX_OFFSET_TX)
-        self.txoffsetbox.setMaximum(MAX_OFFSET_TX)
-        self.txoffsetbox.setSingleStep(int(STEP_TX))
-        self.txoffsetbox.valueChanged.connect(self.txoffset_value_changed)
-        offset_layout.addWidget(self.txoffsetbox)
 
          # Start Label
         self.butontitle = QLabel("Press \"Start/Stop Tracking\" to start doppler correction ")
@@ -699,7 +720,7 @@ class MainWindow(QMainWindow):
 
         self.threadpool = QThreadPool()
         self.timer = QTimer()
-        self.timer.setInterval(50)
+        self.timer.setInterval(1000)
         self.timer.timeout.connect(self.recurring_timer)
 
     def setup_config(self, checked):
@@ -793,12 +814,10 @@ class MainWindow(QMainWindow):
             raise MyError()
 
         self.rxoffsetbox.setValue(0)
-        self.txoffsetbox.setValue(0)
         for tpx in useroffsets:
             if tpx[0] == self.my_satellite.name and tpx[1] == tpxname:
 
                 usrrxoffset=int(tpx[2])
-                usrtxoffset=int(tpx[3])
 
                 if usrrxoffset < MAX_OFFSET_RX and usrrxoffset > -MAX_OFFSET_RX:
                     self.rxoffsetbox.setMaximum(MAX_OFFSET_RX)
@@ -810,13 +829,6 @@ class MainWindow(QMainWindow):
                     self.LogText.append("***  ERROR: Max RX offset ({max}) not align with user offset: {value}.".format(value=usrrxoffset,max =MAX_OFFSET_RX))
                     self.rxoffsetbox.setValue(0)
                 
-                if usrtxoffset < MAX_OFFSET_TX and usrtxoffset > -MAX_OFFSET_TX:
-                    self.txoffsetbox.setMaximum(MAX_OFFSET_TX)
-                    self.txoffsetbox.setMinimum(-MAX_OFFSET_TX)
-                    self.txoffsetbox.setValue(usrtxoffset)
-                else:
-                    self.LogText.append("***  ERROR: Max TX offset ({max}) not align with user offset: {value}.".format(value=usrtxoffset,max=MAX_OFFSET_TX))
-                    self.txoffsetbox.setValue(0)
                 
 
         try:
@@ -1160,8 +1172,22 @@ class MainWindow(QMainWindow):
     def recurring_timer(self):
         date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
         myloc.date = ephem.Date(date_val)
-        self.rxdoppler_val.setText(str(float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))))
-        self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I))))
+        self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
+        self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))
+        self.my_satellite.down_doppler_rate = (self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2
+        if abs(self.my_satellite.down_doppler_rate) > 100.0:
+            self.my_satellite.down_doppler_rate = 0.0
+            
+        self.my_satellite.up_doppler_old = self.my_satellite.up_doppler
+        self.my_satellite.up_doppler = float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I))
+        self.my_satellite.up_doppler_rate = (self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2
+        if abs(self.my_satellite.up_doppler_rate) > 100.0:
+            self.my_satellite.up_doppler_rate = 0.0
+            
+        self.rxdoppler_val.setText(str(self.my_satellite.down_doppler) + " Hz")
+        self.txdoppler_val.setText(str(self.my_satellite.up_doppler) + " Hz")
+        self.rxdopplerrate_val.setText(str(self.my_satellite.down_doppler_rate) + " Hz/s")
+        self.txdopplerrate_val.setText(str(self.my_satellite.up_doppler_rate) + " Hz/s")
         self.rxfreq.setText(str(F0))
         self.rxfreq_onsat.setText(str(float(self.my_satellite.F)))
         self.txfreq.setText(str(I0))
