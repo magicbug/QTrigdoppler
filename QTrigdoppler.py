@@ -90,6 +90,8 @@ elif configur.get('icom', 'fullmode') == "False":
     
 useroffsets = []
 
+subtone_list = ["None", "67 Hz", "71.9 Hz"]
+
 i = 0
 for (each_key, each_val) in configur.items('offset_profiles'):
     # Format SATNAME:RXoffset,TXoffset
@@ -126,8 +128,11 @@ class Satellite:
     mode = ""
     F = 0
     F_init = 0
+    F_cal = 0
     I = 0
     I_init = 0
+    I_cal = 0
+    new_cal = 0
     tledata = ""
     rig_satmode = 0
 
@@ -546,6 +551,14 @@ class MainWindow(QMainWindow):
         self.combo2.currentTextChanged.connect(self.tpx_changed) 
         combo_layout.addWidget(self.combo2)
         
+        self.tonetext = QLabel("Subtone:")
+        self.tonetext.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        combo_layout.addWidget(self.tonetext)
+        self.combo3 = QComboBox()
+        self.combo3.addItems(subtone_list)
+        self.combo3.currentTextChanged.connect(self.tone_changed) 
+        combo_layout.addWidget(self.combo3)
+        
         self.dopplerthreslabel = QLabel("Doppler threshold:")
         combo_layout.addWidget(self.dopplerthreslabel)
         self.dopplerthresval = QLabel("0.0")
@@ -695,17 +708,15 @@ class MainWindow(QMainWindow):
 
     def rxoffset_value_changed(self, i):
             global f_cal
-            global F0
-            f_cal = i
-            F0 = self.my_satellite.F_init + f_cal
+            self.my_satellite.new_cal = 1
+            self.my_satellite.F_cal =  f_cal = i
             self.LogText.append("*** New RX offset: {thenew}".format(thenew=i))
     
     def txoffset_value_changed(self, i):
-            global i_cal
-            global I0
-            i_cal = i
-            I0 = self.my_satellite.I_init + i_cal
-            self.LogText.append("*** New TX offset: {thenew}".format(thenew=i))
+        pass
+            #global i_cal
+            #self.my_satellite.I_cal = i_cal
+            #self.LogText.append("*** New TX offset: {thenew}".format(thenew=i))
     
     def sat_changed(self, satname):
         self.LogText.clear()
@@ -793,6 +804,8 @@ class MainWindow(QMainWindow):
                     self.rxoffsetbox.setMaximum(MAX_OFFSET_RX)
                     self.rxoffsetbox.setMinimum(-MAX_OFFSET_RX)
                     self.rxoffsetbox.setValue(usrrxoffset)
+                    self.my_satellite.new_cal = 1
+                    self.my_satellite.F_cal =  f_cal = usrrxoffset
                 else:
                     self.LogText.append("***  ERROR: Max RX offset ({max}) not align with user offset: {value}.".format(value=usrrxoffset,max =MAX_OFFSET_RX))
                     self.rxoffsetbox.setValue(0)
@@ -831,6 +844,27 @@ class MainWindow(QMainWindow):
                 self.LogText.append("***  Warning, your TLE file is getting older: {days} days.".format(days=diff))
             
         self.timer.start()
+        
+    def tone_changed(self, tone_name):
+        
+        if self.my_satellite.rig_satmode == 1:
+            icomTrx.setVFO("Sub")
+        else:
+            icomTrx.setVFO("VFOB")
+            
+        if tone_name == "67 Hz":
+            icomTrx.setToneHz(str(670))
+            icomTrx.setToneOn(1)
+        elif tone_name == "71.9 Hz":
+            icomTrx.setToneHz(str(719))
+            icomTrx.setToneOn(1)
+        elif tone_name == "None":
+            icomTrx.setToneOn(0)
+            
+        if self.my_satellite.rig_satmode == 1:
+            icomTrx.setVFO("Main")
+        else:
+            icomTrx.setVFO("VFOA")
 
     def the_exit_button_was_clicked(self):
         icomTrx.close()
@@ -921,7 +955,7 @@ class MainWindow(QMainWindow):
                         icomTrx.setVFO("Main")
                     else:
                         icomTrx.setVFO("VFOA")
-                    
+                    icomTrx.setToneOn(0)
                     if self.my_satellite.downmode == "FM":
                         icomTrx.setMode("FM")
                         doppler_thres = DOPPLER_THRES_FM
@@ -950,7 +984,8 @@ class MainWindow(QMainWindow):
                     if self.my_satellite.rig_satmode == 1:
                         icomTrx.setVFO("SUB")
                     else:
-                        icomTrx.setVFO("VFOB") 
+                        icomTrx.setVFO("VFOB")
+                    icomTrx.setToneOn(0)
                     if self.my_satellite.upmode == "FM":
                         icomTrx.setMode("FM")
                     elif self.my_satellite.upmode == "FMN":
@@ -989,11 +1024,13 @@ class MainWindow(QMainWindow):
                 
                 if self.my_satellite.rig_satmode == 1:
                     icomTrx.setVFO("Main")
+                    icomTrx.setToneOn(0)
                     icomTrx.setFrequency(str(int(F0)))
                     icomTrx.setVFO("SUB")
                     icomTrx.setFrequency(str(int(I0)))
                 else:
                     icomTrx.setVFO("VFOA")
+                    icomTrx.setToneOn(0)
                     icomTrx.setFrequency(str(int(F0)))
                     icomTrx.setVFO("VFOB")
                     icomTrx.setFrequency(str(int(I0)))
@@ -1026,9 +1063,9 @@ class MainWindow(QMainWindow):
                         
                         vfo_not_moving_old = vfo_not_moving
                         vfo_not_moving = user_Freq_history.count(user_Freq_history[0]) == len(user_Freq_history)
-                        print("Last n frequencies: " +str(user_Freq_history) +" --> no change: " + str(vfo_not_moving))
-                        # check for valid received freq and if dial is not moving (last two read frequencies are the same)    
-                        if user_Freq > 0 and updated_rx == 1 and vfo_not_moving:
+                        #print("Last n frequencies: " +str(user_Freq_history) +" --> no change: " + str(vfo_not_moving))
+                        # check for valid received freq and if dial is not moving (last two read frequencies are the same)
+                        if user_Freq > 0 and updated_rx == 1 and vfo_not_moving and self.my_satellite.new_cal == 0:
                             # check if there is an offset from the dial and move up/downlink accordingly
                             if abs(user_Freq - F0) > 1:
                                 if True:
@@ -1056,13 +1093,14 @@ class MainWindow(QMainWindow):
                                             
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
-                            new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F))
+                            new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal))
                             if abs(new_rx_doppler-F0) > doppler_thres:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("Main")
                                 else:
                                     icomTrx.setVFO("VFOA")
+                                #print(self.my_satellite.F_cal)
                                 icomTrx.setFrequency(str(rx_doppler))
                                 F0 = rx_doppler
                         
@@ -1081,7 +1119,7 @@ class MainWindow(QMainWindow):
                                 I0 = tx_doppler
                     # FM sats, no dial input accepted!
                     else:
-                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F))
+                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I))
                         if abs(new_rx_doppler-F0) > doppler_thres or tracking_init == 1:
                                 tracking_init = 0
@@ -1111,7 +1149,7 @@ class MainWindow(QMainWindow):
                                     icomTrx.setVFO("MAIN")
                                 else:
                                     icomTrx.setVFO("VFOA")
-                    
+                    self.my_satellite.new_cal = 0
                     time.sleep(0.01)
                     
 
