@@ -17,13 +17,14 @@ import traceback
 import icom
 
 from time import gmtime, strftime
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from configparser import ConfigParser
 
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
+from qt_material import apply_stylesheet
 
 C = 299792458.
 
@@ -41,12 +42,12 @@ def rx_dopplercalc(ephemdata, freq_at_sat):
 ### Calculates the tx doppler error   
 def tx_doppler_val_calc(ephemdata, freq_at_sat):
     ephemdata.compute(myloc)
-    doppler = int(ephemdata.range_velocity * freq_at_sat / C)
+    doppler = format(float(ephemdata.range_velocity * freq_at_sat / C), '.2f')
     return doppler
 ### Calculates the rx doppler error   
 def rx_doppler_val_calc(ephemdata, freq_at_sat):
     ephemdata.compute(myloc)
-    doppler = int(-ephemdata.range_velocity * freq_at_sat / C)
+    doppler = format(float(-ephemdata.range_velocity * freq_at_sat / C),'.2f')
     return doppler
     
 def MyError():
@@ -573,24 +574,29 @@ class MainWindow(QMainWindow):
         myFont=QFont()
         myFont.setBold(True)
         
-        rx_labels_layout = QHBoxLayout()
+        #groupbox = QGroupBox("")
+        #labels_layout.addWidget(groupbox)
+        
+        rx_labels_radio_layout = QHBoxLayout()
         # 1x Label: RX freq
-        self.rxfreqtitle = QLabel("RX:")
+        self.rxfreqtitle = QLabel("RX @ Radio:")
         self.rxfreqtitle.setFont(myFont)
-        rx_labels_layout.addWidget(self.rxfreqtitle)
+        rx_labels_radio_layout.addWidget(self.rxfreqtitle)
 
         self.rxfreq = QLabel("0.0")
         self.rxfreq.setFont(myFont)
-        rx_labels_layout.addWidget(self.rxfreq)
+        rx_labels_radio_layout.addWidget(self.rxfreq)
         
-        labels_layout.addLayout(rx_labels_layout)
+        labels_layout.addLayout(rx_labels_radio_layout)
 
+        rx_labels_sat_layout = QHBoxLayout()
         # 1x Label: RX freq Satellite
-        self.rxfreqsat_lbl = QLabel("RX freq on Sat:")
-        labels_layout.addWidget(self.rxfreqsat_lbl)
+        self.rxfreqsat_lbl = QLabel("RX @ Sat:")
+        rx_labels_sat_layout.addWidget(self.rxfreqsat_lbl)
 
         self.rxfreq_onsat = QLabel("0.0")
-        labels_layout.addWidget(self.rxfreq_onsat)
+        rx_labels_sat_layout.addWidget(self.rxfreq_onsat)
+        labels_layout.addLayout(rx_labels_sat_layout)
         
         # 1x Label: RX Doppler Satellite
         rx_doppler_freq_layout = QHBoxLayout()
@@ -611,25 +617,33 @@ class MainWindow(QMainWindow):
         rx_doppler_rate_layout.addWidget(self.rxdopplerrate_val)
         
         labels_layout.addLayout(rx_doppler_rate_layout)
+        
+        rx_tx_sep = QLabel()
+        rx_tx_sep.setFrameStyle(QFrame.HLine)
+        rx_tx_sep.setLineWidth(2)
+        rx_tx_sep.setStyleSheet("color: rgb(221, 221, 221)")
+        labels_layout.addWidget(rx_tx_sep)
 
-        tx_labels_layout = QHBoxLayout()
+        tx_labels_radio_layout = QHBoxLayout()
         # 1x Label: TX freq
-        self.txfreqtitle = QLabel("TX:")
+        self.txfreqtitle = QLabel("TX @ radio:")
         self.txfreqtitle.setFont(myFont)
-        tx_labels_layout.addWidget(self.txfreqtitle)
+        tx_labels_radio_layout.addWidget(self.txfreqtitle)
 
         self.txfreq = QLabel("0.0")
         self.txfreq.setFont(myFont)
-        tx_labels_layout.addWidget(self.txfreq)
+        tx_labels_radio_layout.addWidget(self.txfreq)
         
-        labels_layout.addLayout(tx_labels_layout)
+        labels_layout.addLayout(tx_labels_radio_layout)
 
+        tx_labels_sat_layout = QHBoxLayout()
         # 1x Label: TX freq Satellite
-        self.txfreqsat_lbl = QLabel("TX freq on Sat:")
-        labels_layout.addWidget(self.txfreqsat_lbl)
+        self.txfreqsat_lbl = QLabel("TX @ Sat:")
+        tx_labels_sat_layout.addWidget(self.txfreqsat_lbl)
 
         self.txfreq_onsat = QLabel("0.0")
-        labels_layout.addWidget(self.txfreq_onsat)
+        tx_labels_sat_layout.addWidget(self.txfreq_onsat)
+        labels_layout.addLayout(tx_labels_sat_layout)
         
         
         # 1x Label: TX Doppler Satellite
@@ -720,7 +734,7 @@ class MainWindow(QMainWindow):
 
         self.threadpool = QThreadPool()
         self.timer = QTimer()
-        self.timer.setInterval(1000)
+        self.timer.setInterval(200)
         self.timer.timeout.connect(self.recurring_timer)
 
     def setup_config(self, checked):
@@ -1170,24 +1184,24 @@ class MainWindow(QMainWindow):
             sys.exit()
     
     def recurring_timer(self):
-        date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
+        date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
         myloc.date = ephem.Date(date_val)
         self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
         self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))
-        self.my_satellite.down_doppler_rate = (self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2
+        self.my_satellite.down_doppler_rate = ((self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2)/0.2
         if abs(self.my_satellite.down_doppler_rate) > 100.0:
             self.my_satellite.down_doppler_rate = 0.0
             
         self.my_satellite.up_doppler_old = self.my_satellite.up_doppler
         self.my_satellite.up_doppler = float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I))
-        self.my_satellite.up_doppler_rate = (self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2
+        self.my_satellite.up_doppler_rate = ((self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2)/0.2
         if abs(self.my_satellite.up_doppler_rate) > 100.0:
             self.my_satellite.up_doppler_rate = 0.0
             
         self.rxdoppler_val.setText(str(self.my_satellite.down_doppler) + " Hz")
         self.txdoppler_val.setText(str(self.my_satellite.up_doppler) + " Hz")
-        self.rxdopplerrate_val.setText(str(self.my_satellite.down_doppler_rate) + " Hz/s")
-        self.txdopplerrate_val.setText(str(self.my_satellite.up_doppler_rate) + " Hz/s")
+        self.rxdopplerrate_val.setText(str(format(self.my_satellite.down_doppler_rate, '.2f')) + " Hz/s")
+        self.txdopplerrate_val.setText(str(format(self.my_satellite.up_doppler_rate, '.2f')) + " Hz/s")
         self.rxfreq.setText(str(F0))
         self.rxfreq_onsat.setText(str(float(self.my_satellite.F)))
         self.txfreq.setText(str(I0))
@@ -1245,5 +1259,6 @@ socket.setdefaulttimeout(15)
 
 app = QApplication(sys.argv)
 window = MainWindow()
+apply_stylesheet(app, theme='dark_lightgreen.xml')
 window.show()
 app.exec()
