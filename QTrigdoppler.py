@@ -523,14 +523,12 @@ class MainWindow(QMainWindow):
         
         labels_layout = QVBoxLayout()
         combo_layout = QVBoxLayout()
-        offset_layout = QVBoxLayout()
         button_layout = QVBoxLayout()
 
         combo_layout.setAlignment(Qt.AlignVCenter)
 
         uplayout.addLayout(combo_layout)
         uplayout.addLayout(labels_layout)
-        uplayout.addLayout(offset_layout)
         uplayout.addLayout(button_layout)
 
         self.sattext = QLabel("Satellite:")
@@ -566,16 +564,34 @@ class MainWindow(QMainWindow):
         self.combo3.currentTextChanged.connect(self.tone_changed) 
         combo_layout.addWidget(self.combo3)
         
+        doppler_thres_layout = QHBoxLayout()
         self.dopplerthreslabel = QLabel("Doppler threshold:")
-        combo_layout.addWidget(self.dopplerthreslabel)
+        doppler_thres_layout.addWidget(self.dopplerthreslabel)
         self.dopplerthresval = QLabel("0.0")
-        combo_layout.addWidget(self.dopplerthresval)
+        doppler_thres_layout.addWidget(self.dopplerthresval)
+        #combo_layout.addLayout(doppler_thres_layout)
+        
+        # 1x Label: RX Offset
+        self.rxoffsetboxtitle = QLabel("RX Offset:")
+        self.rxoffsetboxtitle.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        combo_layout.addWidget(self.rxoffsetboxtitle)
+
+        # 1x QSlider (RX offset)
+        self.rxoffsetbox = QSpinBox()
+        self.rxoffsetbox.setMinimum(-MAX_OFFSET_RX)
+        self.rxoffsetbox.setMaximum(MAX_OFFSET_RX)
+        self.rxoffsetbox.setSingleStep(int(STEP_RX))
+        self.rxoffsetbox.valueChanged.connect(self.rxoffset_value_changed)
+        combo_layout.addWidget(self.rxoffsetbox)
 
         myFont=QFont()
         myFont.setBold(True)
         
-        #groupbox = QGroupBox("")
-        #labels_layout.addWidget(groupbox)
+        groupbox_downlink = QGroupBox()
+        groupbox_downlink.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        labels_layout.addWidget(groupbox_downlink)
+        vbox_downlink = QVBoxLayout()
+        groupbox_downlink.setLayout(vbox_downlink)
         
         rx_labels_radio_layout = QHBoxLayout()
         # 1x Label: RX freq
@@ -587,7 +603,7 @@ class MainWindow(QMainWindow):
         self.rxfreq.setFont(myFont)
         rx_labels_radio_layout.addWidget(self.rxfreq)
         
-        labels_layout.addLayout(rx_labels_radio_layout)
+        vbox_downlink.addLayout(rx_labels_radio_layout)
 
         rx_labels_sat_layout = QHBoxLayout()
         # 1x Label: RX freq Satellite
@@ -596,7 +612,7 @@ class MainWindow(QMainWindow):
 
         self.rxfreq_onsat = QLabel("0.0")
         rx_labels_sat_layout.addWidget(self.rxfreq_onsat)
-        labels_layout.addLayout(rx_labels_sat_layout)
+        vbox_downlink.addLayout(rx_labels_sat_layout)
         
         # 1x Label: RX Doppler Satellite
         rx_doppler_freq_layout = QHBoxLayout()
@@ -606,7 +622,7 @@ class MainWindow(QMainWindow):
         self.rxdoppler_val = QLabel("0.0 Hz")
         rx_doppler_freq_layout.addWidget(self.rxdoppler_val)
         
-        labels_layout.addLayout(rx_doppler_freq_layout)
+        vbox_downlink.addLayout(rx_doppler_freq_layout)
         
         # 1x Label: RX Doppler RateSatellite
         rx_doppler_rate_layout = QHBoxLayout()
@@ -616,17 +632,17 @@ class MainWindow(QMainWindow):
         self.rxdopplerrate_val = QLabel("0.0 Hz/s")
         rx_doppler_rate_layout.addWidget(self.rxdopplerrate_val)
         
-        labels_layout.addLayout(rx_doppler_rate_layout)
+        vbox_downlink.addLayout(rx_doppler_rate_layout)
         
-        rx_tx_sep = QLabel()
-        rx_tx_sep.setFrameStyle(QFrame.HLine)
-        rx_tx_sep.setLineWidth(2)
-        rx_tx_sep.setStyleSheet("color: rgb(221, 221, 221)")
-        labels_layout.addWidget(rx_tx_sep)
+        groupbox_uplink = QGroupBox()
+        groupbox_uplink.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        labels_layout.addWidget(groupbox_uplink)
+        vbox_uplink = QVBoxLayout()
+        groupbox_uplink.setLayout(vbox_uplink)
 
         tx_labels_radio_layout = QHBoxLayout()
         # 1x Label: TX freq
-        self.txfreqtitle = QLabel("TX @ radio:")
+        self.txfreqtitle = QLabel("TX @ Radio:")
         self.txfreqtitle.setFont(myFont)
         tx_labels_radio_layout.addWidget(self.txfreqtitle)
 
@@ -634,7 +650,7 @@ class MainWindow(QMainWindow):
         self.txfreq.setFont(myFont)
         tx_labels_radio_layout.addWidget(self.txfreq)
         
-        labels_layout.addLayout(tx_labels_radio_layout)
+        vbox_uplink.addLayout(tx_labels_radio_layout)
 
         tx_labels_sat_layout = QHBoxLayout()
         # 1x Label: TX freq Satellite
@@ -643,7 +659,7 @@ class MainWindow(QMainWindow):
 
         self.txfreq_onsat = QLabel("0.0")
         tx_labels_sat_layout.addWidget(self.txfreq_onsat)
-        labels_layout.addLayout(tx_labels_sat_layout)
+        vbox_uplink.addLayout(tx_labels_sat_layout)
         
         
         # 1x Label: TX Doppler Satellite
@@ -654,7 +670,7 @@ class MainWindow(QMainWindow):
         self.txdoppler_val = QLabel("0.0 Hz")
         tx_doppler_freq_layout.addWidget(self.txdoppler_val)
         
-        labels_layout.addLayout(tx_doppler_freq_layout)
+        vbox_uplink.addLayout(tx_doppler_freq_layout)
         
         # 1x Label: TX Doppler RateSatellite
         tx_doppler_rate_layout = QHBoxLayout()
@@ -664,25 +680,8 @@ class MainWindow(QMainWindow):
         self.txdopplerrate_val = QLabel("0.0 Hz/s")
         tx_doppler_rate_layout.addWidget(self.txdopplerrate_val)
         
-        labels_layout.addLayout(tx_doppler_rate_layout)
-
-        # 1x Label: RX Offset
-        self.rxoffsetboxtitle = QLabel("RX Offset:")
-        offset_layout.addWidget(self.rxoffsetboxtitle)
-
-        # 1x QSlider (RX offset)
-        self.rxoffsetbox = QSpinBox()
-        self.rxoffsetbox.setMinimum(-MAX_OFFSET_RX)
-        self.rxoffsetbox.setMaximum(MAX_OFFSET_RX)
-        self.rxoffsetbox.setSingleStep(int(STEP_RX))
-        self.rxoffsetbox.valueChanged.connect(self.rxoffset_value_changed)
-        offset_layout.addWidget(self.rxoffsetbox)
-
-         # Start Label
-        self.butontitle = QLabel("Press \"Start/Stop Tracking\" to start doppler correction ")
-        self.butontitle.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        button_layout.addWidget(self.butontitle)
-
+        vbox_uplink.addLayout(tx_doppler_rate_layout)
+        
         # 1x QPushButton (Start)
         self.Startbutton = QPushButton("Start Tracking")
         self.Startbutton.clicked.connect(self.init_worker)
@@ -700,11 +699,6 @@ class MainWindow(QMainWindow):
         self.syncbutton.clicked.connect(self.the_sync_button_was_clicked)
         button_layout.addWidget(self.syncbutton)
         self.syncbutton.setEnabled(False)
-
-        # Exit Label
-        self.exitbutontitle = QLabel("Disconnect and exit:")
-        self.exitbutontitle.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        button_layout.addWidget(self.exitbutontitle)
 
         # 1x QPushButton (Exit)
         self.Exitbutton = QPushButton("Exit")
@@ -1260,5 +1254,18 @@ socket.setdefaulttimeout(15)
 app = QApplication(sys.argv)
 window = MainWindow()
 apply_stylesheet(app, theme='dark_lightgreen.xml')
+tooltip_stylesheet = """
+        QToolTip {
+            color: white;
+            background-color: black;
+        }
+        QComboBox {
+            color: white;
+        }
+        QSpinBox {
+            color: white;
+        }
+    """
+app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
 window.show()
 app.exec()
