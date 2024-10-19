@@ -77,13 +77,13 @@ MAX_OFFSET_RX = configur.getint('qth','max_offset_rx')
 MAX_OFFSET_TX = configur.getint('qth','max_offset_tx')
 TLEFILE = configur.get('satellite','tle_file')
 TLEURL = configur.get('satellite','tle_url')
-SATNAMES = configur.get('satellite','amsatnames')
 DOPPLER_THRES_FM = configur.get('satellite', 'doppler_threshold_fm')
 DOPPLER_THRES_LINEAR = configur.get('satellite', 'doppler_threshold_linear')
 SQFILE = configur.get('satellite','sqffile')
 RADIO = configur.get('icom','radio')
 CVIADDR = configur.get('icom','cviaddress')
 SERIALPORT = configur.get('icom', 'serialport')
+
 if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
 elif configur.get('icom', 'fullmode') == "False":
@@ -164,7 +164,6 @@ class ConfigWindow(QMainWindow):
         # satellite
         global TLEFILE
         global TLEURL
-        global SATNAMES
         global SQFILE
 
         # Radio
@@ -308,14 +307,6 @@ class ConfigWindow(QMainWindow):
         self.sattleurl.setText(TLEURL)
         satellite_layout.addWidget(self.sattleurl)
 
-        # 1x Label SATNAMES file
-        self.satsatnames_lbl = QLabel("AmsatNames filename:")
-        satellite_layout.addWidget(self.satsatnames_lbl)
-
-        self.satsatnames = QLineEdit()
-        self.satsatnames.setMaxLength(30)
-        self.satsatnames.setText(SATNAMES)
-        satellite_layout.addWidget(self.satsatnames)
 
         # 1x Label SQF file
         self.satsqf_lbl = QLabel("SQF filename:")
@@ -433,7 +424,6 @@ class ConfigWindow(QMainWindow):
         # satellite
         global TLEFILE
         global TLEURL
-        global SATNAMES
         global SQFILE
 
         # Radio
@@ -459,7 +449,6 @@ class ConfigWindow(QMainWindow):
         configur['qth']['max_offset_tx'] = str(int(self.qthmaxoffrx.displayText()))
         TLEFILE = configur['satellite']['tle_file'] = str(self.sattle.displayText())
         TLEURL =  configur['satellite']['tle_url'] = str(self.sattleurl.displayText())
-        SATNAMES = configur['satellite']['amsatnames'] = str(self.satsatnames.displayText())
         SQFILE = configur['satellite']['sqffile'] = str(self.satsqf.displayText())
         
         DOPPLER_THRES_FM = int(self.doppler_fm_threshold.displayText())
@@ -741,18 +730,10 @@ class MainWindow(QMainWindow):
             self.my_satellite.F_cal =  f_cal = i
             self.LogText.append("*** New RX offset: {thenew}".format(thenew=i))
     
-    def txoffset_value_changed(self, i):
-        pass
-            #global i_cal
-            #self.my_satellite.I_cal = i_cal
-            #self.LogText.append("*** New TX offset: {thenew}".format(thenew=i))
-    
     def sat_changed(self, satname):
         self.LogText.clear()
         self.my_satellite.name = satname
 
-        #   EA4HCF: Now, let's really use PCSat32 dople file .
-        #   From SatName,  will get the RX and TX frequencies.
         try:
             with open(SQFILE, 'r') as h:
                 sqfdata = h.readlines()
@@ -774,7 +755,6 @@ class MainWindow(QMainWindow):
         global f_cal
         global i_cal
         global MAX_OFFSET_RX
-        global MAX_OFFSET_TX
         
         try:
             with open(SQFILE, 'r') as h:
