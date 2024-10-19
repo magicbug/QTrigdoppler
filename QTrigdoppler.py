@@ -151,25 +151,7 @@ class ConfigWindow(QMainWindow):
         self.setGeometry(0, 0, 800, 350)
 
         # QTH
-        global LATITUDE
-        global LONGITUDE
-        global ALTITUDE
-        global STEP_RX
-        global STEP_TX
-        global MAX_OFFSET_RX
-        global MAX_OFFSET_TX
-        global DOPPLER_THRES_FM
-        global DOPPLER_THRES_LINEAR
-
-        # satellite
-        global TLEFILE
-        global TLEURL
-        global SQFILE
-
-        # Radio
-        global RADIO
-        global CVIADDR
-        global OPMODE
+        
 
         myFont=QFont()
         myFont.setBold(True)
@@ -178,11 +160,11 @@ class ConfigWindow(QMainWindow):
 
         uplayout = QHBoxLayout()
         mediumlayout = QHBoxLayout()
-        downlayout = QHBoxLayout()
+        log_layout = QHBoxLayout()
 
         pagelayout.addLayout(uplayout)
         pagelayout.addLayout(mediumlayout)
-        pagelayout.addLayout(downlayout)
+        pagelayout.addLayout(log_layout)
         
         qth_layout = QVBoxLayout()
         satellite_layout = QVBoxLayout()
@@ -195,41 +177,11 @@ class ConfigWindow(QMainWindow):
 
         mediumlayout.addLayout(radio_layout)
 
-        downlayout.addLayout(offset_layout)
-        downlayout.addLayout(buttons_layout)
+        log_layout.addLayout(offset_layout)
+        log_layout.addLayout(buttons_layout)
 
         ### QTH
-        self.qth = QLabel("QTH Parameters")
-        self.qth.setFont(myFont)
-        qth_layout.addWidget(self.qth)
         
-        # 1x Label latitude
-        self.qthlat_lbl = QLabel("QTH latitude:")
-        qth_layout.addWidget(self.qthlat_lbl)
-
-        self.qthlat = QLineEdit()
-        self.qthlat.setMaxLength(10)
-        self.qthlat.setText(str(LATITUDE))
-        qth_layout.addWidget(self.qthlat)
-
-        # 1x Label Longitude
-        self.qthlong_lbl = QLabel("QTH longitude:")
-        qth_layout.addWidget(self.qthlong_lbl)
-
-        self.qthlong = QLineEdit()
-        self.qthlong.setMaxLength(10)
-        self.qthlong.setEchoMode(QLineEdit.Normal)
-        self.qthlong.setText(str(LONGITUDE))
-        qth_layout.addWidget(self.qthlong)
-
-        # 1x Label altitude
-        self.qthalt_lbl = QLabel("QTH altitude:")
-        qth_layout.addWidget(self.qthalt_lbl)
-
-        self.qthalt = QLineEdit()
-        self.qthalt.setMaxLength(10)
-        self.qthalt.setText(str(ALTITUDE))
-        qth_layout.addWidget(self.qthalt)
 
         # 1x Label step RX
         self.qthsteprx_lbl = QLabel("Step (Hz) for RX:")
@@ -495,20 +447,44 @@ class ConfigWindow(QMainWindow):
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
+        
+        
+        ### All of this should be moved to a global settings struct ....
+        global LATITUDE
+        global LONGITUDE
+        global ALTITUDE
+        global STEP_RX
+        global STEP_TX
+        global MAX_OFFSET_RX
+        global MAX_OFFSET_TX
+        global DOPPLER_THRES_FM
+        global DOPPLER_THRES_LINEAR
+
+        # satellite
+        global TLEFILE
+        global TLEURL
+        global SQFILE
+
+        # Radio
+        global RADIO
+        global CVIADDR
+        global OPMODE
 
         self.counter = 0
         self.my_satellite = Satellite()
 
         self.setWindowTitle("QT RigDoppler v0.4")
         self.setGeometry(0, 0, 900, 150)
+        
+        ### Overview Page
 
-        pagelayout = QVBoxLayout()
+        overview_pagelayout = QVBoxLayout()
 
-        uplayout = QHBoxLayout()
-        downlayout = QHBoxLayout()
+        control_layout = QHBoxLayout()
+        log_layout = QHBoxLayout()
 
-        pagelayout.addLayout(uplayout)
-        pagelayout.addLayout(downlayout)
+        overview_pagelayout.addLayout(control_layout)
+        overview_pagelayout.addLayout(log_layout)
         
         labels_layout = QVBoxLayout()
         combo_layout = QVBoxLayout()
@@ -516,9 +492,9 @@ class MainWindow(QMainWindow):
 
         combo_layout.setAlignment(Qt.AlignVCenter)
 
-        uplayout.addLayout(combo_layout)
-        uplayout.addLayout(labels_layout)
-        uplayout.addLayout(button_layout)
+        control_layout.addLayout(combo_layout)
+        control_layout.addLayout(labels_layout)
+        control_layout.addLayout(button_layout)
 
         self.sattext = QLabel("Satellite:")
         self.sattext.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
@@ -699,30 +675,78 @@ class MainWindow(QMainWindow):
         self.LogText = QTextEdit()
         self.LogText.setReadOnly(True)
         self.LogText.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        downlayout.addWidget(self.LogText)
-
-        ## Menu
-        self.button_action = QAction("&Main setup", self)
-        self.button_action.setStatusTip("Load and edit configuration")
-        self.button_action.triggered.connect(self.setup_config)
-
-        menu = self.menuBar()
-        self.config_menu = menu.addMenu("&Setup")
-        self.config_menu.addAction(self.button_action)
-        ## End Menu
+        log_layout.addWidget(self.LogText)
         
-        container = QWidget()
-        container.setLayout(pagelayout)
-        self.setCentralWidget(container)
+        
+        ### Settings
+        settings_layout = QHBoxLayout()
+        
+        
+        
+        self.settings_qth_box = QGroupBox("QTH")
+        self.settings_qth_box.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        settings_layout.addWidget(self.settings_qth_box)
+        self.settings_radio_box = QGroupBox("Radio")
+        self.settings_radio_box.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        settings_layout.addWidget(self.settings_radio_box)
+        self.settings_file_box = QGroupBox("Files")
+        self.settings_file_box.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        settings_layout.addWidget(self.settings_file_box)
+        
+        
+        ## QTH
+        qth_settings_layout = QVBoxLayout()
+        
+        #LAT
+        qth_settings_lat_layout = QHBoxLayout()
+        self.qth_settings_lat_lbl = QLabel("QTH latitude:")
+        qth_settings_lat_layout.addWidget(self.qth_settings_lat_lbl)
+        self.qth_settings_lat_edit = QLineEdit()
+        self.qth_settings_lat_edit.setMaxLength(10)
+        self.qth_settings_lat_edit.setText(str(LATITUDE))
+        qth_settings_lat_layout.addWidget(self.qth_settings_lat_edit)        
+        qth_settings_layout.addLayout(qth_settings_lat_layout)
+        
+        #LONG
+        qth_settings_long_layout = QHBoxLayout()
+        self.qth_settings_long_lbl = QLabel("QTH longitude:")
+        qth_settings_long_layout.addWidget(self.qth_settings_long_lbl)
+        self.qth_settings_long_edit = QLineEdit()
+        self.qth_settings_long_edit.setMaxLength(10)
+        self.qth_settings_long_edit.setText(str(LONGITUDE))
+        qth_settings_long_layout.addWidget(self.qth_settings_long_edit)
+        qth_settings_layout.addLayout(qth_settings_long_layout)
+        
+        
+        #Altitude
+        qth_settings_alt_layout = QHBoxLayout()
+        self.qth_settings_alt_lbl = QLabel("QTH Altitude:")
+        qth_settings_alt_layout.addWidget(self.qth_settings_alt_lbl)
+        self.qth_settings_alt_edit = QLineEdit()
+        self.qth_settings_alt_edit.setMaxLength(10)
+        self.qth_settings_alt_edit.setText(str(ALTITUDE))
+        qth_settings_alt_layout.addWidget(self.qth_settings_alt_edit)
+        qth_settings_layout.addLayout(qth_settings_alt_layout)
+        
+        
+        
+        self.settings_qth_box.setLayout(qth_settings_layout)
+        
+
+        ###  UI Layout / Tab Widget
+        self.tab_widget = QTabWidget()
+        self.tab_overview = QWidget()
+        self.tab_settings = QWidget()
+        self.tab_widget.addTab(self.tab_overview,"Overview")
+        self.tab_widget.addTab(self.tab_settings,"Settings")
+        self.tab_overview.setLayout(overview_pagelayout)
+        self.tab_settings.setLayout(settings_layout)
+        self.setCentralWidget(self.tab_widget)
 
         self.threadpool = QThreadPool()
         self.timer = QTimer()
         self.timer.setInterval(200)
         self.timer.timeout.connect(self.recurring_timer)
-
-    def setup_config(self, checked):
-        self.cfgwindow = ConfigWindow()
-        self.cfgwindow.show()
 
     def rxoffset_value_changed(self, i):
             global f_cal
@@ -776,7 +800,7 @@ class MainWindow(QMainWindow):
                                 self.my_satellite.rig_satmode = 1
                             else:
                                 self.my_satellite.rig_satmode = 0
-                            if self.my_satellite.noradid == 0 or self.my_satellite.F == 0 or self.my_satellite.I == 0:
+                            if self.my_satellite.F == 0 or self.my_satellite.I == 0:
                                 self.Startbutton.setEnabled(False)
                                 self.Stopbutton.setEnabled(False)
                                 self.syncbutton.setEnabled(False)
@@ -1231,6 +1255,9 @@ tooltip_stylesheet = """
             color: white;
         }
         QSpinBox {
+            color: white;
+        }
+        QLineEdit {
             color: white;
         }
     """
