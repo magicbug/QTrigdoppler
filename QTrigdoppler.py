@@ -49,6 +49,19 @@ def rx_doppler_val_calc(ephemdata, freq_at_sat):
     ephemdata.compute(myloc)
     doppler = format(float(-ephemdata.range_velocity * freq_at_sat / C),'.2f')
     return doppler
+def sat_ele_calc(ephemdata):
+    ephemdata.compute(myloc)
+    ele = format(ephemdata.alt/ math.pi * 180.0,'.2f' )
+    return ele    
+def sat_azi_calc(ephemdata):
+    ephemdata.compute(myloc)
+    azi = format(ephemdata.az/ math.pi * 180.0,'.2f' )
+    return azi
+def sat_height_calc(ephemdata):
+    ephemdata.compute(myloc)
+    height = format(float(ephemdata.elevation)/1000.0,'.2f') 
+    return height
+    
     
 def MyError():
     print("Failed to find required file!")
@@ -156,170 +169,7 @@ class ConfigWindow(QMainWindow):
         myFont=QFont()
         myFont.setBold(True)
 
-        pagelayout = QVBoxLayout()
-
-        uplayout = QHBoxLayout()
-        mediumlayout = QHBoxLayout()
-        log_layout = QHBoxLayout()
-
-        pagelayout.addLayout(uplayout)
-        pagelayout.addLayout(mediumlayout)
-        pagelayout.addLayout(log_layout)
-        
-        qth_layout = QVBoxLayout()
-        satellite_layout = QVBoxLayout()
-        radio_layout = QVBoxLayout()
-        offset_layout = QVBoxLayout()
-        buttons_layout = QVBoxLayout()
-
-        uplayout.addLayout(qth_layout)
-        uplayout.addLayout(satellite_layout)
-
-        mediumlayout.addLayout(radio_layout)
-
-        log_layout.addLayout(offset_layout)
-        log_layout.addLayout(buttons_layout)
-
-        ### QTH
-        
-
-        # 1x Label step RX
-        self.qthsteprx_lbl = QLabel("Step (Hz) for RX:")
-        qth_layout.addWidget(self.qthsteprx_lbl)
-
-        self.qthsteprx = QLineEdit()
-        self.qthsteprx.setMaxLength(10)
-        self.qthsteprx.setText(str(STEP_RX))
-        qth_layout.addWidget(self.qthsteprx)
-
-        # 1x Label step TX
-        self.qthsteptx_lbl = QLabel("Step (Hz) for TX:")
-        qth_layout.addWidget(self.qthsteptx_lbl)
-
-        self.qthsteptx = QLineEdit()
-        self.qthsteptx.setMaxLength(10)
-        self.qthsteptx.setText(str(STEP_TX))
-        qth_layout.addWidget(self.qthsteptx)
-
-        # 1x Label Max Offset RX
-        self.qthmaxoffrx_lbl = QLabel("Max Offset (Hz) for RX:")
-        qth_layout.addWidget(self.qthmaxoffrx_lbl)
-
-        self.qthmaxoffrx = QLineEdit()
-        self.qthmaxoffrx.setMaxLength(6)
-        self.qthmaxoffrx.setText(str(MAX_OFFSET_RX))
-        qth_layout.addWidget(self.qthmaxoffrx)
-
-        # 1x Label Max Offset TX
-        self.qthmaxofftx_lbl = QLabel("Max Offset (Hz) for TX:")
-        qth_layout.addWidget(self.qthmaxofftx_lbl)
-
-        self.qthmaxofftx = QLineEdit()
-        self.qthmaxofftx.setMaxLength(6)
-        self.qthmaxofftx.setText(str(MAX_OFFSET_TX))
-        qth_layout.addWidget(self.qthmaxofftx)
-        
-        # 1x Label doppler fm threshold
-        self.doppler_fm_threshold_lbl = QLabel("Doppler threshold for FM")
-        qth_layout.addWidget(self.doppler_fm_threshold_lbl)
-
-        self.doppler_fm_threshold = QLineEdit()
-        self.doppler_fm_threshold.setMaxLength(6)
-        self.doppler_fm_threshold.setText(str(DOPPLER_THRES_FM))
-        qth_layout.addWidget(self.doppler_fm_threshold)
-        
-        # 1x Label doppler linear threshold
-        self.doppler_linear_threshold_lbl = QLabel("Doppler threshold for Linear")
-        qth_layout.addWidget(self.doppler_linear_threshold_lbl)
-
-        self.doppler_linear_threshold = QLineEdit()
-        self.doppler_linear_threshold.setMaxLength(6)
-        self.doppler_linear_threshold.setText(str(DOPPLER_THRES_LINEAR))
-        qth_layout.addWidget(self.doppler_linear_threshold)
-
-        ### Satellite
-        self.sat = QLabel("Satellite Parameters")
-        self.sat.setFont(myFont)
-        satellite_layout.addWidget(self.sat)
-        # 1x Label TLE file
-        self.sattle_lbl = QLabel("TLE filename:")
-        satellite_layout.addWidget(self.sattle_lbl)
-
-        self.sattle = QLineEdit()
-        self.sattle.setMaxLength(30)
-        self.sattle.setText(TLEFILE)
-        satellite_layout.addWidget(self.sattle)
-
-        # 1x Label TLE URL
-        self.sattleurl_lbl = QLabel("TLE URL:")
-        satellite_layout.addWidget(self.sattleurl_lbl)
-
-        self.sattleurl = QLineEdit()
-        self.sattleurl.setMaxLength(70)
-        self.sattleurl.setText(TLEURL)
-        satellite_layout.addWidget(self.sattleurl)
-
-
-        # 1x Label SQF file
-        self.satsqf_lbl = QLabel("SQF filename:")
-        satellite_layout.addWidget(self.satsqf_lbl)
-
-        self.satsqf = QLineEdit()
-        self.satsqf.setMaxLength(30)
-        self.satsqf.setText(SQFILE)
-        satellite_layout.addWidget(self.satsqf)
-
-        ### RADIO
-        self.radio = QLabel("Radio Parameters")
-        self.radio.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self.radio.setFont(myFont)
-        radio_layout.addWidget(self.radio)
-
-        # 1x Label CVI address
-        self.radiolist_lbl = QLabel("Select radio:")
-        self.radiolist_lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        radio_layout.addWidget(self.radiolist_lbl)
-
-        # 1x Select manufacturer
-        self.radiolistcomb = QComboBox()
-        self.radiolistcomb.addItems(['Icom 9700'])
-        #self.radiolistcomb.addItems(['Icom 705'])
-        #self.radiolistcomb.addItems(['Yaesu 818'])
-        self.radiolistcomb.addItems(['Icom 910H'])
-        if configur['icom']['radio'] == '9700':
-            self.radiolistcomb.setCurrentText('Icom 9700')
-        #elif configur['icom']['radio'] == '705':
-        #    self.radiolistcomb.setCurrentText('Icom 705')
-        #elif configur['icom']['radio'] == '818':
-        #    self.radiolistcomb.setCurrentText('Yaesu 818')
-        elif configur['icom']['radio'] == '910':
-            self.radiolistcomb.setCurrentText('Icom 910H')
-        radio_layout.addWidget(self.radiolistcomb)
-
-        # 1x Label CVI address
-        self.radicvi_lbl = QLabel("CVI address:")
-        self.radicvi_lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        radio_layout.addWidget(self.radicvi_lbl)
-
-        self.radicvi = QLineEdit()
-        self.radicvi.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self.radicvi.setMaxLength(2)
-        self.radicvi.setText(CVIADDR)
-        radio_layout.addWidget(self.radicvi)
-
-        # 1x Label Duplex mode
-        self.radidplx_lbl = QLabel("Duplex mode:")
-        self.radidplx_lbl.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        radio_layout.addWidget(self.radidplx_lbl)
-
-        self.radidplx = QCheckBox()
-        if OPMODE == False:
-            self.radidplx.setChecked(False)
-        elif OPMODE == True:
-            self.radidplx.setChecked(True)
-        self.radidplx.setText("Full Duplex Operation for 705/818")
-        self.radidplx.stateChanged.connect(self.opmode_change)
-        radio_layout.addWidget(self.radidplx)
+        pagelayout = QVBoxLayout()  
 
         ### Offset profiles
         self.offsets = QLabel("Offsets Profiles")
@@ -336,25 +186,6 @@ class ConfigWindow(QMainWindow):
         for (each_key, each_val) in configur.items('offset_profiles'):
             self.offsetText.append(each_val)
 
-        # Save Label
-        self.savebutontitle = QLabel("Save configuration")
-        self.savebutontitle.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        buttons_layout.addWidget(self.savebutontitle)
-
-        # 1x QPushButton (Save)
-        self.Savebutton = QPushButton("Save")
-        self.Savebutton.clicked.connect(self.save_config)
-        buttons_layout.addWidget(self.Savebutton)
-
-        # Exit Label
-        self.exitbutontitle = QLabel("Exit configuration")
-        self.exitbutontitle.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        buttons_layout.addWidget(self.exitbutontitle)
-
-        # 1x QPushButton (Save)
-        self.Exitbutton = QPushButton("Exit")
-        self.Exitbutton.clicked.connect(self.exit_config)
-        buttons_layout.addWidget(self.Exitbutton)
 
         ##########################################
         container = QWidget()
@@ -474,7 +305,7 @@ class MainWindow(QMainWindow):
         self.my_satellite = Satellite()
 
         self.setWindowTitle("QT RigDoppler v0.4")
-        self.setGeometry(0, 0, 900, 150)
+        #self.setGeometry(0, 0, 800, 480)
         
         ### Overview Page
 
@@ -482,6 +313,7 @@ class MainWindow(QMainWindow):
 
         control_layout = QHBoxLayout()
         log_layout = QHBoxLayout()
+        #log_layout.setAlignment(Qt.AlignVCenter)
 
         overview_pagelayout.addLayout(control_layout)
         overview_pagelayout.addLayout(log_layout)
@@ -664,6 +496,11 @@ class MainWindow(QMainWindow):
         self.syncbutton.clicked.connect(self.the_sync_button_was_clicked)
         button_layout.addWidget(self.syncbutton)
         self.syncbutton.setEnabled(False)
+        
+        self.store_offset_button = QPushButton("Store offset")
+        #self.store_offset_button.clicked.connect(self.the_sync_button_was_clicked)
+       # button_layout.addWidget(self.store_offset_button)
+        self.store_offset_button.setEnabled(False)
 
         # 1x QPushButton (Exit)
         self.Exitbutton = QPushButton("Exit")
@@ -672,65 +509,211 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.Exitbutton)
 
         # Output log
+        
+        self.log_sat_status = QGroupBox()
+        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        log_sat_status_layout = QGridLayout()
+        
+        self.log_sat_status_ele_lbl = QLabel("Elevation:")
+        log_sat_status_layout.addWidget(self.log_sat_status_ele_lbl, 0, 0)
+
+        self.log_sat_status_ele_val = QLabel("0.0 °")
+        log_sat_status_layout.addWidget(self.log_sat_status_ele_val, 0, 1)
+        
+        self.log_sat_status_azi_lbl = QLabel("Azimuth:")
+        log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 1, 0)
+
+        self.log_sat_status_azi_val = QLabel("0.0 °")
+        log_sat_status_layout.addWidget(self.log_sat_status_azi_val, 1, 1)
+        
+        self.log_sat_status_height_lbl = QLabel("Height:")
+        log_sat_status_layout.addWidget(self.log_sat_status_height_lbl, 2, 0)
+
+        self.log_sat_status_height_val = QLabel("0.0 m")
+        log_sat_status_layout.addWidget(self.log_sat_status_height_val, 2, 1)
+        
+        self.log_sat_status.setLayout(log_sat_status_layout)
+        log_layout.addWidget(self.log_sat_status, 1)
+        
         self.LogText = QTextEdit()
         self.LogText.setReadOnly(True)
         self.LogText.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        log_layout.addWidget(self.LogText)
+        log_layout.addWidget(self.LogText, 2)
         
         
-        ### Settings
+        ### Settings Tab
         settings_layout = QHBoxLayout()
         
         
-        
+        # QTH Tab
         self.settings_qth_box = QGroupBox("QTH")
-        self.settings_qth_box.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        self.settings_qth_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
         settings_layout.addWidget(self.settings_qth_box)
+        
+        # Radio Tab (scrollable for smaller screens)
         self.settings_radio_box = QGroupBox("Radio")
-        self.settings_radio_box.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        self.settings_radio_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
         settings_layout.addWidget(self.settings_radio_box)
+        
+        # Files Tab
         self.settings_file_box = QGroupBox("Files")
-        self.settings_file_box.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        self.settings_file_box.setStyleSheet("QGroupBox{padding-top:1px;padding-bottom:5px; margin-top:5px}")
         settings_layout.addWidget(self.settings_file_box)
         
         
         ## QTH
-        qth_settings_layout = QVBoxLayout()
+        qth_settings_layout = QGridLayout()
         
-        #LAT
-        qth_settings_lat_layout = QHBoxLayout()
+        # LAT
         self.qth_settings_lat_lbl = QLabel("QTH latitude:")
-        qth_settings_lat_layout.addWidget(self.qth_settings_lat_lbl)
+        qth_settings_layout.addWidget(self.qth_settings_lat_lbl, 0,0)
         self.qth_settings_lat_edit = QLineEdit()
         self.qth_settings_lat_edit.setMaxLength(10)
         self.qth_settings_lat_edit.setText(str(LATITUDE))
-        qth_settings_lat_layout.addWidget(self.qth_settings_lat_edit)        
-        qth_settings_layout.addLayout(qth_settings_lat_layout)
+        qth_settings_layout.addWidget(self.qth_settings_lat_edit, 0,1)        
         
-        #LONG
-        qth_settings_long_layout = QHBoxLayout()
+        # LONG
         self.qth_settings_long_lbl = QLabel("QTH longitude:")
-        qth_settings_long_layout.addWidget(self.qth_settings_long_lbl)
+        qth_settings_layout.addWidget(self.qth_settings_long_lbl, 1, 0)
         self.qth_settings_long_edit = QLineEdit()
         self.qth_settings_long_edit.setMaxLength(10)
         self.qth_settings_long_edit.setText(str(LONGITUDE))
-        qth_settings_long_layout.addWidget(self.qth_settings_long_edit)
-        qth_settings_layout.addLayout(qth_settings_long_layout)
+        qth_settings_layout.addWidget(self.qth_settings_long_edit, 1, 1)        
         
-        
-        #Altitude
-        qth_settings_alt_layout = QHBoxLayout()
+        # Altitude
         self.qth_settings_alt_lbl = QLabel("QTH Altitude:")
-        qth_settings_alt_layout.addWidget(self.qth_settings_alt_lbl)
+        qth_settings_layout.addWidget(self.qth_settings_alt_lbl, 2, 0)
         self.qth_settings_alt_edit = QLineEdit()
         self.qth_settings_alt_edit.setMaxLength(10)
         self.qth_settings_alt_edit.setText(str(ALTITUDE))
-        qth_settings_alt_layout.addWidget(self.qth_settings_alt_edit)
-        qth_settings_layout.addLayout(qth_settings_alt_layout)
-        
-        
-        
+        qth_settings_layout.addWidget(self.qth_settings_alt_edit, 2, 1)
+
         self.settings_qth_box.setLayout(qth_settings_layout)
+        
+        ## Radio
+        self.radio_settings_layout_scroller = QScrollArea()
+        self.radio_settings_layout_scroller_widget = QWidget()
+        radio_settings_layout = QGridLayout()
+        
+        # Radio selector
+        self.radiolist_lbl = QLabel("Select radio:")
+        radio_settings_layout.addWidget(self.radiolist_lbl, 0, 0)
+        self.radiolistcomb = QComboBox()
+        self.radiolistcomb.addItems(['Icom 9700'])
+        #self.radiolistcomb.addItems(['Icom 705'])
+        #self.radiolistcomb.addItems(['Yaesu 818'])
+        self.radiolistcomb.addItems(['Icom 910H'])
+        if configur['icom']['radio'] == '9700':
+            self.radiolistcomb.setCurrentText('Icom 9700')
+        elif configur['icom']['radio'] == '910':
+            self.radiolistcomb.setCurrentText('Icom 910H')
+        radio_settings_layout.addWidget(self.radiolistcomb, 0, 1)
+        
+        # CI-V selector
+        self.radicvi_lbl = QLabel("CVI address:")
+        radio_settings_layout.addWidget(self.radicvi_lbl, 1, 0)
+        self.radicvi = QLineEdit()
+        self.radicvi.setMaxLength(2)
+        self.radicvi.setText(CVIADDR)
+        radio_settings_layout.addWidget(self.radicvi, 1, 1)
+        
+        # 1x Label step RX
+        self.qthsteprx_lbl = QLabel("Step (Hz) for RX:")
+        radio_settings_layout.addWidget(self.qthsteprx_lbl, 2, 0)
+
+        self.qthsteprx = QLineEdit()
+        self.qthsteprx.setMaxLength(10)
+        self.qthsteprx.setText(str(STEP_RX))
+        radio_settings_layout.addWidget(self.qthsteprx, 2, 1)
+
+        # 1x Label step TX
+        self.qthsteptx_lbl = QLabel("Step (Hz) for TX:")
+        radio_settings_layout.addWidget(self.qthsteptx_lbl, 3, 0)
+
+        self.qthsteptx = QLineEdit()
+        self.qthsteptx.setMaxLength(10)
+        self.qthsteptx.setText(str(STEP_TX))
+        radio_settings_layout.addWidget(self.qthsteptx, 3,1)
+
+        # 1x Label Max Offset RX
+        self.qthmaxoffrx_lbl = QLabel("Max Offset (Hz) for RX:")
+        radio_settings_layout.addWidget(self.qthmaxoffrx_lbl, 4, 0)
+
+        self.qthmaxoffrx = QLineEdit()
+        self.qthmaxoffrx.setMaxLength(6)
+        self.qthmaxoffrx.setText(str(MAX_OFFSET_RX))
+        radio_settings_layout.addWidget(self.qthmaxoffrx, 4, 1)
+
+        # 1x Label Max Offset TX
+        self.qthmaxofftx_lbl = QLabel("Max Offset (Hz) for TX:")
+        radio_settings_layout.addWidget(self.qthmaxofftx_lbl, 5, 0)
+
+        self.qthmaxofftx = QLineEdit()
+        self.qthmaxofftx.setMaxLength(6)
+        self.qthmaxofftx.setText(str(MAX_OFFSET_TX))
+        radio_settings_layout.addWidget(self.qthmaxofftx, 5, 1)
+        
+        # 1x Label doppler fm threshold
+        self.doppler_fm_threshold_lbl = QLabel("Doppler threshold for FM")
+        radio_settings_layout.addWidget(self.doppler_fm_threshold_lbl, 6, 0)
+
+        self.doppler_fm_threshold = QLineEdit()
+        self.doppler_fm_threshold.setMaxLength(6)
+        self.doppler_fm_threshold.setText(str(DOPPLER_THRES_FM))
+        radio_settings_layout.addWidget(self.doppler_fm_threshold, 6, 1)
+        
+        # 1x Label doppler linear threshold
+        self.doppler_linear_threshold_lbl = QLabel("Doppler threshold for Linear")
+        radio_settings_layout.addWidget(self.doppler_linear_threshold_lbl, 7, 0)
+
+        self.doppler_linear_threshold = QLineEdit()
+        self.doppler_linear_threshold.setMaxLength(6)
+        self.doppler_linear_threshold.setText(str(DOPPLER_THRES_LINEAR))
+        radio_settings_layout.addWidget(self.doppler_linear_threshold, 7, 1)
+        
+        #self.settings_radio_box.setLayout(radio_settings_layout)
+        self.radio_settings_layout_scroller_widget.setLayout(radio_settings_layout)
+        self.radio_settings_layout_scroller.setWidget(self.radio_settings_layout_scroller_widget)
+        self.radio_settings_layout_scroller.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.radio_settings_layout_scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.radio_settings_layout_scroller.setWidgetResizable(True)
+        self.radio_settings_layout_scroller_layout = QHBoxLayout()
+        self.radio_settings_layout_scroller_layout.addWidget(self.radio_settings_layout_scroller)
+        self.settings_radio_box.setLayout(self.radio_settings_layout_scroller_layout)
+        
+        ## Files
+        files_settings_layout = QGridLayout()
+
+        # 1x Label TLE file
+        self.sattle_lbl = QLabel("TLE filename:")
+        files_settings_layout.addWidget(self.sattle_lbl, 0, 0)
+
+        self.sattle = QLineEdit()
+        self.sattle.setMaxLength(30)
+        self.sattle.setText(TLEFILE)
+        files_settings_layout.addWidget(self.sattle, 0, 1)
+
+        # 1x Label TLE URL
+        self.sattleurl_lbl = QLabel("TLE URL:")
+        files_settings_layout.addWidget(self.sattleurl_lbl, 1, 0)
+
+        self.sattleurl = QLineEdit()
+        self.sattleurl.setMaxLength(70)
+        self.sattleurl.setText(TLEURL)
+        files_settings_layout.addWidget(self.sattleurl, 1, 1)
+
+
+        # 1x Label SQF file
+        self.satsqf_lbl = QLabel("SQF filename:")
+        files_settings_layout.addWidget(self.satsqf_lbl, 2, 0)
+
+        self.satsqf = QLineEdit()
+        self.satsqf.setMaxLength(30)
+        self.satsqf.setText(SQFILE)
+        files_settings_layout.addWidget(self.satsqf, 2, 1)
+        
+        self.settings_file_box.setLayout(files_settings_layout)
+        
         
 
         ###  UI Layout / Tab Widget
@@ -804,9 +787,11 @@ class MainWindow(QMainWindow):
                                 self.Startbutton.setEnabled(False)
                                 self.Stopbutton.setEnabled(False)
                                 self.syncbutton.setEnabled(False)
+                                self.store_offset_button.setEnabled(False)
                             else:
                                 self.Startbutton.setEnabled(True)
                                 self.syncbutton.setEnabled(True)
+                                self.store_offset_button.setEnabled(True)
                             break
         except IOError:
             raise MyError()
@@ -845,6 +830,7 @@ class MainWindow(QMainWindow):
             self.LogText.append("***  Satellite not found in {badfile} file.".format(badfile=TLEFILE))
             self.Startbutton.setEnabled(False)
             self.syncbutton.setEnabled(False)
+            self.store_offset_button.setEnabled(False)
             return
         else:
             #day_of_year = datetime.now().timetuple().tm_yday
@@ -889,6 +875,7 @@ class MainWindow(QMainWindow):
         self.LogText.append("Stopped")
         self.Stopbutton.setEnabled(False)
         self.Startbutton.setEnabled(True)
+        #self.store_offset_button.setEnabled(False)
         #self.syncbutton.setEnabled(False)
         self.combo1.setEnabled(True)
         self.combo2.setEnabled(True)
@@ -1192,6 +1179,9 @@ class MainWindow(QMainWindow):
         self.rxfreq_onsat.setText(str(float(self.my_satellite.F)))
         self.txfreq.setText(str(I0))
         self.txfreq_onsat.setText(str(float(self.my_satellite.I)))
+        self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata)) + " °")
+        self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata)) + " °")
+        self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata)) + " m")
 
 class WorkerSignals(QObject):
     finished = pyqtSignal()
