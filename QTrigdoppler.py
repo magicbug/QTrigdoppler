@@ -750,20 +750,6 @@ class MainWindow(QMainWindow):
     def sat_changed(self, satname):
         self.LogText.clear()
         self.my_satellite.name = satname
-        #   EA4HCF: Let's use PCSat32 translation from NoradID to Sat names, boring but useful for next step.
-        #   From NORAD_ID identifier, will get the SatName to search satellite frequencies in dopler file in next step.
-        try:
-            with open(SATNAMES, 'r') as g:
-                namesdata = g.readlines()  
-                
-            for line in namesdata:
-                if re.search(satname, line):
-                    self.my_satellite.noradid = line.split(" ")[0].strip()
-        except IOError:
-            raise MyError()
-        
-        if self.my_satellite.noradid == 0:
-            self.LogText.append("***  Satellite not found in {badfile} file.".format(badfile=SATNAMES))
 
         #   EA4HCF: Now, let's really use PCSat32 dople file .
         #   From SatName,  will get the RX and TX frequencies.
@@ -844,8 +830,9 @@ class MainWindow(QMainWindow):
                 data = f.readlines()   
                 
                 for index, line in enumerate(data):
-                    if str(self.my_satellite.noradid) in line[2:7]:
-                        self.my_satellite.tledata = ephem.readtle(data[index-1], data[index], data[index+1])
+                    if str(self.my_satellite.name) in line:
+                        print(str(data[index]) + "|" + str(data[index+1]) + "|" + str(data[index+2]))
+                        self.my_satellite.tledata = ephem.readtle(data[index], data[index+1], data[index+2])
                         break
         except IOError:
             raise MyError()
@@ -856,12 +843,13 @@ class MainWindow(QMainWindow):
             self.syncbutton.setEnabled(False)
             return
         else:
-            day_of_year = datetime.now().timetuple().tm_yday
-            tleage = int(data[index][20:23])
-            diff = day_of_year - tleage
+            #day_of_year = datetime.now().timetuple().tm_yday
+            #tleage = int(data[index+1][20:23])
+            #diff = day_of_year - tleage
 
-            if diff > 7:
-                self.LogText.append("***  Warning, your TLE file is getting older: {days} days.".format(days=diff))
+            #if diff > 7:
+            #    self.LogText.append("***  Warning, your TLE file is getting older: {days} days.".format(days=diff))
+            pass
             
         self.timer.start()
         
