@@ -16,6 +16,7 @@ import urllib.request
 import traceback
 import icom
 
+
 from time import gmtime, strftime
 from datetime import datetime, timedelta, timezone
 
@@ -161,8 +162,6 @@ class ConfigWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle("QTRigDoppler configuration")
-        self.setGeometry(0, 0, 800, 350)
-
         # QTH
         
 
@@ -305,7 +304,7 @@ class MainWindow(QMainWindow):
         self.my_satellite = Satellite()
 
         self.setWindowTitle("QT RigDoppler v0.4")
-        #self.setGeometry(0, 0, 800, 480)
+        #self.setGeometry(0, 0, 1024, 600)
         
         ### Overview Page
 
@@ -492,7 +491,7 @@ class MainWindow(QMainWindow):
         self.Stopbutton.setEnabled(False)
         
         # Sync to SQF freq
-        self.syncbutton = QPushButton("Sync to SQF Frequencies")
+        self.syncbutton = QPushButton("Sync to SQF")
         self.syncbutton.clicked.connect(self.the_sync_button_was_clicked)
         button_layout.addWidget(self.syncbutton)
         self.syncbutton.setEnabled(False)
@@ -1228,10 +1227,10 @@ if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
 
 socket.setdefaulttimeout(15)
 
-#try:
-#   urllib.request.urlretrieve(TLEURL, TLEFILE)
-#except Exception as e:
-#   print("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
+try:
+   urllib.request.urlretrieve(TLEURL, TLEFILE)
+except Exception as e:
+   print("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
 
 app = QApplication(sys.argv)
 window = MainWindow()
@@ -1250,6 +1249,26 @@ tooltip_stylesheet = """
         QLineEdit {
             color: white;
         }
+    """
+tooltip_stylesheet_rpi = """
+        QToolTip {
+            color: white;
+            background-color: black;
+        }
+        QComboBox {
+            color: white;
+            font-size: 20pt;
+        }
+        QSpinBox {
+            color: white;
+            font-size: 20pt;
+        }
+        QLineEdit {
+            color: white;
+        }
+        QLabel{font-size: 18pt;}
+        QButton{font-size: 18pt;}
+        QPushButton{font-size: 20pt;}
     """
 app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
 window.show()
