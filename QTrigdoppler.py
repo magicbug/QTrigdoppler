@@ -278,7 +278,6 @@ class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
         
-        
         ### All of this should be moved to a global settings struct ....
         global LATITUDE
         global LONGITUDE
@@ -304,7 +303,7 @@ class MainWindow(QMainWindow):
         self.my_satellite = Satellite()
 
         self.setWindowTitle("QT RigDoppler v0.4")
-        #self.setGeometry(3840*2, 0, 718, 425)
+        self.setGeometry(3840*2, 0, 718, 425)
         
         ### Overview Page
 
@@ -332,6 +331,9 @@ class MainWindow(QMainWindow):
         combo_layout.addWidget(self.sattext)
 
         self.combo1 = QComboBox()
+        self.sat_list_view = self.combo1.view()
+        self.sat_list_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)        
+        QScroller.grabGesture(self.sat_list_view.viewport(), QScroller.LeftMouseButtonGesture)
         satlist = []
         with open(SQFILE, 'r') as h:
             sqfdata = h.readlines() 
@@ -349,6 +351,9 @@ class MainWindow(QMainWindow):
         self.tpxtext.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         combo_layout.addWidget(self.tpxtext)
         self.combo2 = QComboBox()
+        self.tpx_list_view = self.combo1.view()
+        self.tpx_list_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)        
+        QScroller.grabGesture(self.tpx_list_view.viewport(), QScroller.LeftMouseButtonGesture)
         self.combo2.currentTextChanged.connect(self.tpx_changed) 
         combo_layout.addWidget(self.combo2)
         
