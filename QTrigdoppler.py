@@ -304,7 +304,7 @@ class MainWindow(QMainWindow):
         self.my_satellite = Satellite()
 
         self.setWindowTitle("QT RigDoppler v0.4")
-        #self.setGeometry(0, 0, 1024, 600)
+        #self.setGeometry(3840*2, 0, 718, 425)
         
         ### Overview Page
 
@@ -392,10 +392,12 @@ class MainWindow(QMainWindow):
         rx_labels_radio_layout = QHBoxLayout()
         # 1x Label: RX freq
         self.rxfreqtitle = QLabel("RX @ Radio:")
+        self.rxfreqtitle.setStyleSheet("QLabel{font-size: 12pt;}")
         self.rxfreqtitle.setFont(myFont)
         rx_labels_radio_layout.addWidget(self.rxfreqtitle)
 
-        self.rxfreq = QLabel("0.0")
+        self.rxfreq = QLabel("435,500,000.0 Hz")
+        self.rxfreq.setStyleSheet("QLabel{font-size: 12pt;}")
         self.rxfreq.setFont(myFont)
         rx_labels_radio_layout.addWidget(self.rxfreq)
         
@@ -406,7 +408,7 @@ class MainWindow(QMainWindow):
         self.rxfreqsat_lbl = QLabel("RX @ Sat:")
         rx_labels_sat_layout.addWidget(self.rxfreqsat_lbl)
 
-        self.rxfreq_onsat = QLabel("0.0")
+        self.rxfreq_onsat = QLabel("435,500,000.0 Hz")
         rx_labels_sat_layout.addWidget(self.rxfreq_onsat)
         vbox_downlink.addLayout(rx_labels_sat_layout)
         
@@ -439,10 +441,12 @@ class MainWindow(QMainWindow):
         tx_labels_radio_layout = QHBoxLayout()
         # 1x Label: TX freq
         self.txfreqtitle = QLabel("TX @ Radio:")
+        self.txfreqtitle.setStyleSheet("QLabel{font-size: 12pt;}")
         self.txfreqtitle.setFont(myFont)
         tx_labels_radio_layout.addWidget(self.txfreqtitle)
 
-        self.txfreq = QLabel("0.0")
+        self.txfreq = QLabel("145,900,000.0 Hz")
+        self.txfreq.setStyleSheet("QLabel{font-size: 12pt;}")
         self.txfreq.setFont(myFont)
         tx_labels_radio_layout.addWidget(self.txfreq)
         
@@ -453,7 +457,7 @@ class MainWindow(QMainWindow):
         self.txfreqsat_lbl = QLabel("TX @ Sat:")
         tx_labels_sat_layout.addWidget(self.txfreqsat_lbl)
 
-        self.txfreq_onsat = QLabel("0.0")
+        self.txfreq_onsat = QLabel("145,900,000.0 Hz")
         tx_labels_sat_layout.addWidget(self.txfreq_onsat)
         vbox_uplink.addLayout(tx_labels_sat_layout)
         
@@ -510,7 +514,7 @@ class MainWindow(QMainWindow):
         # Output log
         
         self.log_sat_status = QGroupBox()
-        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px}")
+        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px;font-size: 18pt;} QLabel{font-size: 18pt;}")
         log_sat_status_layout = QGridLayout()
         
         self.log_sat_status_ele_lbl = QLabel("Elevation:")
@@ -520,25 +524,19 @@ class MainWindow(QMainWindow):
         log_sat_status_layout.addWidget(self.log_sat_status_ele_val, 0, 1)
         
         self.log_sat_status_azi_lbl = QLabel("Azimuth:")
-        log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 1, 0)
+        log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 0, 2)
 
         self.log_sat_status_azi_val = QLabel("0.0 °")
-        log_sat_status_layout.addWidget(self.log_sat_status_azi_val, 1, 1)
+        log_sat_status_layout.addWidget(self.log_sat_status_azi_val, 0, 3)
         
         self.log_sat_status_height_lbl = QLabel("Height:")
-        log_sat_status_layout.addWidget(self.log_sat_status_height_lbl, 2, 0)
+        log_sat_status_layout.addWidget(self.log_sat_status_height_lbl, 0, 4)
 
         self.log_sat_status_height_val = QLabel("0.0 m")
-        log_sat_status_layout.addWidget(self.log_sat_status_height_val, 2, 1)
+        log_sat_status_layout.addWidget(self.log_sat_status_height_val, 0, 5)
         
         self.log_sat_status.setLayout(log_sat_status_layout)
         log_layout.addWidget(self.log_sat_status, 1)
-        
-        self.LogText = QTextEdit()
-        self.LogText.setReadOnly(True)
-        self.LogText.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        log_layout.addWidget(self.LogText, 2)
-        
         
         ### Settings Tab
         settings_layout = QHBoxLayout()
@@ -724,6 +722,10 @@ class MainWindow(QMainWindow):
         self.tab_overview.setLayout(overview_pagelayout)
         self.tab_settings.setLayout(settings_layout)
         self.setCentralWidget(self.tab_widget)
+        
+        QScroller.grabGesture(
+            self.combo1, QScroller.LeftMouseButtonGesture
+        )
 
         self.threadpool = QThreadPool()
         self.timer = QTimer()
@@ -734,10 +736,8 @@ class MainWindow(QMainWindow):
             global f_cal
             self.my_satellite.new_cal = 1
             self.my_satellite.F_cal =  f_cal = i
-            self.LogText.append("*** New RX offset: {thenew}".format(thenew=i))
     
     def sat_changed(self, satname):
-        self.LogText.clear()
         self.my_satellite.name = satname
 
         try:
@@ -769,10 +769,10 @@ class MainWindow(QMainWindow):
                     if lineb.startswith(";") == 0:
                         if lineb.split(",")[8].strip() == tpxname and lineb.split(",")[0].strip() == self.my_satellite.name:
                             self.my_satellite.F = self.my_satellite.F_init = float(lineb.split(",")[1].strip())*1000
-                            self.rxfreq.setText(str(self.my_satellite.F))
+                            self.rxfreq.setText(str('{:,}'.format(self.my_satellite.F))+ " Hz")
                             F0 = self.my_satellite.F + f_cal
                             self.my_satellite.I = self.my_satellite.I_init = float(lineb.split(",")[2].strip())*1000
-                            self.txfreq.setText(str(self.my_satellite.I))
+                            self.txfreq.setText(str('{:,}'.format(self.my_satellite.I)) + " Hz")
                             I0 = self.my_satellite.I + i_cal
                             self.my_satellite.downmode =  lineb.split(",")[3].strip()
                             self.my_satellite.upmode =  lineb.split(",")[4].strip()
@@ -808,7 +808,6 @@ class MainWindow(QMainWindow):
                     self.my_satellite.new_cal = 1
                     self.my_satellite.F_cal =  f_cal = usrrxoffset
                 else:
-                    self.LogText.append("***  ERROR: Max RX offset ({max}) not align with user offset: {value}.".format(value=usrrxoffset,max =MAX_OFFSET_RX))
                     self.rxoffsetbox.setValue(0)
                 
                 
@@ -826,7 +825,6 @@ class MainWindow(QMainWindow):
             raise MyError()
         
         if self.my_satellite.tledata == "":
-            self.LogText.append("***  Satellite not found in {badfile} file.".format(badfile=TLEFILE))
             self.Startbutton.setEnabled(False)
             self.syncbutton.setEnabled(False)
             self.store_offset_button.setEnabled(False)
@@ -837,7 +835,7 @@ class MainWindow(QMainWindow):
             #diff = day_of_year - tleage
 
             #if diff > 7:
-            #    self.LogText.append("***  Warning, your TLE file is getting older: {days} days.".format(days=diff))
+            #    
             pass
             
         self.timer.start()
@@ -870,12 +868,11 @@ class MainWindow(QMainWindow):
     def the_stop_button_was_clicked(self):
         global TRACKING_ACTIVE
         global INTERACTIVE
-        TRACKING_ACTIVE = INTERACTIVE = False
-        self.LogText.append("Stopped")
+        TRACKING_ACTIVE = False
+        INTERACTIVE = False
+        self.threadpool.clear()
         self.Stopbutton.setEnabled(False)
         self.Startbutton.setEnabled(True)
-        #self.store_offset_button.setEnabled(False)
-        #self.syncbutton.setEnabled(False)
         self.combo1.setEnabled(True)
         self.combo2.setEnabled(True)
     def the_sync_button_was_clicked(self):
@@ -889,23 +886,13 @@ class MainWindow(QMainWindow):
 
         if TRACKING_ACTIVE == False:
             TRACKING_ACTIVE = True
-        # Pass the function to execute
-        self.LogText.append("Sat TLE data {tletext}".format(tletext=self.my_satellite.tledata))
-        self.LogText.append("Tracking: {sat_name}".format(sat_name=self.my_satellite.noradid))
-        self.LogText.append("Sat DownLink mode: {sat_mode_down}".format(sat_mode_down=self.my_satellite.downmode))
-        self.LogText.append("Sat UpLink mode: {sat_mode_up}".format(sat_mode_up=self.my_satellite.upmode))
-        #self.LogText.append("Recieve Frequency (F) = {rx_freq}".format(rx_freq=self.my_satellite.F))
-        #self.LogText.append("Transmit Frequency (I) = {tx_freq}".format(tx_freq=self.my_satellite.I))
-        self.LogText.append("RX Frequency Offset = {rxfreq_off}".format(rxfreq_off=f_cal))
-        self.LogText.append("TX Frequency Offset = {txfreq_off}".format(txfreq_off=i_cal))
+            
         self.Startbutton.setEnabled(False)
         self.combo1.setEnabled(False)
         self.combo2.setEnabled(False)
 
-        worker = Worker(self.calc_doppler)
-
-        # Execute
-        self.threadpool.start(worker)
+        self.doppler_worker = Worker(self.calc_doppler)
+        self.threadpool.start(self.doppler_worker)
 
     def calc_doppler(self, progress_callback):
         global CVIADDR
@@ -1009,12 +996,8 @@ class MainWindow(QMainWindow):
 
                 F0 = rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F)
                 I0 = tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I)
-                self.LogText.append("Start RX@sat: {rx}".format(rx=self.my_satellite.F))
-                self.LogText.append("Start TX@sat: {tx}".format(tx=self.my_satellite.I))
-                self.LogText.append("Start RX@radio: {rx}".format(rx=F0))
-                self.LogText.append("Start TX@radio: {tx}".format(tx=I0))
-                self.rxdoppler_val.setText(str(float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))))
-                self.txdoppler_val.setText(str(float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I))))
+                self.rxdoppler_val.setText(str('{:,}'.format(float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F)))))
+                self.txdoppler_val.setText(str('{:,}'.format(float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I)))))
                 user_Freq = 0;
                 user_Freq_history = [0, 0, 0, 0]
                 vfo_not_moving = 0
@@ -1156,31 +1139,40 @@ class MainWindow(QMainWindow):
             sys.exit()
     
     def recurring_timer(self):
-        date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
-        myloc.date = ephem.Date(date_val)
-        self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
-        self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))
-        self.my_satellite.down_doppler_rate = ((self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2)/0.2
-        if abs(self.my_satellite.down_doppler_rate) > 100.0:
-            self.my_satellite.down_doppler_rate = 0.0
-            
-        self.my_satellite.up_doppler_old = self.my_satellite.up_doppler
-        self.my_satellite.up_doppler = float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I))
-        self.my_satellite.up_doppler_rate = ((self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2)/0.2
-        if abs(self.my_satellite.up_doppler_rate) > 100.0:
-            self.my_satellite.up_doppler_rate = 0.0
-            
-        self.rxdoppler_val.setText(str(self.my_satellite.down_doppler) + " Hz")
-        self.txdoppler_val.setText(str(self.my_satellite.up_doppler) + " Hz")
-        self.rxdopplerrate_val.setText(str(format(self.my_satellite.down_doppler_rate, '.2f')) + " Hz/s")
-        self.txdopplerrate_val.setText(str(format(self.my_satellite.up_doppler_rate, '.2f')) + " Hz/s")
-        self.rxfreq.setText(str(F0))
-        self.rxfreq_onsat.setText(str(float(self.my_satellite.F)))
-        self.txfreq.setText(str(I0))
-        self.txfreq_onsat.setText(str(float(self.my_satellite.I)))
-        self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata)) + " °")
-        self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata)) + " °")
-        self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata)) + " m")
+        try:
+            #date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+            #myloc.date = ephem.Date(date_val)
+            date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
+            myloc.date = ephem.Date(date_val)
+            #print(myloc.date)
+            self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
+            self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))
+            self.my_satellite.down_doppler_rate = ((self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2)/0.2
+            if abs(self.my_satellite.down_doppler_rate) > 100.0:
+                self.my_satellite.down_doppler_rate = 0.0
+                
+            self.my_satellite.up_doppler_old = self.my_satellite.up_doppler
+            self.my_satellite.up_doppler = float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I))
+            self.my_satellite.up_doppler_rate = ((self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2)/0.2
+            if abs(self.my_satellite.up_doppler_rate) > 100.0:
+                self.my_satellite.up_doppler_rate = 0.0
+                
+            #str('{:,}'.format(
+                
+            self.rxdoppler_val.setText(str('{:,}'.format(self.my_satellite.down_doppler)) + " Hz")
+            self.txdoppler_val.setText(str('{:,}'.format(self.my_satellite.up_doppler)) + " Hz")
+            self.rxdopplerrate_val.setText(str(format(self.my_satellite.down_doppler_rate, '.2f')) + " Hz/s")
+            self.txdopplerrate_val.setText(str(format(self.my_satellite.up_doppler_rate, '.2f')) + " Hz/s")
+            self.rxfreq.setText(str('{:,}'.format(F0)))
+            self.rxfreq_onsat.setText(str('{:,}'.format(self.my_satellite.F)))
+            self.txfreq.setText(str('{:,}'.format(I0)))
+            self.txfreq_onsat.setText(str('{:,}'.format(self.my_satellite.I)))
+            self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata)) + " °")
+            self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata)) + " °")
+            self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata)) + " km")
+        except:
+            print("Error in label timer")
+            traceback.print_exc()
 
 class WorkerSignals(QObject):
     finished = pyqtSignal()
@@ -1271,5 +1263,6 @@ tooltip_stylesheet_rpi = """
         QPushButton{font-size: 20pt;}
     """
 app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
+window.setWindowFlag(Qt.FramelessWindowHint)
 window.show()
 app.exec()
