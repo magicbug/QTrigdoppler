@@ -823,7 +823,6 @@ class MainWindow(QMainWindow):
                 
                 for index, line in enumerate(data):
                     if str(self.my_satellite.name) in line:
-                        print(str(data[index]) + "|" + str(data[index+1]) + "|" + str(data[index+2]))
                         self.my_satellite.tledata = ephem.readtle(data[index], data[index+1], data[index+2])
                         break
         except IOError:
@@ -993,7 +992,6 @@ class MainWindow(QMainWindow):
                     print("*** Not implemented yet mate***")
                     sys.exit()
 
-                print("All config done, starting doppler...")
                 icomTrx.setVFO("Main") 
 
                 date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
@@ -1145,10 +1143,10 @@ class MainWindow(QMainWindow):
     
     def recurring_timer(self):
         try:
-            #date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
-            #myloc.date = ephem.Date(date_val)
-            date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
+            date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
             myloc.date = ephem.Date(date_val)
+            #date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
+            #myloc.date = ephem.Date(date_val)
             #print(myloc.date)
             self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
             self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))
@@ -1161,8 +1159,6 @@ class MainWindow(QMainWindow):
             self.my_satellite.up_doppler_rate = ((self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2)/0.2
             if abs(self.my_satellite.up_doppler_rate) > 100.0:
                 self.my_satellite.up_doppler_rate = 0.0
-                
-            #str('{:,}'.format(
                 
             self.rxdoppler_val.setText(str('{:,}'.format(self.my_satellite.down_doppler)) + " Hz")
             self.txdoppler_val.setText(str('{:,}'.format(self.my_satellite.up_doppler)) + " Hz")
