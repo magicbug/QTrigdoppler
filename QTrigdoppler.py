@@ -163,8 +163,6 @@ class ConfigWindow(QMainWindow):
 
         self.setWindowTitle("QTRigDoppler configuration")
         # QTH
-        
-
         myFont=QFont()
         myFont.setBold(True)
 
@@ -303,7 +301,7 @@ class MainWindow(QMainWindow):
         self.my_satellite = Satellite()
 
         self.setWindowTitle("QT RigDoppler v0.4")
-        self.setGeometry(3840*2, 0, 718, 425)
+        #self.setGeometry(3840*2, 0, 718, 425)
         
         ### Overview Page
 
@@ -322,9 +320,9 @@ class MainWindow(QMainWindow):
 
         combo_layout.setAlignment(Qt.AlignVCenter)
 
-        control_layout.addLayout(combo_layout)
-        control_layout.addLayout(labels_layout)
-        control_layout.addLayout(button_layout)
+        control_layout.addLayout(combo_layout, stretch=1)
+        control_layout.addLayout(labels_layout, stretch=1)
+        control_layout.addLayout(button_layout, stretch=1)
 
         self.sattext = QLabel("Satellite:")
         self.sattext.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
@@ -1164,10 +1162,10 @@ class MainWindow(QMainWindow):
             self.txdoppler_val.setText(str('{:,}'.format(self.my_satellite.up_doppler)) + " Hz")
             self.rxdopplerrate_val.setText(str(format(self.my_satellite.down_doppler_rate, '.2f')) + " Hz/s")
             self.txdopplerrate_val.setText(str(format(self.my_satellite.up_doppler_rate, '.2f')) + " Hz/s")
-            self.rxfreq.setText(str('{:,}'.format(F0)))
-            self.rxfreq_onsat.setText(str('{:,}'.format(self.my_satellite.F)))
-            self.txfreq.setText(str('{:,}'.format(I0)))
-            self.txfreq_onsat.setText(str('{:,}'.format(self.my_satellite.I)))
+            self.rxfreq.setText(str('{:,}'.format(F0))+ " Hz")
+            self.rxfreq_onsat.setText(str('{:,}'.format(self.my_satellite.F))+ " Hz")
+            self.txfreq.setText(str('{:,}'.format(I0))+ " Hz")
+            self.txfreq_onsat.setText(str('{:,}'.format(self.my_satellite.I))+ " Hz")
             self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata)) + " °")
             self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata)) + " °")
             self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata)) + " km")
@@ -1264,6 +1262,6 @@ tooltip_stylesheet_rpi = """
         QPushButton{font-size: 20pt;}
     """
 app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
-window.setWindowFlag(Qt.FramelessWindowHint)
+#window.setWindowFlag(Qt.FramelessWindowHint)
 window.show()
 app.exec()
