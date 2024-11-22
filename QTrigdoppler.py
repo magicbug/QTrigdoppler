@@ -119,6 +119,7 @@ I0=0.0
 f_cal = 0
 i_cal = 0
 doppler_thres = 0
+FM_update_time = 0.3
 
 myloc = ephem.Observer()
 myloc.lon = LONGITUDE
@@ -942,7 +943,6 @@ class MainWindow(QMainWindow):
                         icomTrx.setVFO("Main")
                     else:
                         icomTrx.setVFO("VFOA")
-                    icomTrx.setToneOn(0)
                     if self.my_satellite.downmode == "FM":
                         icomTrx.setMode("FM")
                         doppler_thres = DOPPLER_THRES_FM
@@ -972,7 +972,6 @@ class MainWindow(QMainWindow):
                         icomTrx.setVFO("SUB")
                     else:
                         icomTrx.setVFO("VFOB")
-                    icomTrx.setToneOn(0)
                     if self.my_satellite.upmode == "FM":
                         icomTrx.setMode("FM")
                     elif self.my_satellite.upmode == "FMN":
@@ -1003,16 +1002,20 @@ class MainWindow(QMainWindow):
                 user_Freq_history = [0, 0, 0, 0]
                 vfo_not_moving = 0
                 vfo_not_moving_old = 0
+                ptt_state = 0
+                ptt_state_old = 0
                 
                 if self.my_satellite.rig_satmode == 1:
                     icomTrx.setVFO("Main")
-                    icomTrx.setToneOn(0)
+                    #icomTrx.setToneOn(0)
+                    #self.combo3.setCurrentIndex(0);
                     icomTrx.setFrequency(str(int(F0)))
                     icomTrx.setVFO("SUB")
                     icomTrx.setFrequency(str(int(I0)))
                 else:
                     icomTrx.setVFO("VFOA")
-                    icomTrx.setToneOn(0)
+                    #icomTrx.setToneOn(0)
+                    #self.combo3.setCurrentIndex(0);
                     icomTrx.setFrequency(str(int(F0)))
                     icomTrx.setVFO("VFOB")
                     icomTrx.setFrequency(str(int(I0)))
@@ -1100,37 +1103,47 @@ class MainWindow(QMainWindow):
                                 icomTrx.setFrequency(str(tx_doppler))
                                 I0 = tx_doppler
                     # FM sats, no dial input accepted!
-                    else:
+                    elif self.my_satellite.rig_satmode == 1: 
                         new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I))
                         if abs(new_rx_doppler-F0) > doppler_thres or tracking_init == 1:
                                 tracking_init = 0
                                 rx_doppler = new_rx_doppler
-                                if self.my_satellite.rig_satmode == 1:
-                                    icomTrx.setVFO("MAIN")
-                                else:
-                                    icomTrx.setVFO("VFOA")
+                                icomTrx.setVFO("MAIN")
                                 icomTrx.setFrequency(str(rx_doppler))
                                 F0 = rx_doppler
-                                time.sleep(0.2)
+                                time.sleep(FM_update_time)
                         if abs(new_tx_doppler-I0) > doppler_thres or tracking_init == 1:
                                 tracking_init = 0
                                 tx_doppler = new_tx_doppler
-                                if self.my_satellite.rig_satmode == 1:
-                                    icomTrx.setVFO("SUB")
-                                else:
-                                    # Don't switch VFO when PTT is pushed, to avoid switching VFO while TX 
-                                    while icomTrx.isPttOff == 0:
-                                        time.sleep(0.2)
-                                        print("PTT is enganged, waiting....")
-                                    icomTrx.setVFO("VFOB")
+                                icomTrx.setVFO("SUB")
                                 icomTrx.setFrequency(str(tx_doppler))
                                 I0 = tx_doppler
-                                time.sleep(0.2)
-                                if self.my_satellite.rig_satmode == 1:
-                                    icomTrx.setVFO("MAIN")
-                                else:
-                                    icomTrx.setVFO("VFOA")
+                                time.sleep(FM_update_time)
+                                icomTrx.setVFO("MAIN")
+                    else:
+                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal))
+                        new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I))
+                        # 0 = PTT is pressed
+                        # 1 = PTT is released
+                        ptt_state_old = ptt_state
+                        ptt_state = icomTrx.isPttOff()
+                        # Check for RX -> TX transition
+                        if  ptt_state_old and ptt_state == 0:# and abs(new_tx_doppler-I0) > doppler_thres:
+                            #icomTrx.setVFO("VFOB")
+                            print("TX inititated")
+                            tx_doppler = new_tx_doppler
+                            I0 = tx_doppler
+                            icomTrx.setFrequency(str(tx_doppler))
+                        # Check for RX -> TX transition
+                        if  ptt_state_old == 0 and ptt_state:# and abs(new_rx_doppler-F0) > doppler_thres:
+                            print("RX inititated")
+                            rx_doppler = new_rx_doppler
+                            F0 = rx_doppler
+                            icomTrx.setVFO("VFOA")
+                            icomTrx.setFrequency(str(rx_doppler))
+                        time.sleep(0.05)
+                        
                     self.my_satellite.new_cal = 0
                     time.sleep(0.01)
                     
