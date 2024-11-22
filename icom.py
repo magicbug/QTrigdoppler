@@ -31,14 +31,15 @@ class icom:
         self.serialDevice = serialDevice
         self.serialBaud = serialBaud
         # start serial usb connection
-        self.ser = serial.Serial(serialDevice, serialBaud)
+        self.ser = serial.Serial(serialDevice, serialBaud, timeout=1.0)
 
     # gives a empty bytearray when data crc is not valid
     def __readFromIcom(self):
-        time.sleep(0.04)
+        time.sleep(0.05)
         b = bytearray()
+        b = b + self.ser.read(1)
         while self.ser.inWaiting():
-            b = b + self.ser.read()
+            b = b + self.ser.read(1)
         # drop all but the last frame
         while b.count(b'\xfd') > 1:
             del b[0:b.find(b'\xfd') + 1]
@@ -59,13 +60,14 @@ class icom:
                     b = b
                 else:
                     b = bytearray()
-        # print('   * readFromIcom return value: ', b)
+        #print('   * readFromIcom return value: ', b)
         return b
         
     # gives a empty bytearray when data crc is not valid
     def __writeToIcom(self, b):
         s = self.ser.write(bytes([254, 254, self.icomTrxCivAdress, 0]) + b + bytes([253]))
-        # print('   * writeToIcom value: ', b)
+        self.ser.flushInput()
+        #print('   * writeToIcom value: ', b)
         return self.__readFromIcom()
 
     def close(self):
@@ -221,6 +223,9 @@ class icom:
     def isPttOff(self):
         ret = True
         b = self.__writeToIcom(b'\x1C\x00')  # ask for PTT status
+        if len(b) < 3: ## This should be fixed.
+            return ret
+        #print(b)
         if b[-2] == 1:
             ret = False
         return ret
