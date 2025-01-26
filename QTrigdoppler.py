@@ -105,7 +105,7 @@ elif configur.get('icom', 'fullmode') == "False":
     
 useroffsets = []
 
-subtone_list = ["None", "67 Hz", "71.9 Hz"]
+subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz"]
 
 i = 0
 for (each_key, each_val) in configur.items('offset_profiles'):
@@ -856,6 +856,9 @@ class MainWindow(QMainWindow):
         elif tone_name == "71.9 Hz":
             icomTrx.setToneHz(str(719))
             icomTrx.setToneOn(1)
+        elif tone_name == "74.4 Hz":
+            icomTrx.setToneHz(str(744))
+            icomTrx.setToneOn(1)
         elif tone_name == "None":
             icomTrx.setToneOn(0)
             
@@ -1020,6 +1023,7 @@ class MainWindow(QMainWindow):
                     icomTrx.setVFO("VFOB")
                     icomTrx.setFrequency(str(int(I0)))
                     INTERACTIVE = False #for SSB packet sats
+                    icomTrx.setVFO("VFOA")
                 
                 # Ensure that initial frequencies are always written 
                 tracking_init = 1
@@ -1128,15 +1132,16 @@ class MainWindow(QMainWindow):
                         # 1 = PTT is released
                         ptt_state_old = ptt_state
                         ptt_state = icomTrx.isPttOff()
+                        print(ptt_state)
                         # Check for RX -> TX transition
-                        if  ptt_state_old and ptt_state == 0:# and abs(new_tx_doppler-I0) > doppler_thres:
+                        if  ptt_state_old and ptt_state == 0 and abs(new_tx_doppler-I0) > doppler_thres:
                             #icomTrx.setVFO("VFOB")
                             print("TX inititated")
                             tx_doppler = new_tx_doppler
                             I0 = tx_doppler
                             icomTrx.setFrequency(str(tx_doppler))
                         # Check for RX -> TX transition
-                        if  ptt_state_old == 0 and ptt_state:# and abs(new_rx_doppler-F0) > doppler_thres:
+                        if  ptt_state_old == 0 and ptt_state and abs(new_rx_doppler-F0) > doppler_thres:
                             print("RX inititated")
                             rx_doppler = new_rx_doppler
                             F0 = rx_doppler
