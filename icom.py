@@ -111,7 +111,10 @@ class icom:
 
     # Parameter: hertz string with 3 numbers
     def setToneHz(self, hertz):
-        b = b'\x1b\x00' + bytes([int('0' + hertz[0], 16), int(hertz[1] + hertz[2], 16)])
+        if int(hertz) >= 1000:
+            b = b'\x1b\x00' + bytes([int('1' + hertz[1], 16), int(hertz[2] + hertz[3], 16)])
+        else:
+            b = b'\x1b\x00' + bytes([int('0' + hertz[0], 16), int(hertz[1] + hertz[2], 16)])
         self.__writeToIcom(b)
 
     # Caution: RIT CI-V Command only for IC-9700, the IC-9100 has no RIT CI-V command

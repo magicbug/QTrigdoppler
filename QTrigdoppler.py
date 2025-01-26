@@ -105,7 +105,7 @@ elif configur.get('icom', 'fullmode') == "False":
     
 useroffsets = []
 
-subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz"]
+subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
 
 i = 0
 for (each_key, each_val) in configur.items('offset_profiles'):
@@ -863,6 +863,9 @@ class MainWindow(QMainWindow):
             icomTrx.setToneOn(1)
         elif tone_name == "74.4 Hz":
             icomTrx.setToneHz(str(744))
+            icomTrx.setToneOn(1)
+        elif tone_name == "141.3 Hz":
+            icomTrx.setToneHz(str(1413))
             icomTrx.setToneOn(1)
         elif tone_name == "None":
             icomTrx.setToneOn(0)
