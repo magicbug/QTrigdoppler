@@ -128,6 +128,7 @@ myloc.elevation = ALTITUDE
 
 TRACKING_ACTIVE = True # tracking on/off
 INTERACTIVE = False # read user vfo/dial input - disable for inband packet
+RX_TPX_ONLY = False
 if configur['icom']['radio'] == '9700':
     icomTrx = icom.icom(SERIALPORT, '19200', 96)
 elif configur['icom']['radio'] == '910':
@@ -786,7 +787,7 @@ class MainWindow(QMainWindow):
                                 self.my_satellite.rig_satmode = 1
                             else:
                                 self.my_satellite.rig_satmode = 0
-                            if self.my_satellite.F == 0 or self.my_satellite.I == 0:
+                            if self.my_satellite.F == 0:
                                 self.Startbutton.setEnabled(False)
                                 self.Stopbutton.setEnabled(False)
                                 self.syncbutton.setEnabled(False)
@@ -795,6 +796,10 @@ class MainWindow(QMainWindow):
                                 self.Startbutton.setEnabled(True)
                                 self.syncbutton.setEnabled(True)
                                 self.store_offset_button.setEnabled(True)
+                                
+                            if  self.my_satellite.F > 0 and self.my_satellite.I == 0:
+                                RX_TPX_ONLY = True
+                                self.my_satellite.rig_satmode = 0
                             break
         except IOError:
             raise MyError()
@@ -1132,7 +1137,6 @@ class MainWindow(QMainWindow):
                         # 1 = PTT is released
                         ptt_state_old = ptt_state
                         ptt_state = icomTrx.isPttOff()
-                        print(ptt_state)
                         # Check for RX -> TX transition
                         if  ptt_state_old and ptt_state == 0 and abs(new_tx_doppler-I0) > doppler_thres:
                             #icomTrx.setVFO("VFOB")
