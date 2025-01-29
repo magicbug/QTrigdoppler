@@ -31,7 +31,13 @@ class icom:
         self.serialDevice = serialDevice
         self.serialBaud = serialBaud
         # start serial usb connection
-        self.ser = serial.Serial(serialDevice, serialBaud, timeout=1.0)
+        #self.ser = serial.Serial(serialDevice, serialBaud, timeout=1.0,rtscts=False)
+        self.ser = serial.Serial()
+        self.ser.baudrate = serialBaud
+        self.ser.port = serialDevice
+        self.ser.setDTR(0)
+        self.ser.setRTS(0)
+        self.ser.open()
 
     # gives a empty bytearray when data crc is not valid
     def __readFromIcom(self):
