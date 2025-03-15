@@ -62,6 +62,13 @@ def sat_height_calc(ephemdata):
     ephemdata.compute(myloc)
     height = format(float(ephemdata.elevation)/1000.0,'.2f') 
     return height
+def sat_eclipse_calc(ephemdata):
+    ephemdata.compute(myloc)
+    eclipse = ephemdata.eclipsed
+    if eclipse:
+        return "☾"
+    else:
+        return "☀︎"
     
     
 def MyError():
@@ -129,11 +136,12 @@ myloc.elevation = ALTITUDE
 TRACKING_ACTIVE = True # tracking on/off
 INTERACTIVE = False # read user vfo/dial input - disable for inband packet
 RX_TPX_ONLY = False
+RIG_CONNECTED = False
 if configur['icom']['radio'] == '9700':
     icomTrx = icom.icom(SERIALPORT, '19200', 96)
 elif configur['icom']['radio'] == '910':
     icomTrx = icom.icom(SERIALPORT, '19200', 96)
-           
+RIG_CONNECTED = icomTrx.is_connected()    
 
 class Satellite:
     name = ""
@@ -539,14 +547,34 @@ class MainWindow(QMainWindow):
         self.log_sat_status_height_val = QLabel("0.0 m")
         log_sat_status_layout.addWidget(self.log_sat_status_height_val, 0, 3)
         
-        self.log_sat_status_illuminated_lbl = QLabel("Illumination:")
+        self.log_sat_status_illuminated_lbl = QLabel("Visibility:")
         log_sat_status_layout.addWidget(self.log_sat_status_illuminated_lbl, 1, 2)
 
-        self.log_sat_status_illumintated_val = QLabel("Yes")
+        self.log_sat_status_illumintated_val = QLabel("n/a")
         log_sat_status_layout.addWidget(self.log_sat_status_illumintated_val, 1, 3)
         
         self.log_sat_status.setLayout(log_sat_status_layout)
-        log_layout.addWidget(self.log_sat_status, 1)
+        log_layout.addWidget(self.log_sat_status, stretch=2)
+        
+        self.log_rig_status = QGroupBox()
+        self.log_rig_status.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px;font-size: 18pt;} QLabel{font-size: 18pt;}")
+        log_rig_status_layout = QGridLayout()
+        
+        self.log_rig_state_lbl = QLabel("Radio:")
+        log_rig_status_layout.addWidget(self.log_rig_state_lbl, 0, 0)
+
+        self.log_rig_state_val = QLabel("✘")
+        self.log_rig_state_val.setStyleSheet('color: red')
+        log_rig_status_layout.addWidget(self.log_rig_state_val, 0, 1)
+        
+        self.log_time_lbl = QLabel("UTC:")
+        log_rig_status_layout.addWidget(self.log_time_lbl, 1, 0)
+
+        self.log_time_val = QLabel(datetime.now(timezone.utc).strftime('%H:%M:%S')+"z")
+        log_rig_status_layout.addWidget(self.log_time_val, 1, 1)
+        
+        self.log_rig_status.setLayout(log_rig_status_layout)
+        log_layout.addWidget(self.log_rig_status, stretch=1)
         
         ### Settings Tab
         settings_layout = QHBoxLayout()
@@ -741,6 +769,11 @@ class MainWindow(QMainWindow):
         self.timer = QTimer()
         self.timer.setInterval(200)
         self.timer.timeout.connect(self.recurring_timer)
+
+        self.utc_clock_timer = QTimer()
+        self.utc_clock_timer.setInterval(500)
+        self.utc_clock_timer.timeout.connect(self.recurring_utc_clock_timer)
+        self.utc_clock_timer.start()
 
     def rxoffset_value_changed(self, i):
             global f_cal
@@ -1171,6 +1204,18 @@ class MainWindow(QMainWindow):
             print("Failed to open ICOM rig")
             sys.exit()
     
+    def recurring_utc_clock_timer(self):
+        date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+        myloc.date = ephem.Date(date_val)
+        self.log_time_val.setText(datetime.now(timezone.utc).strftime('%H:%M:%S')+"z")
+        if icomTrx.is_connected():
+            self.log_rig_state_val.setText("✔")
+            self.log_rig_state_val.setStyleSheet('color: green')
+        else:
+            self.log_rig_state_val.setText("✘")
+            self.log_rig_state_val.setStyleSheet('color: red')
+            
+    
     def recurring_timer(self):
         try:
             date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
@@ -1178,6 +1223,7 @@ class MainWindow(QMainWindow):
             #date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
             #myloc.date = ephem.Date(date_val)
             #print(myloc.date)
+            
             self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
             self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))
             self.my_satellite.down_doppler_rate = ((self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2)/0.2
@@ -1201,6 +1247,8 @@ class MainWindow(QMainWindow):
             self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata)) + " °")
             self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata)) + " °")
             self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata)) + " km")
+            self.log_sat_status_illumintated_val.setText(sat_eclipse_calc(self.my_satellite.tledata))
+            
         except:
             print("Error in label timer")
             traceback.print_exc()
