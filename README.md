@@ -1,19 +1,20 @@
 # QT RigDoppler
 
-Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
-Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)  
-Extended and modified to v0.4 by DL3JOP Joshua Petry (@dl3jop)
-  
-RigDoppler is a very simple Python3 script to correct doppler effect in radio satellites using Icom rigs connected to a computer.
-
-Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed
 
 <picture>
  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
  <source media="(prefers-color-scheme: light)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
  <img alt="Shows QTRigDoppler GUI." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
-</picture>  
-  
+</picture> 
+
+## RigDoppler features doppler shift control for ICOM radios.
+
+Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
+Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)  
+Extended and modified to v0.4 by DL3JOP Joshua Petry (@dl3jop)
+
+Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed
+
 ## Requirements:  
     1) Python3  
     2) Python3 modules
@@ -22,16 +23,13 @@ Attention: I'm looking for bug reports and new features. Every pull-request/issu
        pip3 install urllib3
        pip3 install pyserial
   
-Support files and download links:  
+## Support files:  
 
     1) TLE ephemerides file. (Example: https://tle.oscarwatch.org/)   
-    2) AmsatNames.txt (https://www.ea5wa.com/satpc32/archivos-auxiliares-de-satpc32)   
-    3) doppler.sqf (included)
+    2) doppler.sqf (included, mostly compatible to SatPC32)
 
-  
-AmsatNames.txt and dopler.sqf are wide and well known files used by SatPC32 software, so can be reused in the same computer.  
-
-## v0.4 vs v0.3 and earlier (DL3JOP modifications):
+## Changelog
+v0.4 vs v0.3 and earlier (DL3JOP modifications):
     1) Removed hamlib
     2) support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)
     3) Implemented transponder selection
@@ -45,11 +43,10 @@ AmsatNames.txt and dopler.sqf are wide and well known files used by SatPC32 soft
  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
  <source media="(prefers-color-scheme: light)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
  <img alt="Shows the GUI for editing config." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
-</picture>  
-    1) "Setup" menu, "Edit setup" item to review and change the parameters:. QTH Parameters
+</picture> 
 
+  1) "Setup" menu, "Edit setup" item to review and change the parameters:. QTH Parameters
 
-    
     - Latitude, Longitude and altitude.
     - Step for RX and TX offset sliders (Hertz).
     - Maximun and minimun values for RX and TX offset sliders (Hertz).
@@ -68,9 +65,6 @@ AmsatNames.txt and dopler.sqf are wide and well known files used by SatPC32 soft
       satoffset1 = IO-117,Digipeater,-750,-750
       where IO-117 is the the satellites name, Digipeater the description/transponder and the two numbers RX/TX offset
 
-
-        
-  
   
   2) Execute RigDoppler: python3 /path/to/QTrigdoppler.py        
         
