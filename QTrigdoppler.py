@@ -906,24 +906,6 @@ class MainWindow(QMainWindow):
 
         self.doppler_worker = Worker(self.calc_doppler)
         self.threadpool.start(self.doppler_worker)
-        
-        #self.ptt_rts_worker = Worker(self.track_ptt_rts_signal)
-        #self.threadpool.start(self.ptt_rts_worker)
-        
-    # def track_ptt_rts_signal(self,progress_callback):
-        # try:
-           # os.system("socat -d -d pty,link=/tmp/vserial1,raw,echo=0 pty,link=/tmp/vserial2,raw,echo=0 &")
-           # virt_serial_1 = serial.Serial()
-           # virt_serial_1.baudrate = 9600
-           # virt_serial_1.port = "/tmp/vserial1"
-           # virt_serial_1.setDTR(0)
-           # virt_serial_1.setRTS(0)
-           # virt_serial_1.open()
-           # while True:
-               # if virt_serial_1.rts:
-                   # print("PTT asserted by RTS on virtual comport")
-        # except:
-            # print("PTT-RTS-Tracking error")
 
     def calc_doppler(self, progress_callback):
         global CVIADDR
