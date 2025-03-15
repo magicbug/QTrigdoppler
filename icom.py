@@ -45,7 +45,7 @@ class icom:
             self.last_set_frequency_a = 0 # per VFO
             self.last_set_frequency_b = 0
             self.current_vfo = "A"
-
+            
     # gives a empty bytearray when data crc is not valid
     def __readFromIcom(self):
         if self.connected == True:
@@ -89,6 +89,9 @@ class icom:
         else:
             return bytearray()
 
+    def is_connected(self):
+        return self.connected
+    
     def close(self):
         self.ser.close()
 
