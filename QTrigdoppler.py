@@ -528,16 +528,22 @@ class MainWindow(QMainWindow):
         log_sat_status_layout.addWidget(self.log_sat_status_ele_val, 0, 1)
         
         self.log_sat_status_azi_lbl = QLabel("Azimuth:")
-        log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 0, 2)
+        log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 1, 0)
 
         self.log_sat_status_azi_val = QLabel("0.0 °")
-        log_sat_status_layout.addWidget(self.log_sat_status_azi_val, 0, 3)
+        log_sat_status_layout.addWidget(self.log_sat_status_azi_val, 1, 1)
         
         self.log_sat_status_height_lbl = QLabel("Height:")
-        log_sat_status_layout.addWidget(self.log_sat_status_height_lbl, 0, 4)
+        log_sat_status_layout.addWidget(self.log_sat_status_height_lbl, 0, 2)
 
         self.log_sat_status_height_val = QLabel("0.0 m")
-        log_sat_status_layout.addWidget(self.log_sat_status_height_val, 0, 5)
+        log_sat_status_layout.addWidget(self.log_sat_status_height_val, 0, 3)
+        
+        self.log_sat_status_illuminated_lbl = QLabel("Illumination:")
+        log_sat_status_layout.addWidget(self.log_sat_status_illuminated_lbl, 1, 2)
+
+        self.log_sat_status_illumintated_val = QLabel("Yes")
+        log_sat_status_layout.addWidget(self.log_sat_status_illumintated_val, 1, 3)
         
         self.log_sat_status.setLayout(log_sat_status_layout)
         log_layout.addWidget(self.log_sat_status, 1)
@@ -875,6 +881,7 @@ class MainWindow(QMainWindow):
             icomTrx.setVFO("VFOA")
 
     def the_exit_button_was_clicked(self):
+        self.the_stop_button_was_clicked()
         icomTrx.close()
         sys.exit()
     
@@ -1036,7 +1043,8 @@ class MainWindow(QMainWindow):
                 tracking_init = 1
 
                 while TRACKING_ACTIVE == True:
-                    date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
+                    #date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
+                    date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
                     myloc.date = ephem.Date(date_val)
 
                     if INTERACTIVE == True:
