@@ -15,9 +15,6 @@ import re
 import urllib.request
 import traceback
 import icom
-# import serial
-# import os
-# import threading
 
 
 from time import gmtime, strftime
