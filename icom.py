@@ -27,54 +27,67 @@ import time
 class icom:
 
     def __init__(self, serialDevice, serialBaud, icomTrxCivAdress):
+        self.connected = False
         self.icomTrxCivAdress = icomTrxCivAdress
         self.serialDevice = serialDevice
         self.serialBaud = serialBaud
-        # start serial usb connection
-        #self.ser = serial.Serial(serialDevice, serialBaud, timeout=1.0,rtscts=False)
         self.ser = serial.Serial()
         self.ser.baudrate = serialBaud
         self.ser.port = serialDevice
         self.ser.setDTR(0)
         self.ser.setRTS(0)
-        self.ser.open()
+        try:
+            self.ser.open()
+            self.connected = True
+        except:
+            self.connected = False
+            print("Rig not connected, switching to dummy mode")
+            self.last_set_frequency_a = 0 # per VFO
+            self.last_set_frequency_b = 0
+            self.current_vfo = "A"
 
     # gives a empty bytearray when data crc is not valid
     def __readFromIcom(self):
-        time.sleep(0.05)
-        b = bytearray()
-        b = b + self.ser.read(1)
-        while self.ser.inWaiting():
+        if self.connected == True:
+            time.sleep(0.05)
+            b = bytearray()
             b = b + self.ser.read(1)
-        # drop all but the last frame
-        while b.count(b'\xfd') > 1:
-            del b[0:b.find(b'\xfd') + 1]
-        if len(b) > 0:
-            # valid message
-            validMsg = bytes([254, 254, 0, self.icomTrxCivAdress, 251, 253])
-            if b[0:5] == validMsg:
-                b = b[6:len(b)]
-                if len(b) > 0:  # read answer from icom trx
-                    if b[0] == 254 and b[1] == 254 and b[-1] == 253:  # check for valid data CRC
-                        return b
+            while self.ser.inWaiting():
+                b = b + self.ser.read(1)
+            # drop all but the last frame
+            while b.count(b'\xfd') > 1:
+                del b[0:b.find(b'\xfd') + 1]
+            if len(b) > 0:
+                # valid message
+                validMsg = bytes([254, 254, 0, self.icomTrxCivAdress, 251, 253])
+                if b[0:5] == validMsg:
+                    b = b[6:len(b)]
+                    if len(b) > 0:  # read answer from icom trx
+                        if b[0] == 254 and b[1] == 254 and b[-1] == 253:  # check for valid data CRC
+                            return b
+                        else:
+                            b = bytearray()
                     else:
                         b = bytearray()
                 else:
-                    b = bytearray()
-            else:
-                if b[0] == 254 and b[1] == 254 and b[-1] == 253:  # check for valid data CRC
-                    b = b
-                else:
-                    b = bytearray()
-        #print('   * readFromIcom return value: ', b)
-        return b
+                    if b[0] == 254 and b[1] == 254 and b[-1] == 253:  # check for valid data CRC
+                        b = b
+                    else:
+                        b = bytearray()
+            #print('   * readFromIcom return value: ', b)
+            return b
+        else:
+            return bytearray()
         
     # gives a empty bytearray when data crc is not valid
     def __writeToIcom(self, b):
-        s = self.ser.write(bytes([254, 254, self.icomTrxCivAdress, 0]) + b + bytes([253]))
-        self.ser.flushInput()
-        #print('   * writeToIcom value: ', b)
-        return self.__readFromIcom()
+        if self.connected == True:
+            s = self.ser.write(bytes([254, 254, self.icomTrxCivAdress, 0]) + b + bytes([253]))
+            self.ser.flushInput()
+            #print('   * writeToIcom value: ', b)
+            return self.__readFromIcom()
+        else:
+            return bytearray()
 
     def close(self):
         self.ser.close()
@@ -95,16 +108,24 @@ class icom:
     def setVFO(self, vfo):
         vfo = vfo.upper()
         if vfo == 'VFOA':
+            self.current_vfo = "A"
             self.__writeToIcom(b'\x07\x00')
         if vfo == 'VFOB':
+            self.current_vfo = "B"
             self.__writeToIcom(b'\x07\x01')
         if vfo == 'MAIN':
+            self.current_vfo = "A"
             self.__writeToIcom(b'\x07\xd0')  # select MAIN
         if vfo == 'SUB':
+            self.current_vfo = "B"
             self.__writeToIcom(b'\x07\xd1')  # select SUB
 
     # change main and sub
     def setExchange(self):
+        if self.current_vfo == "A":
+            self.current_vfo = "B"
+        else:
+            self.current_vfo = "A"
         self.__writeToIcom(b'\x07\xB0')
 
     # change main and sub
@@ -135,6 +156,10 @@ class icom:
 
     # Parameter as string in hertz
     def setFrequency(self, freq):
+        if self.current_vfo == "A":
+            self.last_set_frequency_a = freq
+        else:
+            self.last_set_frequency_b = freq
         freq = '0000000000' + freq
         freq = freq[-10:]
         b = bytes([5, int(freq[8:10], 16), int(freq[6:8], 16), int(freq[4:6], 16),
@@ -189,15 +214,22 @@ class icom:
             self.__writeToIcom(b'\x0F\x12')
 
     def getFrequency(self):
-        b = self.__writeToIcom(b'\x03')  # ask for used frequency
-        c = ''
-        if len(b) > 0:
-            for a in reversed(b[5:10]):
-                c = c + '%0.2X' % a
-        if len(c) > 0: 
-            if c[0] == '0':
-                c = c[1:len(c)]
-        return c
+        if self.connected == True:
+            b = self.__writeToIcom(b'\x03')  # ask for used frequency
+            c = ''
+            if len(b) > 0:
+                for a in reversed(b[5:10]):
+                    c = c + '%0.2X' % a
+            if len(c) > 0: 
+                if c[0] == '0':
+                    c = c[1:len(c)]
+            return c
+        else:
+            if self.current_vfo == "A":
+                return self.last_set_frequency_a
+            else:
+                return self.last_set_frequency_b
+
     def setFrequencyOffUnselectVFO(self, freq):
         freq = '0000000000' + freq
         freq = freq[-10:]
