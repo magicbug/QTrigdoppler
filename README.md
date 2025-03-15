@@ -1,4 +1,4 @@
-# QT RigDoppler v0.4 (stable release for IC-910)
+# QT RigDoppler
 
 Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
 Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)  
@@ -33,10 +33,12 @@ AmsatNames.txt and dopler.sqf are wide and well known files used by SatPC32 soft
 
 ## v0.4 vs v0.3 and earlier (DL3JOP modifications):
     1) Removed hamlib
-    2) support for IC-910H by direct serial communication
+    2) support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)
     3) Implemented transponder selection
     4) Implemented correct switch between Split mode for V/V & U/U packet and satmode for V/U,U/V
     5) Implemented doppler correction threshold
+    6) Added SubTone control
+    7) Various smaller changes and additions
     
 ## Basic Configuration:
 <picture>
@@ -85,9 +87,8 @@ AmsatNames.txt and dopler.sqf are wide and well known files used by SatPC32 soft
 
 Although I tested v0.4 on multiple passes in FM as well as SSB, this project is still WIP. Please, please tell me which bugs you encounterd!
 ### Known bugs:
-  - V/V U/V VFO exchange is only done when the PTT is not engaged. Otherwise the VFO might swap during TX as the IC-910 is not capable to change the unselected VFO. Nevertheless if the radio is put into TX right in between the PTT monitoring command and the VFO switch, the VFOs will mix up.
+  - V/V U/U VFO exchange is only done when the PTT is not engaged. Otherwise the VFO might swap during TX as the IC-910 is not capable to change the unselected VFO. Nevertheless if the radio is put into TX right in between the PTT monitoring command and the VFO switch, the VFOs will mix up.
     - That might be resolvable by adding an TCP client/server which acts as an middle-man between the Terminal, e.g. Greencube Terminal and the modem, e.g. soundmodem to buffer TX messages while the frequency of VFOB is updated
-  - Currently there is no support to enable/change SubTones. The icom library supporst it but I'm undecided how to store the parameters. Maybe similar to the offset profiles?
   - Storing the offset profiles sometimes adds empty lines, atm I don't know why   
 
 ## Roadmap:
