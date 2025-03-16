@@ -1001,14 +1001,22 @@ class MainWindow(QMainWindow):
                         icomTrx.setMode("FM")
                         doppler_thres = DOPPLER_THRES_FM
                         INTERACTIVE = False
-                    elif self.my_satellite.downmode ==  "LSB" or self.my_satellite.downmode ==  "DATA-LSB":
+                    elif self.my_satellite.downmode ==  "LSB":
                         INTERACTIVE = True
                         icomTrx.setMode("LSB")
                         doppler_thres = DOPPLER_THRES_LINEAR
-                    elif self.my_satellite.downmode ==  "USB" or self.my_satellite.downmode ==  "DATA-USB":
+                    elif self.my_satellite.downmode ==  "USB":
                         INTERACTIVE = True
                         icomTrx.setMode("USB")
-                        doppler_thres = DOPPLER_THRES_LINEAR       
+                        doppler_thres = DOPPLER_THRES_LINEAR
+                    elif self.my_satellite.downmode ==  "DATA-LSB":
+                        INTERACTIVE = False
+                        icomTrx.setMode("LSB")
+                        doppler_thres = 0
+                    elif self.my_satellite.downmode ==  "DATA-USB":
+                        INTERACTIVE = False
+                        icomTrx.setMode("USB")
+                        doppler_thres = 0      
                     elif self.my_satellite.downmode == "CW":
                         INTERACTIVE = True
                         icomTrx.setMode("CW") 
@@ -1194,7 +1202,7 @@ class MainWindow(QMainWindow):
                             F0 = rx_doppler
                             icomTrx.setVFO("VFOA")
                             icomTrx.setFrequency(str(rx_doppler))
-                        time.sleep(0.05)
+                        time.sleep(0.025)
                         
                     self.my_satellite.new_cal = 0
                     time.sleep(0.01)
