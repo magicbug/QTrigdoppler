@@ -526,7 +526,7 @@ class MainWindow(QMainWindow):
         # Output log
         
         self.log_sat_status = QGroupBox()
-        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px;font-size: 18pt;} QLabel{font-size: 18pt;}")
+        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 14pt;} QLabel{font-size: 14pt;}")
         log_sat_status_layout = QGridLayout()
         
         self.log_sat_status_ele_lbl = QLabel("Elevation:")
@@ -557,7 +557,7 @@ class MainWindow(QMainWindow):
         log_layout.addWidget(self.log_sat_status, stretch=2)
         
         self.log_rig_status = QGroupBox()
-        self.log_rig_status.setStyleSheet("QGroupBox{padding-top:5px;padding-bottom:5px; margin-top:0px;font-size: 18pt;} QLabel{font-size: 18pt;}")
+        self.log_rig_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 14pt;} QLabel{font-size: 14pt;}")
         log_rig_status_layout = QGridLayout()
         
         self.log_rig_state_lbl = QLabel("Radio:")
