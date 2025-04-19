@@ -5,7 +5,7 @@
 #
 #   v0.4 and beyond: Extended, partly rewritten and adapted from hamlib to direct radio control by DL3JOP Joshua Petry
 
-
+### Mandatory imports
 import ephem
 import socket
 import sys
@@ -15,80 +15,27 @@ import re
 import urllib.request
 import traceback
 import icom
-
-
+import numpy as np
 from time import gmtime, strftime
 from datetime import datetime, timedelta, timezone
-
 from configparser import ConfigParser
-
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from qt_material import apply_stylesheet
 
-C = 299792458.
-
-
-### Calculates the tx doppler frequency
-def tx_dopplercalc(ephemdata, freq_at_sat):
-    ephemdata.compute(myloc)
-    doppler = int(freq_at_sat + ephemdata.range_velocity * freq_at_sat / C)
-    return doppler
-### Calculates the rx doppler frequency
-def rx_dopplercalc(ephemdata, freq_at_sat):
-    ephemdata.compute(myloc)
-    doppler = int(freq_at_sat - ephemdata.range_velocity * freq_at_sat / C)
-    return doppler
-### Calculates the tx doppler error   
-def tx_doppler_val_calc(ephemdata, freq_at_sat):
-    ephemdata.compute(myloc)
-    doppler = format(float(ephemdata.range_velocity * freq_at_sat / C), '.2f')
-    return doppler
-### Calculates the rx doppler error   
-def rx_doppler_val_calc(ephemdata, freq_at_sat):
-    ephemdata.compute(myloc)
-    doppler = format(float(-ephemdata.range_velocity * freq_at_sat / C),'.2f')
-    return doppler
-def sat_ele_calc(ephemdata):
-    ephemdata.compute(myloc)
-    ele = format(ephemdata.alt/ math.pi * 180.0,'.2f' )
-    return ele    
-def sat_azi_calc(ephemdata):
-    ephemdata.compute(myloc)
-    azi = format(ephemdata.az/ math.pi * 180.0,'.2f' )
-    return azi
-def sat_height_calc(ephemdata):
-    ephemdata.compute(myloc)
-    height = format(float(ephemdata.elevation)/1000.0,'.2f') 
-    return height
-def sat_eclipse_calc(ephemdata):
-    ephemdata.compute(myloc)
-    eclipse = ephemdata.eclipsed
-    if eclipse:
-        return "☾"
-    else:
-        return "☀︎"
-    
-    
-def MyError():
-    print("Failed to find required file!")
-    sys.exit()
-
-print("QT Rigdoppler v0.4")
-
-
-### parsing config file
+### Read config and import additional libraries if needed
+# parsing config file
 try:
     with open('config.ini') as f:
         f.close()
         configur = ConfigParser()
         configur.read('config.ini')
 except IOError:
-    raise MyError()
+    print("Failed to find configuration file!")
+    sys.exit()
 
-### config file to global vars
-
+# Set environment variables
 LATITUDE = configur.get('qth','latitude')
 LONGITUDE = configur.get('qth','longitude')
 ALTITUDE = configur.getfloat('qth','altitude')
@@ -104,21 +51,97 @@ SQFILE = configur.get('satellite','sqffile')
 RADIO = configur.get('icom','radio')
 CVIADDR = configur.get('icom','cviaddress')
 SERIALPORT = configur.get('icom', 'serialport')
+DISPLAY_MAP = False
 
 if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
 elif configur.get('icom', 'fullmode') == "False":
     OPMODE = False
     
-useroffsets = []
+if configur.get('misc', 'display_map') == "True":
+    DISPLAY_MAP = True
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    import matplotlib.pyplot as plt
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+    from pyproj import Geod
+elif configur.get('misc', 'display_map') == "False":
+    DISPLAY_MAP = False
 
+### Global constants
+C = 299792458.
 subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
+if DISPLAY_MAP:
+    GEOD = Geod(ellps="WGS84")
 
-i = 0
+
+### Helper functions
+## Calculates the tx doppler frequency
+def tx_dopplercalc(ephemdata, freq_at_sat):
+    ephemdata.compute(myloc)
+    doppler = int(freq_at_sat + ephemdata.range_velocity * freq_at_sat / C)
+    return doppler
+## Calculates the rx doppler frequency
+def rx_dopplercalc(ephemdata, freq_at_sat):
+    ephemdata.compute(myloc)
+    doppler = int(freq_at_sat - ephemdata.range_velocity * freq_at_sat / C)
+    return doppler
+## Calculates the tx doppler error   
+def tx_doppler_val_calc(ephemdata, freq_at_sat):
+    ephemdata.compute(myloc)
+    doppler = format(float(ephemdata.range_velocity * freq_at_sat / C), '.2f')
+    return doppler
+## Calculates the rx doppler error   
+def rx_doppler_val_calc(ephemdata, freq_at_sat):
+    ephemdata.compute(myloc)
+    doppler = format(float(-ephemdata.range_velocity * freq_at_sat / C),'.2f')
+    return doppler
+## Calculates sat elevation at observer
+def sat_ele_calc(ephemdata):
+    ephemdata.compute(myloc)
+    ele = format(ephemdata.alt/ math.pi * 180.0,'.2f' )
+    return ele    
+## Calculates sat azimuth at observer
+def sat_azi_calc(ephemdata):
+    ephemdata.compute(myloc)
+    azi = format(ephemdata.az/ math.pi * 180.0,'.2f' )
+    return azi
+## Calculates sat subpoint latitude
+def sat_lat_calc(ephemdata):
+    ephemdata.compute(myloc)
+    return format(ephemdata.sublat/ math.pi * 180.0,'.1f' )  
+## Calculates sat subpoint longitude
+def sat_lon_calc(ephemdata):
+    ephemdata.compute(myloc)
+    return format(ephemdata.sublong/ math.pi * 180.0,'.1f' )
+## Calculates sat height at observer
+def sat_height_calc(ephemdata):
+    ephemdata.compute(myloc)
+    height = format(float(ephemdata.elevation)/1000.0,'.2f') 
+    return height
+## Calculates sat eclipse status
+def sat_eclipse_calc(ephemdata):
+    ephemdata.compute(myloc)
+    eclipse = ephemdata.eclipsed
+    if eclipse:
+        return "☾"
+    else:
+        return "☀︎"
+## Calculates sat footprint diameter
+def footprint_radius_km(alt_km):
+    return 6371 * np.arccos(6371 / (6371 + alt_km))    
+
+## Error "handler"    
+def MyError():
+    print("Failed to find required file!")
+    sys.exit()
+
+#i = 0
+useroffsets = []
 for (each_key, each_val) in configur.items('offset_profiles'):
     # Format SATNAME:RXoffset,TXoffset
     useroffsets += [each_val.split(',')]
-    i+=1
+    #i+=1
 
 # radio frequencies
 F0=0.0
@@ -165,6 +188,65 @@ class Satellite:
     up_doppler_rate = 0
     tledata = ""
     rig_satmode = 0
+if DISPLAY_MAP:
+    class SatMapCanvas(FigureCanvas):
+        def __init__(self, lat, lon, alt_km):
+            self.fig = plt.figure()
+            self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+            super().__init__(self.fig)
+            self.lat = lat
+            self.lon = lon
+            self.alt_km = alt_km
+            self.ax = self.fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+            self.ax.clear()
+            self.ax.set_global()
+            self.ax.stock_img()
+            self.ax.coastlines()
+            self.ax.add_feature(cfeature.BORDERS, linestyle=':')
+            self.ax.set_aspect('auto')
+
+    
+        def draw_map(self):
+            for l in self.ax.get_lines():
+                l.remove()
+    
+            # Generate geodesic footprint
+            azimuths = np.linspace(0, 360, 361)
+            radius_m = footprint_radius_km(self.alt_km) * 1000
+            lons, lats, _ = GEOD.fwd(
+                np.full(azimuths.shape, self.lon),
+                np.full(azimuths.shape, self.lat),
+                azimuths,
+                np.full(azimuths.shape, radius_m)
+            )
+    
+            # Normalize longitudes
+            lons = ((lons + 180) % 360) - 180
+            lats = np.clip(lats, -90, 90)
+    
+            # Split into segments to handle wraparound
+            segments = []
+            seg_lon = [lons[0]]
+            seg_lat = [lats[0]]
+            for i in range(1, len(lons)):
+                if abs(lons[i] - lons[i-1]) > 180 or abs(lats[i] - lats[i-1]) > 90:
+                    segments.append((seg_lon, seg_lat))
+                    seg_lon = []
+                    seg_lat = []
+                seg_lon.append(lons[i])
+                seg_lat.append(lats[i])
+            if seg_lon:
+                segments.append((seg_lon, seg_lat))
+    
+            # Plot all segments
+            for seg_lon, seg_lat in segments:
+                self.ax.plot(seg_lon, seg_lat, 'b--', transform=ccrs.PlateCarree(), linewidth=1)
+            
+            # Plot satellite subpoint
+            self.ax.plot(float(self.lon), float(self.lat), 'ro', markersize=6, label="Subpoint", transform=ccrs.PlateCarree())
+    
+            self.draw()
+
 
 class ConfigWindow(QMainWindow):
     def __init__(self):
@@ -317,10 +399,13 @@ class MainWindow(QMainWindow):
         overview_pagelayout = QVBoxLayout()
 
         control_layout = QHBoxLayout()
+        map_layout = QHBoxLayout()
         log_layout = QHBoxLayout()
         #log_layout.setAlignment(Qt.AlignVCenter)
 
         overview_pagelayout.addLayout(control_layout)
+        if DISPLAY_MAP:
+            overview_pagelayout.addLayout(map_layout)
         overview_pagelayout.addLayout(log_layout)
         
         labels_layout = QVBoxLayout()
@@ -575,6 +660,18 @@ class MainWindow(QMainWindow):
         
         self.log_rig_status.setLayout(log_rig_status_layout)
         log_layout.addWidget(self.log_rig_status, stretch=1)
+        
+        ## Map layout
+        if DISPLAY_MAP:
+            self.mapbox = QGroupBox()
+            self.mapbox.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 14pt;} QLabel{font-size: 14pt;}")
+            mapbox_layout = QHBoxLayout()
+            self.mapbox.setLayout(mapbox_layout)
+            map_layout.addWidget(self.mapbox)
+            self.map_canvas = SatMapCanvas(-60, -80, 1)
+            mapbox_layout.addWidget(self.map_canvas)
+        
+        
         
         ### Settings Tab
         settings_layout = QHBoxLayout()
@@ -1256,6 +1353,12 @@ class MainWindow(QMainWindow):
             self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata)) + " °")
             self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata)) + " km")
             self.log_sat_status_illumintated_val.setText(sat_eclipse_calc(self.my_satellite.tledata))
+            
+            if DISPLAY_MAP:
+                self.map_canvas.lat = sat_lat_calc(self.my_satellite.tledata)
+                self.map_canvas.lon = sat_lon_calc(self.my_satellite.tledata)
+                self.map_canvas.alt_km = int(round(float(sat_height_calc(self.my_satellite.tledata))))
+                self.map_canvas.draw_map()
             
         except:
             print("Error in label timer")
