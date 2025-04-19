@@ -40,9 +40,7 @@ LATITUDE = configur.get('qth','latitude')
 LONGITUDE = configur.get('qth','longitude')
 ALTITUDE = configur.getfloat('qth','altitude')
 STEP_RX = configur.getint('qth','step_rx')
-STEP_TX = configur.getint('qth','step_tx')
 MAX_OFFSET_RX = configur.getint('qth','max_offset_rx')
-MAX_OFFSET_TX = configur.getint('qth','max_offset_tx')
 TLEFILE = configur.get('satellite','tle_file')
 TLEURL = configur.get('satellite','tle_url')
 DOPPLER_THRES_FM = configur.get('satellite', 'doppler_threshold_fm')
@@ -188,6 +186,7 @@ class Satellite:
     up_doppler_rate = 0
     tledata = ""
     rig_satmode = 0
+    
 if DISPLAY_MAP:
     class SatMapCanvas(FigureCanvas):
         def __init__(self, lat, lon, alt_km):
@@ -248,121 +247,6 @@ if DISPLAY_MAP:
             self.draw()
 
 
-class ConfigWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-
-        self.setWindowTitle("QTRigDoppler configuration")
-        # QTH
-        myFont=QFont()
-        myFont.setBold(True)
-
-        pagelayout = QVBoxLayout()  
-
-        ### Offset profiles
-        self.offsets = QLabel("Offsets Profiles")
-        self.offsets.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
-        self.offsets.setFont(myFont)
-        offset_layout.addWidget(self.offsets)
-
-        self.offsetText = QTextEdit()
-        self.offsetText.setReadOnly(False)
-        self.offsetText.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.offsetText.setStyleSheet("background-color: black; color: white;")
-        offset_layout.addWidget(self.offsetText)
-
-        for (each_key, each_val) in configur.items('offset_profiles'):
-            self.offsetText.append(each_val)
-
-
-        ##########################################
-        container = QWidget()
-        container.setLayout(pagelayout)
-        self.setCentralWidget(container)
-    
-    def save_config(self):
-        # QTH
-        global LATITUDE
-        global LONGITUDE
-        global ALTITUDE
-        global STEP_RX
-        global STEP_TX
-        global MAX_OFFSET_TX
-        global MAX_OFFSET_RX
-        global DOPPLER_THRES_FM
-        global DOPPLER_THRES_LINEAR
-
-        # satellite
-        global TLEFILE
-        global TLEURL
-        global SQFILE
-
-        # Radio
-        global RADIO
-        global CVIADDR
-        global OPMODE
-
-
-
-        LATITUDE = self.qthlat.displayText()
-        configur['qth']['latitude'] = str(float(self.qthlat.displayText()))
-        LONGITUDE = self.qthlong.displayText()
-        configur['qth']['longitude'] = str(float(self.qthlong.displayText()))
-        ALTITUDE = float(self.qthalt.displayText())
-        configur['qth']['altitude'] = str(float(self.qthalt.displayText()))
-        STEP_RX = int(self.qthsteprx.displayText())
-        configur['qth']['step_rx'] = str(int(self.qthsteprx.displayText()))
-        STEP_TX = int(self.qthsteptx.displayText())
-        configur['qth']['step_tx'] = str(int(self.qthsteptx.displayText()))
-        MAX_OFFSET_RX = int(self.qthmaxoffrx.displayText())
-        configur['qth']['max_offset_rx'] = str(int(self.qthmaxoffrx.displayText()))
-        MAX_OFFSET_TX = int(self.qthmaxoffrx.displayText())
-        configur['qth']['max_offset_tx'] = str(int(self.qthmaxoffrx.displayText()))
-        TLEFILE = configur['satellite']['tle_file'] = str(self.sattle.displayText())
-        TLEURL =  configur['satellite']['tle_url'] = str(self.sattleurl.displayText())
-        SQFILE = configur['satellite']['sqffile'] = str(self.satsqf.displayText())
-        
-        DOPPLER_THRES_FM = int(self.doppler_fm_threshold.displayText())
-        configur['satellite']['doppler_threshold_fm'] = str(int(self.doppler_fm_threshold.displayText()))
-        DOPPLER_THRES_LINEAR = int(self.doppler_linear_threshold.displayText())
-        configur['satellite']['doppler_threshold_linear'] = str(int(self.doppler_linear_threshold.displayText()))
-        
-        if self.radiolistcomb.currentText() == "Icom 9700":
-            RADIO = configur['icom']['radio'] = '9700'
-        #elif self.radiolistcomb.currentText() == "Icom 705":
-        #    RADIO = configur['icom']['radio'] = '705'
-        #elif self.radiolistcomb.currentText() == "Yaesu 818":
-        #    RADIO = configur['icom']['radio'] = '818'
-        elif self.radiolistcomb.currentText() == "Icom 910H":
-            RADIO = configur['icom']['radio'] = '910'
-
-        if self.radidplx.isChecked():
-            OPMODE = True
-            configur['icom']['fullmode'] = "True"
-        else:
-            OPMODE = False
-            configur['icom']['fullmode'] = "False"
-        CVIADDR = configur['icom']['cviaddress'] = str(self.radicvi.displayText())
-
-        if self.offsetText.document().blockCount() >= 1:
-            for i in range(0, self.offsetText.document().blockCount()):
-                theline = self.offsetText.toPlainText().splitlines(i)
-                index = 'satoffset' + str(i + 1)
-                configur['offset_profiles'][index] = theline[i]
-
-        with open('config.ini', 'w') as configfile:
-            configur.write(configfile)
-        self.close()
-
-    def opmode_change(self):
-        if self.radidplx.isChecked():
-            self.hamlport2.setEnabled(True)
-        else:
-            self.hamlport2.setEnabled(False)
-
-    def exit_config(self):
-        self.close()
-
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
@@ -372,9 +256,7 @@ class MainWindow(QMainWindow):
         global LONGITUDE
         global ALTITUDE
         global STEP_RX
-        global STEP_TX
         global MAX_OFFSET_RX
-        global MAX_OFFSET_TX
         global DOPPLER_THRES_FM
         global DOPPLER_THRES_LINEAR
 
@@ -476,6 +358,21 @@ class MainWindow(QMainWindow):
         self.rxoffsetbox.setSingleStep(int(STEP_RX))
         self.rxoffsetbox.valueChanged.connect(self.rxoffset_value_changed)
         combo_layout.addWidget(self.rxoffsetbox)
+        
+        offset_button_layout = QHBoxLayout()
+        labels = ["+1000", "+100", "+10", "-10", "-100", "-1000"]
+        self.offset_buttons = [QPushButton(label) for label in labels]
+        
+        for button in self.offset_buttons:
+            button.setStyleSheet("font-size: 8pt;")
+            button.clicked.connect(lambda _, b=button: self.rxoffset_button_pushed(b.text()))
+            offset_button_layout.addWidget(button)
+        #self.Startbutton.clicked.connect(self.init_worker)
+        #for button in offset_button_list:
+        #    offset_button_layout.addWidget(button)
+
+        combo_layout.addLayout(offset_button_layout)
+        #self.inc_rx_offset_10_but.setStyleSheet("font-size: 8pt;")
 
         myFont=QFont()
         myFont.setBold(True)
@@ -596,11 +493,6 @@ class MainWindow(QMainWindow):
         self.syncbutton.clicked.connect(self.the_sync_button_was_clicked)
         button_layout.addWidget(self.syncbutton)
         self.syncbutton.setEnabled(False)
-        
-        self.store_offset_button = QPushButton("Store offset")
-        #self.store_offset_button.clicked.connect(self.the_sync_button_was_clicked)
-       # button_layout.addWidget(self.store_offset_button)
-        self.store_offset_button.setEnabled(False)
 
         # 1x QPushButton (Exit)
         self.Exitbutton = QPushButton("Exit")
@@ -674,23 +566,23 @@ class MainWindow(QMainWindow):
         
         
         ### Settings Tab
-        settings_layout = QHBoxLayout()
+        settings_value_layout = QHBoxLayout()
         
         
         # QTH Tab
         self.settings_qth_box = QGroupBox("QTH")
         self.settings_qth_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
-        settings_layout.addWidget(self.settings_qth_box)
+        settings_value_layout.addWidget(self.settings_qth_box)
         
         # Radio Tab (scrollable for smaller screens)
         self.settings_radio_box = QGroupBox("Radio")
         self.settings_radio_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
-        settings_layout.addWidget(self.settings_radio_box)
+        settings_value_layout.addWidget(self.settings_radio_box)
         
         # Files Tab
         self.settings_file_box = QGroupBox("Files")
         self.settings_file_box.setStyleSheet("QGroupBox{padding-top:1px;padding-bottom:5px; margin-top:5px}")
-        settings_layout.addWidget(self.settings_file_box)
+        settings_value_layout.addWidget(self.settings_file_box)
         
         
         ## QTH
@@ -750,22 +642,13 @@ class MainWindow(QMainWindow):
         radio_settings_layout.addWidget(self.radicvi, 1, 1)
         
         # 1x Label step RX
-        self.qthsteprx_lbl = QLabel("Step (Hz) for RX:")
+        self.qthsteprx_lbl = QLabel("Step (Hz) for RX offset:")
         radio_settings_layout.addWidget(self.qthsteprx_lbl, 2, 0)
 
         self.qthsteprx = QLineEdit()
         self.qthsteprx.setMaxLength(10)
         self.qthsteprx.setText(str(STEP_RX))
         radio_settings_layout.addWidget(self.qthsteprx, 2, 1)
-
-        # 1x Label step TX
-        self.qthsteptx_lbl = QLabel("Step (Hz) for TX:")
-        radio_settings_layout.addWidget(self.qthsteptx_lbl, 3, 0)
-
-        self.qthsteptx = QLineEdit()
-        self.qthsteptx.setMaxLength(10)
-        self.qthsteptx.setText(str(STEP_TX))
-        radio_settings_layout.addWidget(self.qthsteptx, 3,1)
 
         # 1x Label Max Offset RX
         self.qthmaxoffrx_lbl = QLabel("Max Offset (Hz) for RX:")
@@ -776,15 +659,6 @@ class MainWindow(QMainWindow):
         self.qthmaxoffrx.setText(str(MAX_OFFSET_RX))
         radio_settings_layout.addWidget(self.qthmaxoffrx, 4, 1)
 
-        # 1x Label Max Offset TX
-        self.qthmaxofftx_lbl = QLabel("Max Offset (Hz) for TX:")
-        radio_settings_layout.addWidget(self.qthmaxofftx_lbl, 5, 0)
-
-        self.qthmaxofftx = QLineEdit()
-        self.qthmaxofftx.setMaxLength(6)
-        self.qthmaxofftx.setText(str(MAX_OFFSET_TX))
-        radio_settings_layout.addWidget(self.qthmaxofftx, 5, 1)
-        
         # 1x Label doppler fm threshold
         self.doppler_fm_threshold_lbl = QLabel("Doppler threshold for FM")
         radio_settings_layout.addWidget(self.doppler_fm_threshold_lbl, 6, 0)
@@ -846,6 +720,20 @@ class MainWindow(QMainWindow):
         
         self.settings_file_box.setLayout(files_settings_layout)
         
+        # Settings store layout
+        settings_store_layout = QVBoxLayout()
+        
+        self.SafeSettingsButton = QPushButton("Store Settings - requires restart to take effect")
+        self.SafeSettingsButton.clicked.connect(self.save_settings)
+        settings_store_layout.addWidget(self.SafeSettingsButton)
+        self.SafeSettingsButton.setEnabled(True)
+        
+        
+        # Glueing settinglayouts together
+        settings_layout = QVBoxLayout()
+        settings_layout.addLayout(settings_value_layout)
+        settings_layout.addLayout(settings_store_layout)
+        
         
 
         ###  UI Layout / Tab Widget
@@ -871,11 +759,73 @@ class MainWindow(QMainWindow):
         self.utc_clock_timer.setInterval(500)
         self.utc_clock_timer.timeout.connect(self.recurring_utc_clock_timer)
         self.utc_clock_timer.start()
+        
+    def save_settings(self):
+        global LATITUDE
+        global LONGITUDE
+        global ALTITUDE
+        global STEP_RX
+        global MAX_OFFSET_RX
+        global DOPPLER_THRES_FM
+        global DOPPLER_THRES_LINEAR
+        global TLEFILE
+        global TLEURL
+        global SQFILE
+        global RADIO
+        global CVIADDR
+        global OPMODE
+
+        LATITUDE = self.qth_settings_lat_edit.displayText()
+        configur['qth']['latitude'] = str(float(LATITUDE))
+        LONGITUDE = self.qth_settings_long_edit.displayText()
+        configur['qth']['longitude'] = str(float(LONGITUDE))
+        ALTITUDE = float(self.qth_settings_alt_edit.displayText())
+        configur['qth']['altitude'] = str(float(ALTITUDE))
+        STEP_RX = int(self.qthsteprx.displayText())
+        configur['qth']['step_rx'] = str(int(STEP_RX))
+        MAX_OFFSET_RX = int(self.qthmaxoffrx.displayText())
+        configur['qth']['max_offset_rx'] = str(int(MAX_OFFSET_RX))
+        TLEFILE = configur['satellite']['tle_file'] = str(self.sattle.displayText())
+        TLEURL =  configur['satellite']['tle_url'] = str(self.sattleurl.displayText())
+        SQFILE = configur['satellite']['sqffile'] = str(self.satsqf.displayText())
+        
+        DOPPLER_THRES_FM = int(self.doppler_fm_threshold.displayText())
+        configur['satellite']['doppler_threshold_fm'] = str(int(DOPPLER_THRES_FM))
+        DOPPLER_THRES_LINEAR = int(self.doppler_linear_threshold.displayText())
+        configur['satellite']['doppler_threshold_linear'] = str(int(DOPPLER_THRES_LINEAR))
+        
+        if self.radiolistcomb.currentText() == "Icom 9700":
+            RADIO = configur['icom']['radio'] = '9700'
+        elif self.radiolistcomb.currentText() == "Icom 910H":
+            RADIO = configur['icom']['radio'] = '910'
+
+        CVIADDR = str(self.radicvi.displayText())
+        configur['icom']['cviaddress'] = CVIADDR
+        
+        # Saving offsets
+        offset_stored = False
+        num_offsets = 0
+        for (each_key, each_val) in configur.items('offset_profiles'):
+            num_offsets = num_offsets+1
+            # Iterate through each entry if sat/tpx combo is already in list otherwise adds it. 
+            if each_val.split(",")[0].strip() == self.my_satellite.name and each_val.split(",")[1].strip() == self.my_transponder_name:
+                offset_stored = True
+                if int(each_val.split(",")[2].strip()) != int(self.rxoffsetbox.value()):
+                    configur['offset_profiles'][each_key] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"        
+        if offset_stored == False and int(self.rxoffsetbox.value()) != 0 and self.combo1.currentIndex() != 0:
+            configur['offset_profiles']["satoffset"+str(num_offsets+1)] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
+            offset_stored = True
+
+        with open('config.ini', 'w') as configfile:
+            configur.write(configfile)
 
     def rxoffset_value_changed(self, i):
             global f_cal
             self.my_satellite.new_cal = 1
             self.my_satellite.F_cal =  f_cal = i
+    
+    def rxoffset_button_pushed(self, i):
+            self.rxoffsetbox.setValue(self.rxoffsetbox.value() +int(i))
     
     def sat_changed(self, satname):
         self.my_satellite.name = satname
@@ -901,6 +851,8 @@ class MainWindow(QMainWindow):
         global f_cal
         global i_cal
         global MAX_OFFSET_RX
+        
+        self.my_transponder_name = tpxname
         
         try:
             with open(SQFILE, 'r') as h:
@@ -930,7 +882,7 @@ class MainWindow(QMainWindow):
                             else:
                                 self.Startbutton.setEnabled(True)
                                 self.syncbutton.setEnabled(True)
-                                self.store_offset_button.setEnabled(True)
+                                #self.store_offset_button.setEnabled(True)
                                 
                             if  self.my_satellite.F > 0 and self.my_satellite.I == 0:
                                 RX_TPX_ONLY = True
