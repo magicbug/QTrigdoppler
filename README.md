@@ -17,11 +17,15 @@ Attention: I'm looking for bug reports and new features. Every pull-request/issu
 
 ## Requirements:  
     1) Python3  
-    2) Python3 modules
+    2) Required Python3 modules
        pip3 install ephem
        pip3 install PyQt5
        pip3 install urllib3
        pip3 install pyserial
+    3) Python3 modules if you'd like to use the map:
+       pip3 install matplotlib
+       pip3 install cartopy
+       pip3 install pyproj
   
 ## Support files:  
 
@@ -77,13 +81,6 @@ v0.4 vs v0.3 and earlier (DL3JOP modifications):
 |  Icom 910H    |  ARISS        |     DL3JOP    |   Sep 24    |
 
 
-## The good, the bad and the ugly - Feature/Bug Tracker
-
-Although I tested v0.4 on multiple passes in FM as well as SSB, this project is still WIP. Please, please tell me which bugs you encounterd!
-### Known bugs:
-  - V/V U/U VFO exchange is only done when the PTT is not engaged. Otherwise the VFO might swap during TX as the IC-910 is not capable to change the unselected VFO. Nevertheless if the radio is put into TX right in between the PTT monitoring command and the VFO switch, the VFOs will mix up.
-    - That might be resolvable by adding an TCP client/server which acts as an middle-man between the Terminal, e.g. Greencube Terminal and the modem, e.g. soundmodem to buffer TX messages while the frequency of VFOB is updated
-  - Storing the offset profiles sometimes adds empty lines, atm I don't know why   
 
 ## Roadmap:
   - Adding support for IC-9700 (should be easy as it uses nearly the same comands as the IC-910H)
