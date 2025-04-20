@@ -23,7 +23,6 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from qt_material import apply_stylesheet
-
 ### Read config and import additional libraries if needed
 # parsing config file
 try:
@@ -49,13 +48,14 @@ SQFILE = configur.get('satellite','sqffile')
 RADIO = configur.get('icom','radio')
 CVIADDR = configur.get('icom','cviaddress')
 SERIALPORT = configur.get('icom', 'serialport')
+LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
+TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
 DISPLAY_MAP = False
 
 if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
 elif configur.get('icom', 'fullmode') == "False":
     OPMODE = False
-    
 if configur.get('misc', 'display_map') == "True":
     DISPLAY_MAP = True
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -65,6 +65,7 @@ if configur.get('misc', 'display_map') == "True":
     from pyproj import Geod
 elif configur.get('misc', 'display_map') == "False":
     DISPLAY_MAP = False
+
 
 ### Global constants
 C = 299792458.
@@ -185,6 +186,7 @@ class Satellite:
     up_doppler_old = 0
     up_doppler_rate = 0
     tledata = ""
+    tle_age = "n/a"
     rig_satmode = 0
     
 if DISPLAY_MAP:
@@ -367,12 +369,8 @@ class MainWindow(QMainWindow):
             button.setStyleSheet("font-size: 8pt;")
             button.clicked.connect(lambda _, b=button: self.rxoffset_button_pushed(b.text()))
             offset_button_layout.addWidget(button)
-        #self.Startbutton.clicked.connect(self.init_worker)
-        #for button in offset_button_list:
-        #    offset_button_layout.addWidget(button)
 
         combo_layout.addLayout(offset_button_layout)
-        #self.inc_rx_offset_10_but.setStyleSheet("font-size: 8pt;")
 
         myFont=QFont()
         myFont.setBold(True)
@@ -503,7 +501,7 @@ class MainWindow(QMainWindow):
         # Output log
         
         self.log_sat_status = QGroupBox()
-        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 14pt;} QLabel{font-size: 14pt;}")
+        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 12pt;} QLabel{font-size: 12pt;}")
         log_sat_status_layout = QGridLayout()
         
         self.log_sat_status_ele_lbl = QLabel("Elevation:")
@@ -534,7 +532,7 @@ class MainWindow(QMainWindow):
         log_layout.addWidget(self.log_sat_status, stretch=2)
         
         self.log_rig_status = QGroupBox()
-        self.log_rig_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 14pt;} QLabel{font-size: 14pt;}")
+        self.log_rig_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 12pt;} QLabel{font-size: 12pt;}")
         log_rig_status_layout = QGridLayout()
         
         self.log_rig_state_lbl = QLabel("Radio:")
@@ -544,11 +542,25 @@ class MainWindow(QMainWindow):
         self.log_rig_state_val.setStyleSheet('color: red')
         log_rig_status_layout.addWidget(self.log_rig_state_val, 0, 1)
         
+        self.log_tle_state_lbl = QLabel("TLE age:")
+        log_rig_status_layout.addWidget(self.log_tle_state_lbl, 0, 3)
+
+        self.log_tle_state_val = QLabel("{0} day(s)".format(self.my_satellite.tle_age))
+        #self.log_tle_state_val.setStyleSheet('color: red')
+        log_rig_status_layout.addWidget(self.log_tle_state_val, 0, 4)
+        
         self.log_time_lbl = QLabel("UTC:")
         log_rig_status_layout.addWidget(self.log_time_lbl, 1, 0)
 
         self.log_time_val = QLabel(datetime.now(timezone.utc).strftime('%H:%M:%S')+"z")
         log_rig_status_layout.addWidget(self.log_time_val, 1, 1)
+        
+        self.log_layout_vline_right = QFrame()
+        self.log_layout_vline_right.setFrameShape(QFrame.VLine)
+        self.log_layout_vline_right.setFrameShadow(QFrame.Plain)
+        self.log_layout_vline_right.setStyleSheet("background-color: #4f5b62;border: none;")
+        self.log_layout_vline_right.setFixedWidth(2)
+        log_rig_status_layout.addWidget(self.log_layout_vline_right, 0, 2, 2, 1)
         
         self.log_rig_status.setLayout(log_rig_status_layout)
         log_layout.addWidget(self.log_rig_status, stretch=1)
@@ -718,6 +730,14 @@ class MainWindow(QMainWindow):
         self.satsqf.setText(SQFILE)
         files_settings_layout.addWidget(self.satsqf, 2, 1)
         
+        self.UpdateTLEButton = QPushButton("Update TLE")
+        self.UpdateTLEButton.clicked.connect(self.update_tle_file)
+        files_settings_layout.addWidget(self.UpdateTLEButton, 3,0)
+        self.UpdateTLEButton.setEnabled(True)
+        
+        self.tleupdate_stat_lbl = QLabel(LAST_TLE_UPDATE)
+        files_settings_layout.addWidget(self.tleupdate_stat_lbl, 3, 1)
+        
         self.settings_file_box.setLayout(files_settings_layout)
         
         # Settings store layout
@@ -774,6 +794,7 @@ class MainWindow(QMainWindow):
         global RADIO
         global CVIADDR
         global OPMODE
+        global LAST_TLE_UPDATE
 
         LATITUDE = self.qth_settings_lat_edit.displayText()
         configur['qth']['latitude'] = str(float(LATITUDE))
@@ -815,6 +836,9 @@ class MainWindow(QMainWindow):
         if offset_stored == False and int(self.rxoffsetbox.value()) != 0 and self.combo1.currentIndex() != 0:
             configur['offset_profiles']["satoffset"+str(num_offsets+1)] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
             offset_stored = True
+        
+        # Save TLE update
+        configur['misc']['last_tle_update'] = LAST_TLE_UPDATE
 
         with open('config.ini', 'w') as configfile:
             configur.write(configfile)
@@ -826,7 +850,18 @@ class MainWindow(QMainWindow):
     
     def rxoffset_button_pushed(self, i):
             self.rxoffsetbox.setValue(self.rxoffsetbox.value() +int(i))
-    
+    def update_tle_file(self):
+        try:
+            
+            global LAST_TLE_UPDATE
+            urllib.request.urlretrieve(TLEURL, TLEFILE)
+            self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE)
+            LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.save_settings()
+        except Exception as e:
+            print("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
+            self.tleupdate_stat_lbl.setText("❌")
+            
     def sat_changed(self, satname):
         self.my_satellite.name = satname
 
@@ -882,7 +917,6 @@ class MainWindow(QMainWindow):
                             else:
                                 self.Startbutton.setEnabled(True)
                                 self.syncbutton.setEnabled(True)
-                                #self.store_offset_button.setEnabled(True)
                                 
                             if  self.my_satellite.F > 0 and self.my_satellite.I == 0:
                                 RX_TPX_ONLY = True
@@ -907,10 +941,11 @@ class MainWindow(QMainWindow):
                     self.rxoffsetbox.setValue(0)
                 
                 
-
+        self.my_satellite.tledata = ""
+        self.timer.stop()
         try:
             with open(TLEFILE, 'r') as f:
-                data = f.readlines()   
+                data = f.readlines()  
                 
                 for index, line in enumerate(data):
                     if str(self.my_satellite.name) in line:
@@ -922,16 +957,13 @@ class MainWindow(QMainWindow):
         if self.my_satellite.tledata == "":
             self.Startbutton.setEnabled(False)
             self.syncbutton.setEnabled(False)
-            self.store_offset_button.setEnabled(False)
+            self.log_tle_state_val.setText("n/a")
             return
         else:
-            #day_of_year = datetime.now().timetuple().tm_yday
-            #tleage = int(data[index+1][20:23])
-            #diff = day_of_year - tleage
-
-            #if diff > 7:
-            #    
-            pass
+            day_of_year = datetime.now().timetuple().tm_yday
+            tleage = int(data[index+1][20:23])
+            self.my_satellite.tle_age = day_of_year - tleage
+            self.log_tle_state_val.setText("{0} day(s)".format(self.my_satellite.tle_age))
             
         self.timer.start()
         
@@ -1359,12 +1391,6 @@ if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
     print("***  Icom radio not supported: {badmodel}".format(badmodel=RADIO))
     sys.exit()
 
-socket.setdefaulttimeout(15)
-
-try:
-   urllib.request.urlretrieve(TLEURL, TLEFILE)
-except Exception as e:
-   print("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
 
 app = QApplication(sys.argv)
 window = MainWindow()
