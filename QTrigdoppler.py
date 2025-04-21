@@ -922,6 +922,7 @@ class MainWindow(QMainWindow):
         global f_cal
         global i_cal
         global MAX_OFFSET_RX
+        global RX_TPX_ONLY
         
         self.my_transponder_name = tpxname
         
@@ -957,6 +958,8 @@ class MainWindow(QMainWindow):
                             if  self.my_satellite.F > 0 and self.my_satellite.I == 0:
                                 RX_TPX_ONLY = True
                                 self.my_satellite.rig_satmode = 0
+                            else:
+                                RX_TPX_ONLY = False
                             break
         except IOError:
             raise MyError()
@@ -1081,9 +1084,12 @@ class MainWindow(QMainWindow):
                 #################################
                 if RADIO == "9700" and self.my_satellite.rig_satmode == 0: #not implemented yet
                     pass
-                elif RADIO == "910" and self.my_satellite.rig_satmode == 0:
+                elif RADIO == "910" and self.my_satellite.rig_satmode == 0 and RX_TPX_ONLY == False:
                     icomTrx.setSatelliteMode(0)
                     icomTrx.setSplitOn(1)
+                elif RADIO == "910" and self.my_satellite.rig_satmode == 0 and RX_TPX_ONLY == True:
+                    icomTrx.setSatelliteMode(0)
+                    icomTrx.setSplitOn(0)
                 elif RADIO == "910" and self.my_satellite.rig_satmode == 1:
                     icomTrx.setSatelliteMode(1)
                     icomTrx.setSplitOn(0)
@@ -1192,10 +1198,13 @@ class MainWindow(QMainWindow):
                     #icomTrx.setToneOn(0)
                     #self.combo3.setCurrentIndex(0);
                     icomTrx.setFrequency(str(int(F0)))
-                    icomTrx.setVFO("VFOB")
-                    icomTrx.setFrequency(str(int(I0)))
-                    INTERACTIVE = False #for SSB packet sats
-                    icomTrx.setVFO("VFOA")
+                    if RX_TPX_ONLY == False:
+                        icomTrx.setVFO("VFOB")
+                        icomTrx.setFrequency(str(int(I0)))
+                        INTERACTIVE = False #for SSB packet sats
+                        icomTrx.setVFO("VFOA")
+                    else:
+                        icomTrx.setSplitOn(0)
                 
                 # Ensure that initial frequencies are always written 
                 tracking_init = 1
@@ -1312,9 +1321,7 @@ class MainWindow(QMainWindow):
                             tx_doppler = new_tx_doppler
                             I0 = tx_doppler
                             icomTrx.setFrequency(str(tx_doppler))
-                        # Check for RX -> TX transition
-                        if  ptt_state_old == 0 and ptt_state and abs(new_rx_doppler-F0) > doppler_thres:
-                            print("RX inititated")
+                        if  ptt_state and abs(new_rx_doppler-F0) > doppler_thres:
                             rx_doppler = new_rx_doppler
                             F0 = rx_doppler
                             icomTrx.setVFO("VFOA")
