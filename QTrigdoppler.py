@@ -129,7 +129,41 @@ def sat_eclipse_calc(ephemdata):
 ## Calculates sat footprint diameter
 def footprint_radius_km(alt_km):
     return 6371 * np.arccos(6371 / (6371 + alt_km))    
-
+## Calculates next sat pass at observer
+def sat_next_event_calc(ephemdata):
+    epoch_time = datetime.now(timezone.utc)
+    date_val = epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+    myloc.date = ephem.Date(date_val)
+    ephemdata.compute(myloc)
+    rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = myloc.next_pass(ephemdata)
+    rise_time = rise_time.datetime().replace(tzinfo=timezone.utc)
+    tca_time = tca_time.datetime().replace(tzinfo=timezone.utc)
+    los_time = los_time.datetime().replace(tzinfo=timezone.utc)
+    ele = format(ephemdata.alt/ math.pi * 180.0,'.2f' )
+    if float(ele) <= 0.0:
+        #Display next rise
+        aos_cnt_dwn = rise_time - epoch_time
+        return "AOS in " + str(time.strftime('%H:%M:%S', time.gmtime(aos_cnt_dwn.total_seconds())))
+    else:
+        # Display TCA and LOS, as the sat is already on the horion next_pass() ignores the current pass. Therefore we shift the time back by half a orbit period :D
+        orbital_period = 86400/(ephemdata.n)
+        epoch_time = datetime.now(timezone.utc) - timedelta(seconds=int(orbital_period/2))
+        date_val = epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+        myloc.date = ephem.Date(date_val)
+        ephemdata.compute(myloc)
+        rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = myloc.next_pass(ephemdata)
+        # Got right TCA and LOS, switch back to current epoch time
+        epoch_time = datetime.now(timezone.utc)
+        tca_time = tca_time.datetime().replace(tzinfo=timezone.utc)
+        los_time = los_time.datetime().replace(tzinfo=timezone.utc)
+        tca_cnt_dwn = tca_time - epoch_time
+        los_cnt_dwn = los_time - epoch_time
+        if tca_cnt_dwn.days >= 0:
+            return "TCA in " + str(time.strftime('%H:%M:%S', time.gmtime(tca_cnt_dwn.total_seconds())))
+        else:
+            return "LOS in " + str(time.strftime('%H:%M:%S', time.gmtime(los_cnt_dwn.total_seconds())))
+            
+    return "Error"
 ## Error "handler"    
 def MyError():
     print("Failed to find required file!")
@@ -546,8 +580,10 @@ class MainWindow(QMainWindow):
         log_rig_status_layout.addWidget(self.log_tle_state_lbl, 0, 3)
 
         self.log_tle_state_val = QLabel("{0} day(s)".format(self.my_satellite.tle_age))
-        #self.log_tle_state_val.setStyleSheet('color: red')
         log_rig_status_layout.addWidget(self.log_tle_state_val, 0, 4)
+        
+        self.log_sat_event_val = QLabel("events n/a")
+        log_rig_status_layout.addWidget(self.log_sat_event_val, 1, 3, 1,2)
         
         self.log_time_lbl = QLabel("UTC:")
         log_rig_status_layout.addWidget(self.log_time_lbl, 1, 0)
@@ -1297,6 +1333,8 @@ class MainWindow(QMainWindow):
         date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
         myloc.date = ephem.Date(date_val)
         self.log_time_val.setText(datetime.now(timezone.utc).strftime('%H:%M:%S')+"z")
+        if self.my_satellite.tledata != "":
+            self.log_sat_event_val.setText(str(sat_next_event_calc(self.my_satellite.tledata)))
         if icomTrx.is_connected():
             self.log_rig_state_val.setText("✔")
             self.log_rig_state_val.setStyleSheet('color: green')
@@ -1309,9 +1347,6 @@ class MainWindow(QMainWindow):
         try:
             date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
             myloc.date = ephem.Date(date_val)
-            #date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
-            #myloc.date = ephem.Date(date_val)
-            #print(myloc.date)
             
             self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
             self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F))
