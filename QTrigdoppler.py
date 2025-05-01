@@ -309,7 +309,7 @@ class MainWindow(QMainWindow):
         self.counter = 0
         self.my_satellite = Satellite()
 
-        self.setWindowTitle("QT RigDoppler v0.4")
+        self.setWindowTitle("QT RigDoppler")
         #self.setGeometry(3840*2, 0, 718, 425)
         
         ### Overview Page
@@ -1210,6 +1210,7 @@ class MainWindow(QMainWindow):
                 tracking_init = 1
 
                 while TRACKING_ACTIVE == True:
+                    a = datetime.now()
                     #date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
                     date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
                     myloc.date = ephem.Date(date_val)
@@ -1265,13 +1266,16 @@ class MainWindow(QMainWindow):
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal))
+                            #print("RXdo: "+str(new_rx_doppler))
+                            #print("satf: "+str(self.my_satellite.F))
+                            #print("FCAL: "+str(self.my_satellite.F_cal))
                             if abs(new_rx_doppler-F0) > doppler_thres:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("Main")
                                 else:
                                     icomTrx.setVFO("VFOA")
-                                #print(self.my_satellite.F_cal)
+                                
                                 icomTrx.setFrequency(str(rx_doppler))
                                 F0 = rx_doppler
                         
@@ -1288,8 +1292,9 @@ class MainWindow(QMainWindow):
                                         
                                 icomTrx.setFrequency(str(tx_doppler))
                                 I0 = tx_doppler
+                            time.sleep(0.2)
                     # FM sats, no dial input accepted!
-                    elif self.my_satellite.rig_satmode == 1: 
+                    elif self.my_satellite.rig_satmode == 1:
                         new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I))
                         if abs(new_rx_doppler-F0) > doppler_thres or tracking_init == 1:
@@ -1298,15 +1303,16 @@ class MainWindow(QMainWindow):
                                 icomTrx.setVFO("MAIN")
                                 icomTrx.setFrequency(str(rx_doppler))
                                 F0 = rx_doppler
-                                time.sleep(FM_update_time)
                         if abs(new_tx_doppler-I0) > doppler_thres or tracking_init == 1:
                                 tracking_init = 0
                                 tx_doppler = new_tx_doppler
                                 icomTrx.setVFO("SUB")
                                 icomTrx.setFrequency(str(tx_doppler))
                                 I0 = tx_doppler
-                                time.sleep(FM_update_time)
                                 icomTrx.setVFO("MAIN")
+                        if doppler_thres > 0:
+                            time.sleep(FM_update_time) # Slower update rate on FM, max on linear sats
+                            
                     else:
                         new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I))
@@ -1330,6 +1336,9 @@ class MainWindow(QMainWindow):
                         
                     self.my_satellite.new_cal = 0
                     time.sleep(0.01)
+                    b = datetime.now()
+                    c = b - a
+                    print("Ups:" +str(1000000/c.microseconds))  
                     
 
         except:
