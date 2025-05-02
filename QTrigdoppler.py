@@ -149,9 +149,10 @@ def sat_next_event_calc(ephemdata):
         orbital_period = 86400/(ephemdata.n)
         epoch_time = datetime.now(timezone.utc) - timedelta(seconds=int(orbital_period/2))
         date_val = epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
-        myloc.date = ephem.Date(date_val)
-        ephemdata.compute(myloc)
-        rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = myloc.next_pass(ephemdata)
+        history_loc = myloc
+        history_loc.date = ephem.Date(date_val)
+        ephemdata.compute(history_loc)
+        rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = history_loc.next_pass(ephemdata)
         # Got right TCA and LOS, switch back to current epoch time
         epoch_time = datetime.now(timezone.utc)
         tca_time = tca_time.datetime().replace(tzinfo=timezone.utc)
@@ -1266,9 +1267,9 @@ class MainWindow(QMainWindow):
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal))
-                            #print("RXdo: "+str(new_rx_doppler))
-                            #print("satf: "+str(self.my_satellite.F))
-                            #print("FCAL: "+str(self.my_satellite.F_cal))
+                            print("RXdo: "+str(new_rx_doppler))
+                            print("satf: "+str(self.my_satellite.F))
+                            print("FCAL: "+str(self.my_satellite.F_cal))
                             if abs(new_rx_doppler-F0) > doppler_thres:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
@@ -1338,7 +1339,7 @@ class MainWindow(QMainWindow):
                     time.sleep(0.01)
                     b = datetime.now()
                     c = b - a
-                    print("Ups:" +str(1000000/c.microseconds))  
+                    #print("Ups:" +str(1000000/c.microseconds))  
                     
 
         except:
