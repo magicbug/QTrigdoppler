@@ -1267,9 +1267,9 @@ class MainWindow(QMainWindow):
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal))
-                            print("RXdo: "+str(new_rx_doppler))
-                            print("satf: "+str(self.my_satellite.F))
-                            print("FCAL: "+str(self.my_satellite.F_cal))
+                            #print("RXdo: "+str(new_rx_doppler))
+                            #print("satf: "+str(self.my_satellite.F))
+                            #print("FCAL: "+str(self.my_satellite.F_cal))
                             if abs(new_rx_doppler-F0) > doppler_thres:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
