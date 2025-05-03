@@ -131,34 +131,38 @@ def footprint_radius_km(alt_km):
     return 6371 * np.arccos(6371 / (6371 + alt_km))    
 ## Calculates next sat pass at observer
 def sat_next_event_calc(ephemdata):
-    epoch_time = datetime.now(timezone.utc)
-    date_val = epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
-    myloc.date = ephem.Date(date_val)
-    ephemdata.compute(myloc)
-    rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = myloc.next_pass(ephemdata)
+    event_loc = myloc
+    event_ephemdata = ephemdata
+    event_epoch_time = datetime.now(timezone.utc)
+    event_date_val = event_epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+    event_loc.date = ephem.Date(event_date_val)
+    event_ephemdata.compute(event_loc)
+    rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = event_loc.next_pass(event_ephemdata)
     rise_time = rise_time.datetime().replace(tzinfo=timezone.utc)
     tca_time = tca_time.datetime().replace(tzinfo=timezone.utc)
     los_time = los_time.datetime().replace(tzinfo=timezone.utc)
-    ele = format(ephemdata.alt/ math.pi * 180.0,'.2f' )
+    ele = format(event_ephemdata.alt/ math.pi * 180.0,'.2f' )
     if float(ele) <= 0.0:
         #Display next rise
-        aos_cnt_dwn = rise_time - epoch_time
+        aos_cnt_dwn = rise_time - event_epoch_time
         return "AOS in " + str(time.strftime('%H:%M:%S', time.gmtime(aos_cnt_dwn.total_seconds())))
     else:
         # Display TCA and LOS, as the sat is already on the horion next_pass() ignores the current pass. Therefore we shift the time back by half a orbit period :D
-        orbital_period = 86400/(ephemdata.n)
-        epoch_time = datetime.now(timezone.utc) - timedelta(seconds=int(orbital_period/2))
-        date_val = epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
-        history_loc = myloc
-        history_loc.date = ephem.Date(date_val)
-        ephemdata.compute(history_loc)
-        rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = history_loc.next_pass(ephemdata)
+        orbital_period = int(86400/(event_ephemdata.n))
+        event_epoch_time = datetime.now(timezone.utc) - timedelta(seconds=int(orbital_period/2))
+        event_date_val = event_epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+        event_loc.date = ephem.Date(event_date_val)
+        event_ephemdata.compute(event_loc)
+        ephemdata.compute(myloc) # This is a workaround. Investigation needed
+        rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = event_loc.next_pass(event_ephemdata)
         # Got right TCA and LOS, switch back to current epoch time
-        epoch_time = datetime.now(timezone.utc)
+        event_epoch_time = datetime.now(timezone.utc)
+        event_date_val = event_epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+        event_loc.date = ephem.Date(event_date_val)
         tca_time = tca_time.datetime().replace(tzinfo=timezone.utc)
         los_time = los_time.datetime().replace(tzinfo=timezone.utc)
-        tca_cnt_dwn = tca_time - epoch_time
-        los_cnt_dwn = los_time - epoch_time
+        tca_cnt_dwn = tca_time - event_epoch_time
+        los_cnt_dwn = los_time - event_epoch_time
         if tca_cnt_dwn.days >= 0:
             return "TCA in " + str(time.strftime('%H:%M:%S', time.gmtime(tca_cnt_dwn.total_seconds())))
         else:
