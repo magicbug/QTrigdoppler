@@ -15,6 +15,7 @@ import re
 import urllib.request
 import traceback
 import icom
+import os
 import numpy as np
 from time import gmtime, strftime
 from datetime import datetime, timedelta, timezone
@@ -48,6 +49,7 @@ SQFILE = configur.get('satellite','sqffile')
 RADIO = configur.get('icom','radio')
 CVIADDR = configur.get('icom','cviaddress')
 SERIALPORT = configur.get('icom', 'serialport')
+RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
 DISPLAY_MAP = False
@@ -1028,20 +1030,36 @@ class MainWindow(QMainWindow):
         else:
             icomTrx.setVFO("VFOB")
             
-        if tone_name == "67 Hz":
-            icomTrx.setToneHz(str(670))
-            icomTrx.setToneOn(1)
-        elif tone_name == "71.9 Hz":
-            icomTrx.setToneHz(str(719))
-            icomTrx.setToneOn(1)
-        elif tone_name == "74.4 Hz":
-            icomTrx.setToneHz(str(744))
-            icomTrx.setToneOn(1)
-        elif tone_name == "141.3 Hz":
-            icomTrx.setToneHz(str(1413))
-            icomTrx.setToneOn(1)
-        elif tone_name == "None":
-            icomTrx.setToneOn(0)
+        if RIG_TYPE == "US":
+            if tone_name == "67 Hz":
+                icomTrx.setToneSQLHz(str(670))
+                icomTrx.setToneSquelchOn(1)
+            elif tone_name == "71.9 Hz":
+                icomTrx.setToneSQLHz(str(719))
+                icomTrx.setToneSquelchOn(1)
+            elif tone_name == "74.4 Hz":
+                icomTrx.setToneSQLHz(str(744))
+                icomTrx.setToneSquelchOn(1)
+            elif tone_name == "141.3 Hz":
+                icomTrx.setToneSQLHz(str(1413))
+                icomTrx.setToneSquelchOn(1)
+            elif tone_name == "None":
+                icomTrx.setToneSquelchOn(0)
+        elif RIG_TYPE == "EU":
+            if tone_name == "67 Hz":
+                icomTrx.setToneHz(str(670))
+                icomTrx.setToneOn(1)
+            elif tone_name == "71.9 Hz":
+                icomTrx.setToneHz(str(719))
+                icomTrx.setToneOn(1)
+            elif tone_name == "74.4 Hz":
+                icomTrx.setToneHz(str(744))
+                icomTrx.setToneOn(1)
+            elif tone_name == "141.3 Hz":
+                icomTrx.setToneHz(str(1413))
+                icomTrx.setToneOn(1)
+            elif tone_name == "None":
+                icomTrx.setToneSquelchOn(0)
             
         if self.my_satellite.rig_satmode == 1:
             icomTrx.setVFO("Main")
