@@ -1059,7 +1059,7 @@ class MainWindow(QMainWindow):
                 icomTrx.setToneHz(str(1413))
                 icomTrx.setToneOn(1)
             elif tone_name == "None":
-                icomTrx.setToneSquelchOn(0)
+                icomTrx.setToneOn(0)
             
         if self.my_satellite.rig_satmode == 1:
             icomTrx.setVFO("Main")
