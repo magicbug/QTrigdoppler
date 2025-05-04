@@ -892,13 +892,15 @@ class MainWindow(QMainWindow):
     def rxoffset_button_pushed(self, i):
             self.rxoffsetbox.setValue(self.rxoffsetbox.value() +int(i))
     def update_tle_file(self):
+        self.the_stop_button_was_clicked()
         try:
             
             global LAST_TLE_UPDATE
             urllib.request.urlretrieve(TLEURL, TLEFILE)
-            self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE)
             self.save_settings()
+            self.sat_changed(self.my_satellite.name)
         except Exception as e:
             print("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             self.tleupdate_stat_lbl.setText("❌")
