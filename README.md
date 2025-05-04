@@ -95,3 +95,7 @@ v0.4 vs v0.3 and earlier (DL3JOP modifications):
   - Separate GUI and tracking class
   - Refactor tracking loop:
     - no global F0/I0 variables, more abstracted methods to allow eaier implementation of other radios
+    
+# Developer notes
+## Compile using pyinstaller
+`pyinstaller --onefile QTrigdoppler.py --exclude PySide6 --exclude PyQt6 --splash images/splash.jpg`
