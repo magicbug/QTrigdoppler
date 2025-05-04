@@ -15,17 +15,38 @@ Extended and modified to v0.4 by DL3JOP Joshua Petry (@dl3jop)
 
 Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed
 
-## Requirements:  
-    1) Python3  
-    2) Required Python3 modules
-       pip3 install ephem
-       pip3 install PyQt5
-       pip3 install urllib3
-       pip3 install pyserial
-    3) Python3 modules if you'd like to use the map:
-       pip3 install matplotlib
-       pip3 install cartopy
-       pip3 install pyproj
+## Installation guide
+### Ubuntu 24.10 or higher
+ 1) It is assumed that you use Ubuntu 24.10 (or newer) or a derivative of it
+ 2) Open a terminal
+ 3) Update package sources by:<br/> `sudo apt update`
+ 5) Install required packages:<br/> `sudo apt install git python3 python3-pyqt5 python3-qt-material python3-ephem python3-numpy`
+ 6) Add your user to the dialout group to access the serial port by:<br/> `sudo adduser [username, remove brackets] dialout` e.g.: `sudo adduser dl3jop dialout`<br/>
+ 6.1) restart you computer for all changes to take effect, than repeat step 2)<br/>
+ 7) Get the software by:<br/> `git clone https://github.com/dl3jop/QTrigdoppler.git`
+ 8) Enter software directory by:<br/> `cd QTrigdoppler`
+ 9) Start using:<br/> `python3 QTrigdoppler.py`
+ 10) For every startup from now on repeat step 2,7 and 8 or create a starter in the start menu
+
+ 11) TLDR:\
+     `sudo apt update`\
+     `sudo apt install git python3 python3-pyqt5 python3-qt-material python3-ephem python3-numpy`\
+     `sudo adduser [username, remove brackets] dialout`\
+     `git clone https://github.com/dl3jop/QTrigdoppler.git`\
+     `python3 QTrigdoppler.py`
+
+### Arch or derivatives (e.g.: Manjaro)
+`sudo pacman -Syu`\
+     `sudo pacman -S git python python-pyqt5 python-qt-material python-ephem python-numpy`\
+     `sudo usermod -aG uucp [username, remove brackets]`\
+     `git clone https://github.com/dl3jop/QTrigdoppler.git`\
+     `python3 QTrigdoppler.py`
+
+## Requirements for using the map:  
+Currently, using the map is not advised due to bad perfomance. If you choose to try it, you'll need:<br/>
+`matplotlib
+cartopy
+pyproj`
   
 ## Support files:  
 
@@ -34,13 +55,13 @@ Attention: I'm looking for bug reports and new features. Every pull-request/issu
 
 ## Changelog
 v0.4 vs v0.3 and earlier (DL3JOP modifications):
-    1) Removed hamlib
-    2) support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)
-    3) Implemented transponder selection
-    4) Implemented correct switch between Split mode for V/V & U/U packet and satmode for V/U,U/V
-    5) Implemented doppler correction threshold
-    6) Added SubTone control
-    7) Various smaller changes and additions
+    1) Removed hamlib<br/>
+    2) support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)<br/>
+    3) Implemented transponder selection<br/>
+    4) Implemented correct switch between Split mode for V/V & U/U packet and satmode for V/U,U/V<br/>
+    5) Implemented doppler correction threshold<br/>
+    6) Added SubTone control<br/>
+    7) Various smaller changes and additions<br/>
     
 ## Basic Configuration:
 <picture>
@@ -48,8 +69,6 @@ v0.4 vs v0.3 and earlier (DL3JOP modifications):
  <source media="(prefers-color-scheme: light)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
  <img alt="Shows the GUI for editing config." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
 </picture> 
-
-  1) "Setup" menu, "Edit setup" item to review and change the parameters:. QTH Parameters
 
     - Latitude, Longitude and altitude.
     - Step for RX and TX offset sliders (Hertz).
@@ -68,19 +87,6 @@ v0.4 vs v0.3 and earlier (DL3JOP modifications):
     - Offsets will be automatically loaded when selecting the satellite. satellite and transponder name must be the same as in the doppler sqf file:
       satoffset1 = IO-117,Digipeater,-750,-750
       where IO-117 is the the satellites name, Digipeater the description/transponder and the two numbers RX/TX offset
-
-  
-  2) Execute RigDoppler: python3 /path/to/QTrigdoppler.py        
-        
-## Field Tests:
-
-|     Radio     |   Satellite   |     Tester    |     Date    |
-| ------------- | ------------- | ------------- | ----------- |
-|  Icom 910H    |  RS-44        |     DL3JOP    |   Sep 24    |
-|  Icom 910H    |  SO-50        |     DL3JOP    |   Sep 24    |
-|  Icom 910H    |  ARISS        |     DL3JOP    |   Sep 24    |
-
-
 
 ## Roadmap:
   - Adding support for IC-9700 (should be easy as it uses nearly the same comands as the IC-910H)
