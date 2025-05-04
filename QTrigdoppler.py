@@ -292,6 +292,12 @@ class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
         
+        ## Pyinstaller Splashscreen handler
+        if '_PYI_SPLASH_IPC' in os.environ:
+            import pyi_splash
+            pyi_splash.update_text('UI Loaded ...')
+            pyi_splash.close()
+        
         ### All of this should be moved to a global settings struct ....
         global LATITUDE
         global LONGITUDE
@@ -314,7 +320,7 @@ class MainWindow(QMainWindow):
         self.counter = 0
         self.my_satellite = Satellite()
 
-        self.setWindowTitle("QT RigDoppler")
+        self.setWindowTitle("QTRigDoppler")
         #self.setGeometry(3840*2, 0, 718, 425)
         
         ### Overview Page
@@ -904,6 +910,7 @@ class MainWindow(QMainWindow):
                 self.sat_changed(self.my_satellite.name)
         except Exception as e:
             print("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
+            print(e)
             self.tleupdate_stat_lbl.setText("❌")
             
     def sat_changed(self, satname):
