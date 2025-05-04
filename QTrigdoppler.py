@@ -900,7 +900,8 @@ class MainWindow(QMainWindow):
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE)
             self.save_settings()
-            self.sat_changed(self.my_satellite.name)
+            if self.my_satellite.name != '':
+                self.sat_changed(self.my_satellite.name)
         except Exception as e:
             print("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             self.tleupdate_stat_lbl.setText("❌")
