@@ -13,7 +13,9 @@ Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)
 Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)  
 Extended and modified by DL3JOP Joshua Petry (@dl3jop)
 
-Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed
+Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed<br/>
+Note: Read the Readme reagridng steup and initial installation<br/>
+Note: The softwrae is tested on my IC-910H Eu as well as US. The IC-9700 should work as well but I didnot check that. Please report your findings<br/>
 
 ## Installation guide
 ### Ubuntu 24.10 or higher
@@ -79,7 +81,7 @@ You might also need to change the serial port of your CI-V to serial adapter. Th
 Portnames might be `/dev/ttyUSB0`, `/dev/ttyUSB1` .... or `/dev/tty/ACM0` ... 
 
 # Changelog
-v0.4 vs v0.3 and earlier (DL3JOP modifications):
+v0.4 vs v0.3 and earlier (DL3JOP modifications): <br/>
     1) Removed hamlib<br/>
     2) support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)<br/>
     3) Implemented transponder selection<br/>
