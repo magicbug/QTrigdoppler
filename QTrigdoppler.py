@@ -701,22 +701,37 @@ class MainWindow(QMainWindow):
             self.radiolistcomb.setCurrentText('Icom 910H')
         radio_settings_layout.addWidget(self.radiolistcomb, 0, 1)
         
+        # Radio config --> EU/Tone or US/TQSL
+        self.radio_country_config_lbl = QLabel("Radio type:")
+        radio_settings_layout.addWidget(self.radio_country_config_lbl, 1, 0)
+        self.radio_country_config_eu_button = QRadioButton("EU/Tone")
+        self.radio_country_config_us_button = QRadioButton("US/TSQL")
+        self.radio_country_config_group = QButtonGroup()
+        self.radio_country_config_group.addButton(self.radio_country_config_eu_button)
+        self.radio_country_config_group.addButton(self.radio_country_config_us_button)
+        radio_settings_layout.addWidget(self.radio_country_config_eu_button, 1, 1)
+        radio_settings_layout.addWidget(self.radio_country_config_us_button, 1, 2)
+        if RIG_TYPE == "EU":
+            self.radio_country_config_eu_button.setChecked(1)
+        elif RIG_TYPE == "US":
+            self.radio_country_config_us_button.setChecked(1)
+        
         # CI-V selector
         self.radicvi_lbl = QLabel("CVI address:")
-        radio_settings_layout.addWidget(self.radicvi_lbl, 1, 0)
+        radio_settings_layout.addWidget(self.radicvi_lbl, 2, 0)
         self.radicvi = QLineEdit()
         self.radicvi.setMaxLength(2)
         self.radicvi.setText(CVIADDR)
-        radio_settings_layout.addWidget(self.radicvi, 1, 1)
+        radio_settings_layout.addWidget(self.radicvi, 2, 1)
         
         # 1x Label step RX
         self.qthsteprx_lbl = QLabel("Step (Hz) for RX offset:")
-        radio_settings_layout.addWidget(self.qthsteprx_lbl, 2, 0)
+        radio_settings_layout.addWidget(self.qthsteprx_lbl, 3, 0)
 
         self.qthsteprx = QLineEdit()
         self.qthsteprx.setMaxLength(10)
         self.qthsteprx.setText(str(STEP_RX))
-        radio_settings_layout.addWidget(self.qthsteprx, 2, 1)
+        radio_settings_layout.addWidget(self.qthsteprx, 3, 1)
 
         # 1x Label Max Offset RX
         self.qthmaxoffrx_lbl = QLabel("Max Offset (Hz) for RX:")
@@ -729,21 +744,21 @@ class MainWindow(QMainWindow):
 
         # 1x Label doppler fm threshold
         self.doppler_fm_threshold_lbl = QLabel("Doppler threshold for FM")
-        radio_settings_layout.addWidget(self.doppler_fm_threshold_lbl, 6, 0)
+        radio_settings_layout.addWidget(self.doppler_fm_threshold_lbl, 5, 0)
 
         self.doppler_fm_threshold = QLineEdit()
         self.doppler_fm_threshold.setMaxLength(6)
         self.doppler_fm_threshold.setText(str(DOPPLER_THRES_FM))
-        radio_settings_layout.addWidget(self.doppler_fm_threshold, 6, 1)
+        radio_settings_layout.addWidget(self.doppler_fm_threshold, 5, 1)
         
         # 1x Label doppler linear threshold
         self.doppler_linear_threshold_lbl = QLabel("Doppler threshold for Linear")
-        radio_settings_layout.addWidget(self.doppler_linear_threshold_lbl, 7, 0)
+        radio_settings_layout.addWidget(self.doppler_linear_threshold_lbl, 6, 0)
 
         self.doppler_linear_threshold = QLineEdit()
         self.doppler_linear_threshold.setMaxLength(6)
         self.doppler_linear_threshold.setText(str(DOPPLER_THRES_LINEAR))
-        radio_settings_layout.addWidget(self.doppler_linear_threshold, 7, 1)
+        radio_settings_layout.addWidget(self.doppler_linear_threshold, 6, 1)
         
         #self.settings_radio_box.setLayout(radio_settings_layout)
         self.radio_settings_layout_scroller_widget.setLayout(radio_settings_layout)
@@ -799,7 +814,7 @@ class MainWindow(QMainWindow):
         # Settings store layout
         settings_store_layout = QVBoxLayout()
         
-        self.SafeSettingsButton = QPushButton("Store Settings - requires restart to take effect")
+        self.SafeSettingsButton = QPushButton("Store Settings - location changes require restart")
         self.SafeSettingsButton.clicked.connect(self.save_settings)
         settings_store_layout.addWidget(self.SafeSettingsButton)
         self.SafeSettingsButton.setEnabled(True)
@@ -851,6 +866,7 @@ class MainWindow(QMainWindow):
         global CVIADDR
         global OPMODE
         global LAST_TLE_UPDATE
+        global RIG_TYPE
 
         LATITUDE = self.qth_settings_lat_edit.displayText()
         configur['qth']['latitude'] = str(float(LATITUDE))
@@ -875,6 +891,12 @@ class MainWindow(QMainWindow):
             RADIO = configur['icom']['radio'] = '9700'
         elif self.radiolistcomb.currentText() == "Icom 910H":
             RADIO = configur['icom']['radio'] = '910'
+            
+        if self.radio_country_config_eu_button.isChecked():
+            RIG_TYPE = "EU"
+        elif self.radio_country_config_us_button.isChecked():
+            RIG_TYPE = "US"
+        configur['icom']['rig_type'] = RIG_TYPE
 
         CVIADDR = str(self.radicvi.displayText())
         configur['icom']['cviaddress'] = CVIADDR
