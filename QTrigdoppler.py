@@ -428,28 +428,29 @@ class MainWindow(QMainWindow):
         vbox_downlink = QVBoxLayout()
         groupbox_downlink.setLayout(vbox_downlink)
         
+        rx_labels_sat_layout = QHBoxLayout()
+        # 1x Label: RX freq Satellite
+        self.rxfreqsat_lbl = QLabel("RX @ Sat:")
+        self.rxfreqsat_lbl.setStyleSheet("QLabel{font-size: 12pt;}")
+        self.rxfreqsat_lbl.setFont(myFont)
+        rx_labels_sat_layout.addWidget(self.rxfreqsat_lbl)
+
+        self.rxfreq_onsat = QLabel("435,500,000.0 Hz")
+        self.rxfreq_onsat.setStyleSheet("QLabel{font-size: 12pt;}")
+        self.rxfreq_onsat.setFont(myFont)
+        rx_labels_sat_layout.addWidget(self.rxfreq_onsat)
+        vbox_downlink.addLayout(rx_labels_sat_layout)
+        
         rx_labels_radio_layout = QHBoxLayout()
         # 1x Label: RX freq
         self.rxfreqtitle = QLabel("RX @ Radio:")
-        self.rxfreqtitle.setStyleSheet("QLabel{font-size: 12pt;}")
-        self.rxfreqtitle.setFont(myFont)
         rx_labels_radio_layout.addWidget(self.rxfreqtitle)
 
         self.rxfreq = QLabel("435,500,000.0 Hz")
-        self.rxfreq.setStyleSheet("QLabel{font-size: 12pt;}")
-        self.rxfreq.setFont(myFont)
         rx_labels_radio_layout.addWidget(self.rxfreq)
         
         vbox_downlink.addLayout(rx_labels_radio_layout)
 
-        rx_labels_sat_layout = QHBoxLayout()
-        # 1x Label: RX freq Satellite
-        self.rxfreqsat_lbl = QLabel("RX @ Sat:")
-        rx_labels_sat_layout.addWidget(self.rxfreqsat_lbl)
-
-        self.rxfreq_onsat = QLabel("435,500,000.0 Hz")
-        rx_labels_sat_layout.addWidget(self.rxfreq_onsat)
-        vbox_downlink.addLayout(rx_labels_sat_layout)
         
         # 1x Label: RX Doppler Satellite
         rx_doppler_freq_layout = QHBoxLayout()
@@ -477,28 +478,28 @@ class MainWindow(QMainWindow):
         vbox_uplink = QVBoxLayout()
         groupbox_uplink.setLayout(vbox_uplink)
 
-        tx_labels_radio_layout = QHBoxLayout()
-        # 1x Label: TX freq
-        self.txfreqtitle = QLabel("TX @ Radio:")
-        self.txfreqtitle.setStyleSheet("QLabel{font-size: 12pt;}")
-        self.txfreqtitle.setFont(myFont)
-        tx_labels_radio_layout.addWidget(self.txfreqtitle)
-
-        self.txfreq = QLabel("145,900,000.0 Hz")
-        self.txfreq.setStyleSheet("QLabel{font-size: 12pt;}")
-        self.txfreq.setFont(myFont)
-        tx_labels_radio_layout.addWidget(self.txfreq)
-        
-        vbox_uplink.addLayout(tx_labels_radio_layout)
-
         tx_labels_sat_layout = QHBoxLayout()
         # 1x Label: TX freq Satellite
         self.txfreqsat_lbl = QLabel("TX @ Sat:")
+        self.txfreqsat_lbl.setStyleSheet("QLabel{font-size: 12pt;}")
+        self.txfreqsat_lbl.setFont(myFont)
         tx_labels_sat_layout.addWidget(self.txfreqsat_lbl)
 
         self.txfreq_onsat = QLabel("145,900,000.0 Hz")
+        self.txfreq_onsat.setStyleSheet("QLabel{font-size: 12pt;}")
+        self.txfreq_onsat.setFont(myFont)
         tx_labels_sat_layout.addWidget(self.txfreq_onsat)
         vbox_uplink.addLayout(tx_labels_sat_layout)
+        
+        tx_labels_radio_layout = QHBoxLayout()
+        # 1x Label: TX freq
+        self.txfreqtitle = QLabel("TX @ Radio:")
+        tx_labels_radio_layout.addWidget(self.txfreqtitle)
+
+        self.txfreq = QLabel("145,900,000.0 Hz")
+        tx_labels_radio_layout.addWidget(self.txfreq)
+        
+        vbox_uplink.addLayout(tx_labels_radio_layout)
         
         
         # 1x Label: TX Doppler Satellite
