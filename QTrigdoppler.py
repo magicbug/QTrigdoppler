@@ -534,10 +534,16 @@ class MainWindow(QMainWindow):
         self.Stopbutton.setEnabled(False)
         
         # Sync to SQF freq
-        self.syncbutton = QPushButton("Sync to SQF")
+        self.syncbutton = QPushButton("Memory to VFO")
         self.syncbutton.clicked.connect(self.the_sync_button_was_clicked)
         button_layout.addWidget(self.syncbutton)
         self.syncbutton.setEnabled(False)
+        
+        # Sync to SQF freq
+        self.offsetstorebutton = QPushButton("Store Offset")
+        self.offsetstorebutton.clicked.connect(self.save_settings)
+        button_layout.addWidget(self.offsetstorebutton)
+        self.offsetstorebutton.setEnabled(False)
 
         # 1x QPushButton (Exit)
         self.Exitbutton = QPushButton("Exit")
@@ -971,6 +977,7 @@ class MainWindow(QMainWindow):
                             else:
                                 self.Startbutton.setEnabled(True)
                                 self.syncbutton.setEnabled(True)
+                                self.offsetstorebutton.setEnabled(True)
                                 
                             if  self.my_satellite.F > 0 and self.my_satellite.I == 0:
                                 RX_TPX_ONLY = True
@@ -1013,6 +1020,7 @@ class MainWindow(QMainWindow):
         if self.my_satellite.tledata == "":
             self.Startbutton.setEnabled(False)
             self.syncbutton.setEnabled(False)
+            self.offsetstorebutton.setEnabled(False)
             self.log_tle_state_val.setText("n/a")
             return
         else:
@@ -1078,6 +1086,8 @@ class MainWindow(QMainWindow):
         INTERACTIVE = False
         self.threadpool.clear()
         self.Stopbutton.setEnabled(False)
+        #self.offsetstorebutton.setEnabled(False)
+        #self.syncbutton.setEnabled(False)
         self.Startbutton.setEnabled(True)
         self.combo1.setEnabled(True)
         self.combo2.setEnabled(True)
@@ -1088,6 +1098,7 @@ class MainWindow(QMainWindow):
     def init_worker(self):
         global TRACKING_ACTIVE
         self.syncbutton.setEnabled(True)
+        self.offsetstorebutton.setEnabled(True)
         self.Stopbutton.setEnabled(True)
 
         if TRACKING_ACTIVE == False:
