@@ -24,6 +24,12 @@ from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from qt_material import apply_stylesheet
+import threading
+import web_api
+
+# Disable Qt accessibility warnings
+os.environ["QT_LOGGING_RULES"] = "qt.accessibility.atspi=false"
+
 ### Read config and import additional libraries if needed
 # parsing config file
 try:
@@ -65,13 +71,13 @@ if configur.get('misc', 'display_map') == "True":
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
     from pyproj import Geod
-elif configur.get('misc', 'display_map') == "False":
-    DISPLAY_MAP = False
 
+# WebSocket API enable/disable (default False if not present)
+if configur.has_option('misc', 'websocket_enabled'):
+    WEBSOCKET_ENABLED = configur.getboolean('misc', 'websocket_enabled')
+else:
+    WEBSOCKET_ENABLED = False
 
-### Global constants
-C = 299792458.
-subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
 if DISPLAY_MAP:
     GEOD = Geod(ellps="WGS84")
 
@@ -825,6 +831,11 @@ class MainWindow(QMainWindow):
         settings_layout.addLayout(settings_value_layout)
         settings_layout.addLayout(settings_store_layout)
         
+        # WebSocket enable checkbox
+        self.websocket_checkbox = QCheckBox("Enable WebSocket API (remote control)")
+        self.websocket_checkbox.setChecked(WEBSOCKET_ENABLED)
+        self.websocket_checkbox.stateChanged.connect(self.toggle_websocket_server)
+        settings_layout.addWidget(self.websocket_checkbox)
         
 
         ###  UI Layout / Tab Widget
@@ -917,6 +928,9 @@ class MainWindow(QMainWindow):
         
         # Save TLE update
         configur['misc']['last_tle_update'] = LAST_TLE_UPDATE
+
+        # Save WebSocket setting
+        configur['misc']['websocket_enabled'] = str(self.websocket_checkbox.isChecked())
 
         with open('config.ini', 'w') as configfile:
             configur.write(configfile)
@@ -1465,6 +1479,18 @@ class MainWindow(QMainWindow):
         except:
             print("Error in label timer")
             traceback.print_exc()
+
+    def toggle_websocket_server(self, state):
+        if state == Qt.Checked:
+            # Start the WebSocket server in a background thread
+            if not hasattr(self, '_websocket_thread') or not self._websocket_thread.is_alive():
+                web_api.register_window(self)
+                self._websocket_thread = threading.Thread(target=web_api.run_socketio, daemon=True)
+                self._websocket_thread.start()
+        else:
+            # No built-in way to stop Flask-SocketIO server, so just inform user
+            # (Advanced: could implement a shutdown endpoint if needed)
+            pass
 
 class WorkerSignals(QObject):
     finished = Signal()
