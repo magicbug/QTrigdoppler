@@ -1,3 +1,9 @@
-ephem==4.1.5
-PyQt5==5.15.10
-urllib3==2.0.6
+ephem
+PyQt5
+urllib3
+numpy
+qt-material
+pyserial
+matplotlib
+cartopy
+pyproj
