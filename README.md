@@ -13,9 +13,9 @@ Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)
 Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)  
 Extended and modified by DL3JOP Joshua Petry (@dl3jop)
 
-Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed<br/>
-Note: Read the Readme reagridng steup and initial installation<br/>
-Note: The softwrae is tested on my IC-910H Eu as well as US. The IC-9700 should work as well but I didnot check that. Please report your findings<br/>
+Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed.<br/>
+Note: Read the Readme reagridng steup and initial installation.<br/>
+Note: The software is tested on my two IC-910H (EU as well as US version). The IC-9700 should work as well but I did not check that. Please report your findings!<br/>
 
 ## Installation guide
 ### Ubuntu 24.10 or higher
@@ -24,7 +24,7 @@ Note: The softwrae is tested on my IC-910H Eu as well as US. The IC-9700 should 
  3) Update package sources by:<br/> `sudo apt update`
  5) Install required packages:<br/> `sudo apt install git python3 python3-pyqt5 python3-qt-material python3-ephem python3-numpy`
  6) Add your user to the dialout group to access the serial port by:<br/> `sudo adduser [username, remove brackets] dialout` e.g.: `sudo adduser dl3jop dialout`<br/>
- 6.1) restart you computer for all changes to take effect, than repeat step 2)<br/>
+ 6.1) Restart you computer for all changes to take effect, than repeat step 2)<br/>
  7) Get the software by:<br/> `git clone https://github.com/dl3jop/QTrigdoppler.git`
  8) Enter software directory by:<br/> `cd QTrigdoppler`
  9) Start using:<br/> `python3 QTrigdoppler.py`
@@ -77,11 +77,11 @@ pyproj`
       where IO-117 is the the satellites name, Digipeater the description/transponder and the two numbers RX/TX offset
 ## Attention:
 After installation/download you need to adjust `config.ini` to suit your needs. If you have a US configured IC-910 you need to change the `rig_type` from `EU` to `US` otherwise TSL or T won't work
-You might also need to change the serial port of your CI-V to serial adapter. The easiest solution ist to run `sudo dmesg -wH` in a terminal and plugging in your serial adpter to get the serial port name.
+You might also need to change the serial port of your CI-V to serial adapter. The easiest solution is to run `sudo dmesg -wH` in a terminal and plugging in your serial adpter to get the serial port name.
 Portnames might be `/dev/ttyUSB0`, `/dev/ttyUSB1` .... or `/dev/tty/ACM0` ... 
 
 # Changelog
-v0.4 vs v0.3 and earlier (DL3JOP modifications): <br/>
+DL3JOP modifications: <br/>
     1) Removed hamlib<br/>
     2) support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)<br/>
     3) Implemented transponder selection<br/>
@@ -89,6 +89,7 @@ v0.4 vs v0.3 and earlier (DL3JOP modifications): <br/>
     5) Implemented doppler correction threshold<br/>
     6) Added SubTone control<br/>
     7) Various smaller changes and additions<br/>
+    8) Added binaries
     
 # Roadmap:
   - Adding support for IC-9700 (should be easy as it uses nearly the same comands as the IC-910H)
