@@ -20,9 +20,9 @@ import numpy as np
 from time import gmtime, strftime
 from datetime import datetime, timedelta, timezone
 from configparser import ConfigParser
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
+from PySide6.QtGui import *
+from PySide6.QtWidgets import *
+from PySide6.QtCore import *
 from qt_material import apply_stylesheet
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -1467,10 +1467,10 @@ class MainWindow(QMainWindow):
             traceback.print_exc()
 
 class WorkerSignals(QObject):
-    finished = pyqtSignal()
-    error = pyqtSignal(tuple)
-    result = pyqtSignal(object)
-    progress = pyqtSignal(int)
+    finished = Signal()
+    error = Signal(tuple)
+    result = Signal(object)
+    progress = Signal(int)
 
 class Worker(QRunnable):
 
@@ -1486,7 +1486,7 @@ class Worker(QRunnable):
         # Add the callback to our kwargs
         self.kwargs['progress_callback'] = self.signals.progress
 
-    @pyqtSlot()
+    @Slot()
     def run(self):
         '''
         Initialise the runner function with passed args, kwargs.

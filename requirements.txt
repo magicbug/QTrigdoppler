@@ -1,5 +1,5 @@
 ephem
-PyQt5
+PySide6
 urllib3
 numpy
 qt-material
