@@ -14,7 +14,7 @@ Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)
 Extended and modified by DL3JOP Joshua Petry (@dl3jop)
 
 Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed.<br/>
-Note: Read the Readme reagridng steup and initial installation.<br/>
+Note: Read the Readme regarding setup and initial installation.<br/>
 Note: The software is tested on my two IC-910H (EU as well as US version). The IC-9700 should work as well but I did not check that. Please report your findings!<br/>
 
 ## Installation guide
@@ -58,23 +58,20 @@ pyproj`
  <img alt="Shows the GUI for editing config." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
 </picture> 
 
-    - Latitude, Longitude and altitude.
-    - Step for RX and TX offset sliders (Hertz).
-    - Maximun and minimun values for RX and TX offset sliders (Hertz).
+## Configuration notes
 
-    Satellite parameters:
-    Support files used to get satellites frequencies and ephemeris:
+1) maximum and minimun values for RX and TX offset (Hertz) can be adjusted if the per device drift should exceed the normal range.<br/>
 
-    - tle_file must contain ephemeris two line elements to calculate satellite passes over the coordinates in the [qth] section.
-    - sqffile must contain satellites' frequencies (both downlink and uplink), following the same format as the original SatPC32 file.
-    - amsatnames is just an auxiliary file son NORAD_ID satellites identifiers could be correlated with common satellites names used in doppler.sf file. Three columns per each satellite will list NORAD_ID identifier and common satellite name.
+2) tle_file must contain ephemeris two line elements to calculate satellite passes over the coordinates in the [qth] section. <br/>
 
-    Doppler Thresholds:
-    - select the thresholds for FM/SSB doppler correction. Frequencies are not updated when the difference between the current doppler frequency and radio frequency is below the threshold
-    Offset Profiles:
-    - Offsets will be automatically loaded when selecting the satellite. satellite and transponder name must be the same as in the doppler sqf file:
+3) sqffile must contain satellites' frequencies (both downlink and uplink), following the same format as the original SatPC32 file. <br/>
+
+4) Doppler Thresholds:
+     - Select the thresholds for FM/SSB doppler correction. Frequencies are not updated when the difference between the current doppler frequency and radio frequency is below the threshold.
+5) Offset Profiles:
+    - Offsets will be automatically loaded when selecting the satellite. Satellite and transponder name must be the same as in the doppler.sqf file:
       satoffset1 = IO-117,Digipeater,-750,-750
-      where IO-117 is the the satellites name, Digipeater the description/transponder and the two numbers RX/TX offset
+      where IO-117 is the the satellites name, Digipeater the description/transponder and the two numbers RX/TX offset.
 ## Attention:
 After installation/download you need to adjust `config.ini` to suit your needs. If you have a US configured IC-910 you need to change the `rig_type` from `EU` to `US` otherwise TSL or T won't work
 You might also need to change the serial port of your CI-V to serial adapter. The easiest solution is to run `sudo dmesg -wH` in a terminal and plugging in your serial adpter to get the serial port name.
