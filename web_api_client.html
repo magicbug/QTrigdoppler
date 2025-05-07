@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>QTrigdoppler WebSocket Control</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        label, select, input, button { margin: 0.5em 0; display: block; }
+        #status { margin-top: 1em; color: green; }
+    </style>
+</head>
+<body>
+    <h2>QTrigdoppler WebSocket Control</h2>
+    <button onclick="startTracking()">Start Tracking</button>
+    <button onclick="stopTracking()">Stop Tracking</button>
+    <hr>
+    <label for="satellite">Satellite:</label>
+    <input id="satellite" type="text" placeholder="e.g. FO-29">
+    <button onclick="selectSatellite()">Select Satellite</button>
+    <label for="transponder">Transponder:</label>
+    <input id="transponder" type="text" placeholder="e.g. SSB Transponder">
+    <button onclick="selectTransponder()">Select Transponder</button>
+    <label for="subtone">Subtone:</label>
+    <select id="subtone">
+        <option value="None">None</option>
+        <option value="67 Hz">67 Hz</option>
+        <option value="71.9 Hz">71.9 Hz</option>
+        <option value="74.4 Hz">74.4 Hz</option>
+        <option value="141.3 Hz">141.3 Hz</option>
+    </select>
+    <button onclick="setSubtone()">Set Subtone</button>
+    <label for="rxoffset">RX Offset (Hz):</label>
+    <input id="rxoffset" type="number" value="0">
+    <button onclick="setRxOffset()">Set RX Offset</button>
+    <div id="status">Status: Not connected</div>
+    <label for="debug">Debug Log:</label>
+    <textarea id="debug" rows="10" cols="60" readonly style="font-family:monospace;"></textarea>
+    <script>
+        var socket = io('http://localhost:5000');
+        var statusDiv = document.getElementById('status');
+        var debugArea = document.getElementById('debug');
+
+        socket.on('connect', function() {
+            statusDiv.textContent = 'Status: Connected';
+            logDebug('Socket connected');
+        });
+        socket.on('disconnect', function() {
+            statusDiv.textContent = 'Status: Disconnected';
+            logDebug('Socket disconnected');
+        });
+        socket.on('status', function(data) {
+            statusDiv.textContent = 'Status: ' + JSON.stringify(data);
+            logDebug('Received status: ' + JSON.stringify(data));
+        });
+
+        function startTracking() {
+            logDebug('Emit: start_tracking');
+            socket.emit('start_tracking');
+        }
+        function stopTracking() {
+            logDebug('Emit: stop_tracking');
+            socket.emit('stop_tracking');
+        }
+        function selectSatellite() {
+            var sat = document.getElementById('satellite').value;
+            logDebug('Emit: select_satellite ' + sat);
+            socket.emit('select_satellite', {satellite: sat});
+        }
+        function selectTransponder() {
+            var tpx = document.getElementById('transponder').value;
+            logDebug('Emit: select_transponder ' + tpx);
+            socket.emit('select_transponder', {transponder: tpx});
+        }
+        function setSubtone() {
+            var tone = document.getElementById('subtone').value;
+            logDebug('Emit: set_subtone ' + tone);
+            socket.emit('set_subtone', {subtone: tone});
+        }
+        function setRxOffset() {
+            var offset = parseInt(document.getElementById('rxoffset').value, 10);
+            logDebug('Emit: set_rx_offset ' + offset);
+            socket.emit('set_rx_offset', {offset: offset});
+        }
+        function logDebug(msg) {
+            debugArea.value += '[' + (new Date()).toLocaleTimeString() + '] ' + msg + '\n';
+            debugArea.scrollTop = debugArea.scrollHeight;
+        }
+    </script>
+</body>
+</html> 
