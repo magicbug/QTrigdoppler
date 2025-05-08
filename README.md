@@ -87,6 +87,10 @@ DL3JOP modifications: <br/>
     6) Added SubTone control<br/>
     7) Various smaller changes and additions<br/>
     8) Added binaries
+
+2M0SQL Modifications:<br>
+    1) Changed to PySide<br/>
+    2) Implimented Websocket features using Flask and SocketIO
     
 # Roadmap:
   - Adding support for IC-9700 (should be easy as it uses nearly the same comands as the IC-910H)
