@@ -96,6 +96,49 @@ DL3JOP modifications: <br/>
   - Refactor tracking loop:
     - no global F0/I0 variables, more abstracted methods to allow eaier implementation of other radios
     
+# Web API
+QTrigdoppler now includes a web API that allows for remote control of the application through a web browser or other applications. This is useful for satellite tracking from a remote location or for integrating with other software.
+
+## Configuration
+The web API can be configured in the `config.ini` file under the `[web_api]` section:
+
+```ini
+[web_api]
+enabled = True
+port = 5000
+debug = False
+```
+
+- `enabled`: Set to `True` to enable the web API, or `False` to disable it
+- `port`: The TCP port the web server will listen on (default: 5000)
+- `debug`: Set to `True` to enable debug output, or `False` for normal operation
+
+## Usage
+When enabled, the web API server starts automatically with QTrigdoppler. You can access the web interface by opening a web browser and navigating to:
+
+```
+http://localhost:5000/
+```
+
+(Replace `localhost` with the IP address of the computer running QTrigdoppler if accessing from another device)
+
+The web interface allows you to:
+- Start/stop satellite tracking
+- Select different satellites and transponders
+- Set subtones
+- Adjust RX offset
+
+## For Developers
+The web API uses Flask-SocketIO for real-time communication. You can integrate it with your own applications by connecting to the Socket.IO endpoints. Available events:
+
+- `start_tracking`: Start satellite tracking
+- `stop_tracking`: Stop satellite tracking
+- `select_satellite`: Select a satellite by name
+- `select_transponder`: Select a transponder by name
+- `set_subtone`: Set subtone
+- `set_rx_offset`: Set RX offset in Hz
+- `get_status`: Get current application status
+
 # Developer notes
 ## Compile using pyinstaller
 `pyinstaller --onefile QTrigdoppler.py --exclude PySide6 --exclude PyQt6 --splash images/splash.jpg`

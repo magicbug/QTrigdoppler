@@ -8,84 +8,313 @@
         body { font-family: Arial, sans-serif; margin: 2em; }
         label, select, input, button { margin: 0.5em 0; display: block; }
         #status { margin-top: 1em; color: green; }
+        .server-info { 
+            background-color: #f0f0f0; 
+            padding: 10px; 
+            border-radius: 5px; 
+            margin-bottom: 10px; 
+            display: flex;
+            align-items: center;
+        }
+        .server-status {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: red;
+            margin-right: 10px;
+        }
+        .server-status.connected {
+            background-color: green;
+        }
+        .control-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .control-section {
+            flex: 1;
+            min-width: 250px;
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        .info-table th, .info-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .info-table th {
+            background-color: #f2f2f2;
+        }
     </style>
 </head>
 <body>
     <h2>QTrigdoppler WebSocket Control</h2>
-    <button onclick="startTracking()">Start Tracking</button>
-    <button onclick="stopTracking()">Stop Tracking</button>
-    <hr>
-    <label for="satellite">Satellite:</label>
-    <input id="satellite" type="text" placeholder="e.g. FO-29">
-    <button onclick="selectSatellite()">Select Satellite</button>
-    <label for="transponder">Transponder:</label>
-    <input id="transponder" type="text" placeholder="e.g. SSB Transponder">
-    <button onclick="selectTransponder()">Select Transponder</button>
-    <label for="subtone">Subtone:</label>
-    <select id="subtone">
-        <option value="None">None</option>
-        <option value="67 Hz">67 Hz</option>
-        <option value="71.9 Hz">71.9 Hz</option>
-        <option value="74.4 Hz">74.4 Hz</option>
-        <option value="141.3 Hz">141.3 Hz</option>
-    </select>
-    <button onclick="setSubtone()">Set Subtone</button>
-    <label for="rxoffset">RX Offset (Hz):</label>
-    <input id="rxoffset" type="number" value="0">
-    <button onclick="setRxOffset()">Set RX Offset</button>
+    
+    <div class="server-info">
+        <span class="server-status" id="connectionIndicator"></span>
+        <span id="serverDisplay">Server: Not connected</span>
+        <button onclick="configureServer()" style="margin-left: 10px;">Configure Server</button>
+    </div>
+    
+    <div class="control-panel">
+        <div class="control-section">
+            <h3>Tracking Control</h3>
+            <button onclick="startTracking()">Start Tracking</button>
+            <button onclick="stopTracking()">Stop Tracking</button>
+            <button onclick="getStatus()">Get Current Status</button>
+            
+            <h3>Satellite Selection</h3>
+            <label for="satellite">Satellite:</label>
+            <input id="satellite" type="text" placeholder="e.g. FO-29">
+            <button onclick="selectSatellite()">Select Satellite</button>
+            
+            <label for="transponder">Transponder:</label>
+            <input id="transponder" type="text" placeholder="e.g. SSB Transponder">
+            <button onclick="selectTransponder()">Select Transponder</button>
+        </div>
+        
+        <div class="control-section">
+            <h3>Radio Settings</h3>
+            <label for="subtone">Subtone:</label>
+            <select id="subtone">
+                <option value="None">None</option>
+                <option value="67 Hz">67 Hz</option>
+                <option value="71.9 Hz">71.9 Hz</option>
+                <option value="74.4 Hz">74.4 Hz</option>
+                <option value="141.3 Hz">141.3 Hz</option>
+            </select>
+            <button onclick="setSubtone()">Set Subtone</button>
+            
+            <label for="rxoffset">RX Offset (Hz):</label>
+            <input id="rxoffset" type="number" value="0">
+            <button onclick="setRxOffset()">Set RX Offset</button>
+        </div>
+        
+        <div class="control-section">
+            <h3>Satellite Information</h3>
+            <div id="satellite-info">No satellite selected</div>
+        </div>
+    </div>
+    
+    <h3>Status and Log</h3>
     <div id="status">Status: Not connected</div>
     <label for="debug">Debug Log:</label>
     <textarea id="debug" rows="10" cols="60" readonly style="font-family:monospace;"></textarea>
     <script>
-        var socket = io('http://localhost:5000');
+        // Allow user to configure the server URL with localStorage persistence
+        var serverUrl = localStorage.getItem('serverUrl') || "http://localhost:5000";
+        var socket;
         var statusDiv = document.getElementById('status');
         var debugArea = document.getElementById('debug');
+        var serverDisplay = document.getElementById('serverDisplay');
+        var connectionIndicator = document.getElementById('connectionIndicator');
+        var satelliteInfoDiv = document.getElementById('satellite-info');
 
-        socket.on('connect', function() {
-            statusDiv.textContent = 'Status: Connected';
-            logDebug('Socket connected');
-        });
-        socket.on('disconnect', function() {
-            statusDiv.textContent = 'Status: Disconnected';
-            logDebug('Socket disconnected');
-        });
-        socket.on('status', function(data) {
-            statusDiv.textContent = 'Status: ' + JSON.stringify(data);
-            logDebug('Received status: ' + JSON.stringify(data));
-        });
+        // Display the current server
+        serverDisplay.textContent = "Server: " + serverUrl;
+
+        // Function to configure the server URL
+        function configureServer() {
+            var newUrl = prompt("Enter server URL (e.g., http://localhost:5000):", serverUrl);
+            if (newUrl) {
+                serverUrl = newUrl;
+                localStorage.setItem('serverUrl', serverUrl);
+                serverDisplay.textContent = "Server: " + serverUrl;
+                
+                // Reconnect with new URL
+                if (socket) {
+                    socket.disconnect();
+                }
+                connectToServer();
+                
+                logDebug('Server changed to: ' + serverUrl);
+            }
+        }
+
+        // Function to connect to the configured server
+        function connectToServer() {
+            try {
+                socket = io(serverUrl);
+                
+                socket.on('connect', function() {
+                    statusDiv.textContent = 'Status: Connected';
+                    connectionIndicator.classList.add('connected');
+                    logDebug('Socket connected to ' + serverUrl);
+                });
+                
+                socket.on('disconnect', function() {
+                    statusDiv.textContent = 'Status: Disconnected';
+                    connectionIndicator.classList.remove('connected');
+                    logDebug('Socket disconnected');
+                });
+                
+                socket.on('connect_error', function(error) {
+                    statusDiv.textContent = 'Status: Connection Error';
+                    connectionIndicator.classList.remove('connected');
+                    logDebug('Connection error: ' + error);
+                });
+                
+                socket.on('status', function(data) {
+                    statusDiv.textContent = 'Status: ' + (data.tracking ? 'Tracking' : 'Not Tracking');
+                    logDebug('Received status: ' + JSON.stringify(data));
+                    
+                    // Update UI with received status if available
+                    if (data.satellite) {
+                        document.getElementById('satellite').value = data.satellite;
+                    }
+                    if (data.transponder) {
+                        document.getElementById('transponder').value = data.transponder;
+                    }
+                    if (data.rx_offset !== undefined) {
+                        document.getElementById('rxoffset').value = data.rx_offset;
+                    }
+                    
+                    // Update satellite info display
+                    updateSatelliteInfo(data);
+                });
+            } catch (e) {
+                logDebug('Error creating socket: ' + e.message);
+            }
+        }
+        
+        // Function to update the satellite information display
+        function updateSatelliteInfo(data) {
+            if (data.satellite && data.satellite_info) {
+                var info = data.satellite_info;
+                var position = data.satellite_position || {};
+                var doppler = data.doppler || {};
+                
+                var html = '<table class="info-table">';
+                
+                // Basic info
+                html += '<tr><th colspan="2">Selected Satellite</th></tr>';
+                html += '<tr><td>Name</td><td>' + (info.name || 'N/A') + '</td></tr>';
+                html += '<tr><td>Transponder</td><td>' + (data.transponder || 'N/A') + '</td></tr>';
+                html += '<tr><td>TLE Age</td><td>' + (info.tle_age || 'N/A') + '</td></tr>';
+                
+                // Frequencies
+                html += '<tr><th colspan="2">Frequencies</th></tr>';
+                html += '<tr><td>Downlink</td><td>' + (info.downlink_freq ? formatFreq(info.downlink_freq) : 'N/A') + ' (' + (info.downlink_mode || 'N/A') + ')</td></tr>';
+                html += '<tr><td>Uplink</td><td>' + (info.uplink_freq ? formatFreq(info.uplink_freq) : 'N/A') + ' (' + (info.uplink_mode || 'N/A') + ')</td></tr>';
+                
+                // Position
+                if (position.elevation || position.azimuth) {
+                    html += '<tr><th colspan="2">Position</th></tr>';
+                    html += '<tr><td>Elevation</td><td>' + (position.elevation || 'N/A') + '</td></tr>';
+                    html += '<tr><td>Azimuth</td><td>' + (position.azimuth || 'N/A') + '</td></tr>';
+                }
+                
+                // Doppler
+                if (doppler.downlink || doppler.uplink) {
+                    html += '<tr><th colspan="2">Doppler Shift</th></tr>';
+                    html += '<tr><td>Downlink</td><td>' + (doppler.downlink || 'N/A') + '</td></tr>';
+                    html += '<tr><td>Uplink</td><td>' + (doppler.uplink || 'N/A') + '</td></tr>';
+                }
+                
+                html += '</table>';
+                satelliteInfoDiv.innerHTML = html;
+            } else {
+                satelliteInfoDiv.innerHTML = 'No satellite selected or no data available';
+            }
+        }
+        
+        // Format frequency in MHz
+        function formatFreq(freq) {
+            if (typeof freq === 'number') {
+                return (freq / 1000000).toFixed(3) + ' MHz';
+            }
+            return freq;
+        }
+
+        // Initial connection
+        connectToServer();
+
+        function getStatus() {
+            if (!socket || !socket.connected) {
+                logDebug('Not connected to server');
+                return;
+            }
+            logDebug('Emit: get_status');
+            socket.emit('get_status');
+        }
 
         function startTracking() {
+            if (!socket || !socket.connected) {
+                logDebug('Not connected to server');
+                return;
+            }
             logDebug('Emit: start_tracking');
             socket.emit('start_tracking');
         }
+        
         function stopTracking() {
+            if (!socket || !socket.connected) {
+                logDebug('Not connected to server');
+                return;
+            }
             logDebug('Emit: stop_tracking');
             socket.emit('stop_tracking');
         }
+        
         function selectSatellite() {
+            if (!socket || !socket.connected) {
+                logDebug('Not connected to server');
+                return;
+            }
             var sat = document.getElementById('satellite').value;
             logDebug('Emit: select_satellite ' + sat);
             socket.emit('select_satellite', {satellite: sat});
         }
+        
         function selectTransponder() {
+            if (!socket || !socket.connected) {
+                logDebug('Not connected to server');
+                return;
+            }
             var tpx = document.getElementById('transponder').value;
             logDebug('Emit: select_transponder ' + tpx);
             socket.emit('select_transponder', {transponder: tpx});
         }
+        
         function setSubtone() {
+            if (!socket || !socket.connected) {
+                logDebug('Not connected to server');
+                return;
+            }
             var tone = document.getElementById('subtone').value;
             logDebug('Emit: set_subtone ' + tone);
             socket.emit('set_subtone', {subtone: tone});
         }
+        
         function setRxOffset() {
+            if (!socket || !socket.connected) {
+                logDebug('Not connected to server');
+                return;
+            }
             var offset = parseInt(document.getElementById('rxoffset').value, 10);
             logDebug('Emit: set_rx_offset ' + offset);
             socket.emit('set_rx_offset', {offset: offset});
         }
+        
         function logDebug(msg) {
             debugArea.value += '[' + (new Date()).toLocaleTimeString() + '] ' + msg + '\n';
             debugArea.scrollTop = debugArea.scrollHeight;
         }
+        
+        // Auto-refresh status every 5 seconds
+        setInterval(function() {
+            if (socket && socket.connected) {
+                socket.emit('get_status');
+            }
+        }, 5000);
     </script>
 </body>
 </html> 

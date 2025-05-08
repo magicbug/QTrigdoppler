@@ -7,3 +7,5 @@ pyserial
 matplotlib
 cartopy
 pyproj
+Flask
+Flask-SocketIO
