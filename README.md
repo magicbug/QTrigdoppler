@@ -96,8 +96,9 @@ DL3JOP modifications: <br/>
   - Refactor tracking loop:
     - no global F0/I0 variables, more abstracted methods to allow eaier implementation of other radios
     
-# Web API
-QTrigdoppler now includes a web API that allows for remote control of the application through a web browser or other applications. This is useful for satellite tracking from a remote location or for integrating with other software.
+# Web API and WebSocket Usage
+
+QTrigdoppler includes a web API that allows for remote control of the application through a web browser or other applications. This is useful for satellite tracking from a remote location or for integrating with other software.
 
 ## Configuration
 The web API can be configured in the `config.ini` file under the `[web_api]` section:
@@ -128,27 +129,11 @@ The web interface allows you to:
 - Set subtones
 - Adjust RX offset
 
-## For Developers
-The web API uses Flask-SocketIO for real-time communication. You can integrate it with your own applications by connecting to the Socket.IO endpoints. Available events:
+## WebSocket API (for Developers)
 
-- `start_tracking`: Start satellite tracking
-- `stop_tracking`: Stop satellite tracking
-- `select_satellite`: Select a satellite by name
-- `select_transponder`: Select a transponder by name
-- `set_subtone`: Set subtone
-- `set_rx_offset`: Set RX offset in Hz
-- `get_status`: Get current application status
+The web API uses Flask-SocketIO for real-time communication. You can integrate it with your own applications by connecting to the Socket.IO endpoints. All events are real-time and changes are reflected immediately in the desktop app and all connected clients.
 
-# Developer notes
-## Compile using pyinstaller
-`pyinstaller --onefile QTrigdoppler.py --exclude PySide6 --exclude PyQt6 --splash images/splash.jpg`
-
-# WebSocket API Usage
-
-The QTrigdoppler server exposes a WebSocket API (using Flask-SocketIO) for real-time control and monitoring. You can connect to the server from a web browser or any Socket.IO-compatible client.
-
-## Connecting to the Server
-
+### Connecting to the Server
 - By default, the server runs on port 5000.
 - To connect from another device on your local network, use:
   
@@ -156,9 +141,7 @@ The QTrigdoppler server exposes a WebSocket API (using Flask-SocketIO) for real-
   
   (e.g., `http://192.168.1.100:5000`)
 
-## Available WebSocket Events
-
-### Client → Server Events
+### Available WebSocket Events
 
 | Event                | Parameters                        | Description                                 |
 |----------------------|------------------------------------|---------------------------------------------|
@@ -173,7 +156,7 @@ The QTrigdoppler server exposes a WebSocket API (using Flask-SocketIO) for real-
 | `stop_tracking`      | none                               | Stop satellite tracking                     |
 | `debug_main_window`  | none                               | Get debug info about the main window        |
 
-### Server → Client Events
+#### Server → Client Events
 
 | Event                | Data Example                      | Description                                 |
 |----------------------|------------------------------------|---------------------------------------------|
@@ -182,12 +165,13 @@ The QTrigdoppler server exposes a WebSocket API (using Flask-SocketIO) for real-
 | `transponder_list`   | `{ transponders: [...], current }` | List of transponders and current selection  |
 | `debug_info`         | `{ attributes, ... }`              | Debug information about the main window     |
 
-## Example Usage (JavaScript)
+### Example Usage (JavaScript)
 
 ```js
 const socket = io('http://192.168.1.100:5000');
 
-// Request current status	socket.emit('get_status');
+// Request current status
+socket.emit('get_status');
 
 // Select a satellite
 socket.emit('select_satellite', { satellite: 'ISS' });
@@ -201,9 +185,7 @@ socket.on('status', (data) => {
 });
 ```
 
-## Notes
 - The web client (`web_api_client.html`) demonstrates all available features and can be used as a reference.
-- All events are real-time and changes are reflected immediately in the desktop app and all connected clients.
 - The server must be running and accessible from your network for remote clients to connect.
 
 For more advanced integration, see the code in `web_api_client.html` or contact the project maintainers.
