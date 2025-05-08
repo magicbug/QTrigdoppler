@@ -26,6 +26,7 @@ from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from qt_material import apply_stylesheet
 import web_api  # Import the web API module
+import web_api_proxy
 
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -380,7 +381,13 @@ class MainWindow(QMainWindow):
         self.tpx_list_view = self.combo1.view()
         self.tpx_list_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)        
         QScroller.grabGesture(self.tpx_list_view.viewport(), QScroller.LeftMouseButtonGesture)
+        # Ensure the currentTextChanged signal is connected to tpx_changed
+        try:
+            self.combo2.currentTextChanged.disconnect()  # Disconnect any existing connections first
+        except:
+            pass  # Ignore if there were no connections
         self.combo2.currentTextChanged.connect(self.tpx_changed) 
+        print("Connected combo2.currentTextChanged to tpx_changed")
         combo_layout.addWidget(self.combo2)
         
         self.tonetext = QLabel("Subtone:")
@@ -863,6 +870,15 @@ class MainWindow(QMainWindow):
             self.web_api_thread.start()
             print(f"Web API server started on port {configur.get('web_api', 'port', fallback='5000')}")
         
+        # Set up the web API proxy for thread-safe GUI/timer operations
+        self.web_api_proxy = web_api_proxy.WebApiGuiProxy()
+        self.web_api_proxy.select_satellite.connect(self.slot_select_satellite)
+        self.web_api_proxy.select_transponder.connect(self.slot_select_transponder)
+        self.web_api_proxy.set_subtone.connect(self.slot_set_subtone)
+        self.web_api_proxy.set_rx_offset.connect(self.slot_set_rx_offset)
+        self.web_api_proxy.start_tracking.connect(self.init_worker)
+        self.web_api_proxy.stop_tracking.connect(self.the_stop_button_was_clicked)
+        
     def save_settings(self):
         global LATITUDE
         global LONGITUDE
@@ -936,10 +952,24 @@ class MainWindow(QMainWindow):
     def rxoffset_value_changed(self, i):
             global f_cal
             self.my_satellite.new_cal = 1
-            self.my_satellite.F_cal =  f_cal = i
+            self.my_satellite.F_cal = f_cal = i
+            
+            # Notify web clients of RX offset change
+            try:
+                web_api.safe_emit('status', {'rx_offset': i})
+            except Exception as e:
+                print(f"Error broadcasting RX offset change to web clients: {e}")
     
     def rxoffset_button_pushed(self, i):
-            self.rxoffsetbox.setValue(self.rxoffsetbox.value() +int(i))
+            new_value = self.rxoffsetbox.value() + int(i)
+            self.rxoffsetbox.setValue(new_value)
+            
+            # Notify web clients of RX offset change (note: setValue will trigger the valueChanged signal, 
+            # but we'll add this for clarity and as a backup)
+            try:
+                web_api.safe_emit('status', {'rx_offset': new_value})
+            except Exception as e:
+                print(f"Error broadcasting RX offset button change to web clients: {e}")
     def update_tle_file(self):
         self.the_stop_button_was_clicked()
         try:
@@ -963,16 +993,29 @@ class MainWindow(QMainWindow):
             with open(SQFILE, 'r') as h:
                 sqfdata = h.readlines()
                 tpxlist=[]
+                # Block signals temporarily while we clear the combo box
+                self.combo2.blockSignals(True)
                 self.combo2.clear()
+                self.combo2.blockSignals(False)
+                
                 for line in sqfdata:
                     if line.startswith(satname):
                         tpxlist += [str(line.split(",")[8].strip())]
                         
                 tpxlist=list(dict.fromkeys(tpxlist))
-                self.combo2.addItems(tpxlist)  
+                
+                # Add items one by one to ensure signals are properly emitted
+                for tpx in tpxlist:
+                    self.combo2.addItem(tpx)
                     
         except IOError:
             raise MyError()
+            
+        # Notify web clients of the satellite change
+        try:
+            web_api.broadcast_satellite_change(satname)
+        except Exception as e:
+            print(f"Error broadcasting satellite change to web clients: {e}")
             
     def tpx_changed(self, tpxname):
         global F0
@@ -982,14 +1025,18 @@ class MainWindow(QMainWindow):
         global MAX_OFFSET_RX
         global RX_TPX_ONLY
         
+        print(f"tpx_changed called with transponder: {tpxname}")
         self.my_transponder_name = tpxname
         
         try:
             with open(SQFILE, 'r') as h:
                 sqfdata = h.readlines()
+                found_match = False
                 for lineb in sqfdata:
                     if lineb.startswith(";") == 0:
                         if lineb.split(",")[8].strip() == tpxname and lineb.split(",")[0].strip() == self.my_satellite.name:
+                            found_match = True
+                            print(f"Found matching transponder in SQFILE: {tpxname} for satellite {self.my_satellite.name}")
                             self.my_satellite.F = self.my_satellite.F_init = float(lineb.split(",")[1].strip())*1000
                             self.rxfreq.setText(str('{:,}'.format(self.my_satellite.F))+ " Hz")
                             F0 = self.my_satellite.F + f_cal
@@ -1008,7 +1055,7 @@ class MainWindow(QMainWindow):
                                 self.Startbutton.setEnabled(False)
                                 self.Stopbutton.setEnabled(False)
                                 self.syncbutton.setEnabled(False)
-                                self.store_offset_button.setEnabled(False)
+                                self.offsetstorebutton.setEnabled(False)
                             else:
                                 self.Startbutton.setEnabled(True)
                                 self.syncbutton.setEnabled(True)
@@ -1020,39 +1067,68 @@ class MainWindow(QMainWindow):
                             else:
                                 RX_TPX_ONLY = False
                             break
-        except IOError:
+                
+                if not found_match:
+                    print(f"Warning: No matching entry found for transponder: {tpxname} and satellite: {self.my_satellite.name}")
+        except IOError as e:
+            print(f"IO Error when processing transponder change: {e}")
             raise MyError()
 
+        print(f"Setting RX offset to 0")
         self.rxoffsetbox.setValue(0)
         for tpx in useroffsets:
             if tpx[0] == self.my_satellite.name and tpx[1] == tpxname:
-
                 usrrxoffset=int(tpx[2])
-
+                print(f"Found user offset for this satellite+transponder: {usrrxoffset}")
                 if usrrxoffset < MAX_OFFSET_RX and usrrxoffset > -MAX_OFFSET_RX:
+                    print(f"Setting RX offset to: {usrrxoffset}")
                     self.rxoffsetbox.setMaximum(MAX_OFFSET_RX)
                     self.rxoffsetbox.setMinimum(-MAX_OFFSET_RX)
                     self.rxoffsetbox.setValue(usrrxoffset)
                     self.my_satellite.new_cal = 1
-                    self.my_satellite.F_cal =  f_cal = usrrxoffset
+                    self.my_satellite.F_cal = f_cal = usrrxoffset
                 else:
+                    print(f"User offset {usrrxoffset} outside allowed range [-{MAX_OFFSET_RX}, {MAX_OFFSET_RX}]")
                     self.rxoffsetbox.setValue(0)
                 
                 
         self.my_satellite.tledata = ""
-        self.timer.stop()
+        
+        # Safely stop the timer from any thread
+        try:
+            QMetaObject.invokeMethod(self.timer, "stop", Qt.QueuedConnection)
+            print("Timer stopped safely")
+        except Exception as e:
+            print(f"Error stopping timer: {e}")
+            # Fallback: try direct stop if invokeMethod failed
+            try:
+                if QThread.currentThread() == self.thread():
+                    self.timer.stop()
+                    print("Timer stopped directly")
+                else:
+                    print("Cannot stop timer - not in main thread")
+            except Exception as e2:
+                print(f"Error in fallback timer stop: {e2}")
+                
         try:
             with open(TLEFILE, 'r') as f:
                 data = f.readlines()  
-                
+                tle_found = False
                 for index, line in enumerate(data):
                     if str(self.my_satellite.name) in line:
+                        print(f"Found TLE data for satellite: {self.my_satellite.name}")
                         self.my_satellite.tledata = ephem.readtle(data[index], data[index+1], data[index+2])
+                        tle_found = True
                         break
-        except IOError:
+                        
+                if not tle_found:
+                    print(f"Warning: No TLE data found for satellite: {self.my_satellite.name}")
+        except IOError as e:
+            print(f"IO Error when reading TLE file: {e}")
             raise MyError()
         
         if self.my_satellite.tledata == "":
+            print("TLE data is empty, disabling tracking buttons")
             self.Startbutton.setEnabled(False)
             self.syncbutton.setEnabled(False)
             self.offsetstorebutton.setEnabled(False)
@@ -1063,9 +1139,29 @@ class MainWindow(QMainWindow):
             tleage = int(data[index+1][20:23])
             self.my_satellite.tle_age = day_of_year - tleage
             self.log_tle_state_val.setText("{0} day(s)".format(self.my_satellite.tle_age))
-            
-        self.timer.start()
         
+        # Safely start the timer from any thread    
+        try:
+            QMetaObject.invokeMethod(self.timer, "start", Qt.QueuedConnection)
+            print("Timer started safely")
+        except Exception as e:
+            print(f"Error starting timer: {e}")
+            # Fallback: try direct start if invokeMethod failed
+            try:
+                if QThread.currentThread() == self.thread():
+                    self.timer.start()
+                    print("Timer started directly")
+                else:
+                    print("Cannot start timer - not in main thread")
+            except Exception as e2:
+                print(f"Error in fallback timer start: {e2}")
+        
+        # Notify web clients of the transponder change
+        try:
+            web_api.broadcast_transponder_change(tpxname)
+        except Exception as e:
+            print(f"Error broadcasting transponder change to web clients: {e}")
+            
     def tone_changed(self, tone_name):
         
         if self.my_satellite.rig_satmode == 1:
@@ -1108,6 +1204,12 @@ class MainWindow(QMainWindow):
             icomTrx.setVFO("Main")
         else:
             icomTrx.setVFO("VFOA")
+            
+        # Notify web clients of the subtone change
+        try:
+            web_api.broadcast_subtone_change(tone_name)
+        except Exception as e:
+            print(f"Error broadcasting subtone change to web clients: {e}")
 
     def the_exit_button_was_clicked(self):
         self.the_stop_button_was_clicked()
@@ -1126,6 +1228,13 @@ class MainWindow(QMainWindow):
         self.Startbutton.setEnabled(True)
         self.combo1.setEnabled(True)
         self.combo2.setEnabled(True)
+        
+        # Notify web clients of tracking state change
+        try:
+            web_api.broadcast_tracking_state(False)
+        except Exception as e:
+            print(f"Error broadcasting tracking stop to web clients: {e}")
+
     def the_sync_button_was_clicked(self):
         self.my_satellite.F = self.my_satellite.F_init
         self.my_satellite.I = self.my_satellite.I_init
@@ -1145,6 +1254,12 @@ class MainWindow(QMainWindow):
 
         self.doppler_worker = Worker(self.calc_doppler)
         self.threadpool.start(self.doppler_worker)
+        
+        # Notify web clients of tracking state change
+        try:
+            web_api.broadcast_tracking_state(True)
+        except Exception as e:
+            print(f"Error broadcasting tracking start to web clients: {e}")
 
     def calc_doppler(self, progress_callback):
         global CVIADDR
@@ -1477,6 +1592,43 @@ class MainWindow(QMainWindow):
         except:
             print("Error in label timer")
             traceback.print_exc()
+
+    @Slot(str)
+    def slot_select_satellite(self, sat_name):
+        # Set the combo box and call sat_changed in the main thread
+        for i in range(self.combo1.count()):
+            if self.combo1.itemText(i) == sat_name:
+                self.combo1.setCurrentIndex(i)
+                break
+        self.sat_changed(sat_name)
+
+    @Slot(str)
+    def slot_select_transponder(self, tpx_name):
+        for i in range(self.combo2.count()):
+            if self.combo2.itemText(i) == tpx_name:
+                self.combo2.setCurrentIndex(i)
+                break
+        self.tpx_changed(tpx_name)
+
+    @Slot(str)
+    def slot_set_subtone(self, tone):
+        for i in range(self.combo3.count()):
+            if self.combo3.itemText(i) == tone:
+                self.combo3.setCurrentIndex(i)
+                break
+        self.tone_changed(tone)
+
+    @Slot(int)
+    def slot_set_rx_offset(self, offset):
+        min_val = self.rxoffsetbox.minimum()
+        max_val = self.rxoffsetbox.maximum()
+        if min_val <= offset <= max_val:
+            self.rxoffsetbox.setValue(offset)
+
+    # The slots for start_tracking and stop_tracking are already connected to init_worker and the_stop_button_was_clicked
+
+    # Remove all QMetaObject.invokeMethod and run_on_ui_thread logic for GUI/timer operations in this file.
+    # Only start/stop timers in the main thread via these slots.
 
 class WorkerSignals(QObject):
     finished = Signal()

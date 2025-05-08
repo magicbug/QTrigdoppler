@@ -142,3 +142,68 @@ The web API uses Flask-SocketIO for real-time communication. You can integrate i
 # Developer notes
 ## Compile using pyinstaller
 `pyinstaller --onefile QTrigdoppler.py --exclude PySide6 --exclude PyQt6 --splash images/splash.jpg`
+
+# WebSocket API Usage
+
+The QTrigdoppler server exposes a WebSocket API (using Flask-SocketIO) for real-time control and monitoring. You can connect to the server from a web browser or any Socket.IO-compatible client.
+
+## Connecting to the Server
+
+- By default, the server runs on port 5000.
+- To connect from another device on your local network, use:
+  
+  `http://<your-computer-ip>:5000`
+  
+  (e.g., `http://192.168.1.100:5000`)
+
+## Available WebSocket Events
+
+### Client → Server Events
+
+| Event                | Parameters                        | Description                                 |
+|----------------------|------------------------------------|---------------------------------------------|
+| `get_status`         | none                               | Request current status and settings         |
+| `get_satellite_list` | none                               | Request list of available satellites        |
+| `select_satellite`   | `{ satellite: <name> }`            | Select a satellite by name                  |
+| `get_transponder_list` | `{ satellite: <name> }`          | Get transponders for a satellite            |
+| `select_transponder` | `{ transponder: <name> }`          | Select a transponder by name                |
+| `set_subtone`        | `{ subtone: <value> }`             | Set the radio subtone (e.g., 'None', '67 Hz') |
+| `set_rx_offset`      | `{ offset: <integer> }`            | Set RX frequency offset in Hz               |
+| `start_tracking`     | none                               | Start satellite tracking                    |
+| `stop_tracking`      | none                               | Stop satellite tracking                     |
+| `debug_main_window`  | none                               | Get debug info about the main window        |
+
+### Server → Client Events
+
+| Event                | Data Example                      | Description                                 |
+|----------------------|------------------------------------|---------------------------------------------|
+| `status`             | `{ tracking, satellite, ... }`     | Current status and settings                 |
+| `satellite_list`     | `{ satellites: [...], current }`   | List of satellites and current selection    |
+| `transponder_list`   | `{ transponders: [...], current }` | List of transponders and current selection  |
+| `debug_info`         | `{ attributes, ... }`              | Debug information about the main window     |
+
+## Example Usage (JavaScript)
+
+```js
+const socket = io('http://192.168.1.100:5000');
+
+// Request current status	socket.emit('get_status');
+
+// Select a satellite
+socket.emit('select_satellite', { satellite: 'ISS' });
+
+// Set RX offset
+socket.emit('set_rx_offset', { offset: 100 });
+
+// Listen for status updates
+socket.on('status', (data) => {
+    console.log('Status:', data);
+});
+```
+
+## Notes
+- The web client (`web_api_client.html`) demonstrates all available features and can be used as a reference.
+- All events are real-time and changes are reflected immediately in the desktop app and all connected clients.
+- The server must be running and accessible from your network for remote clients to connect.
+
+For more advanced integration, see the code in `web_api_client.html` or contact the project maintainers.
