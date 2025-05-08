@@ -27,6 +27,7 @@ from PySide6.QtCore import *
 from qt_material import apply_stylesheet
 import web_api  # Import the web API module
 import web_api_proxy
+import rotator
 
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -57,6 +58,17 @@ RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
 DISPLAY_MAP = False
+# Rotator config
+ROTATOR_ENABLED = configur.getboolean('rotator', 'enabled', fallback=False)
+ROTATOR_SERIAL_PORT = configur.get('rotator', 'serial_port', fallback='COM4')
+ROTATOR_BAUDRATE = configur.getint('rotator', 'baudrate', fallback=4800)
+ROTATOR_AZ_PARK = configur.getint('rotator', 'az_park', fallback=0)
+ROTATOR_EL_PARK = configur.getint('rotator', 'el_park', fallback=0)
+ROTATOR_AZ_MIN = configur.getint('rotator', 'az_min', fallback=0)
+ROTATOR_AZ_MAX = configur.getint('rotator', 'az_max', fallback=450)
+ROTATOR_EL_MIN = configur.getint('rotator', 'gel_min', fallback=0)
+ROTATOR_EL_MAX = configur.getint('rotator', 'el_max', fallback=180)
+ROTATOR_MIN_ELEVATION = configur.getint('rotator', 'min_elevation', fallback=5)
 
 if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
@@ -439,7 +451,7 @@ class MainWindow(QMainWindow):
         groupbox_downlink.setLayout(vbox_downlink)
         
         rx_labels_sat_layout = QHBoxLayout()
-        # 1x Label: RX freq Satellite
+        # 1x Label: RX freq Satellite
         self.rxfreqsat_lbl = QLabel("RX @ Sat:")
         self.rxfreqsat_lbl.setStyleSheet("QLabel{font-size: 12pt;}")
         self.rxfreqsat_lbl.setFont(myFont)
@@ -452,7 +464,7 @@ class MainWindow(QMainWindow):
         vbox_downlink.addLayout(rx_labels_sat_layout)
         
         rx_labels_radio_layout = QHBoxLayout()
-        # 1x Label: RX freq
+        # 1x Label: RX freq
         self.rxfreqtitle = QLabel("RX @ Radio:")
         rx_labels_radio_layout.addWidget(self.rxfreqtitle)
 
@@ -462,7 +474,7 @@ class MainWindow(QMainWindow):
         vbox_downlink.addLayout(rx_labels_radio_layout)
 
         
-        # 1x Label: RX Doppler Satellite
+        # 1x Label: RX Doppler Satellite
         rx_doppler_freq_layout = QHBoxLayout()
         self.rxdopplersat_lbl = QLabel("Doppler:")
         rx_doppler_freq_layout.addWidget(self.rxdopplersat_lbl)
@@ -472,7 +484,7 @@ class MainWindow(QMainWindow):
         
         vbox_downlink.addLayout(rx_doppler_freq_layout)
         
-        # 1x Label: RX Doppler RateSatellite
+        # 1x Label: RX Doppler RateSatellite
         rx_doppler_rate_layout = QHBoxLayout()
         self.rxdopplerratesat_lbl = QLabel("Rate:")
         rx_doppler_rate_layout.addWidget(self.rxdopplerratesat_lbl)
@@ -489,7 +501,7 @@ class MainWindow(QMainWindow):
         groupbox_uplink.setLayout(vbox_uplink)
 
         tx_labels_sat_layout = QHBoxLayout()
-        # 1x Label: TX freq Satellite
+        # 1x Label: TX freq Satellite
         self.txfreqsat_lbl = QLabel("TX @ Sat:")
         self.txfreqsat_lbl.setStyleSheet("QLabel{font-size: 12pt;}")
         self.txfreqsat_lbl.setFont(myFont)
@@ -512,7 +524,7 @@ class MainWindow(QMainWindow):
         vbox_uplink.addLayout(tx_labels_radio_layout)
         
         
-        # 1x Label: TX Doppler Satellite
+        # 1x Label: TX Doppler Satellite
         tx_doppler_freq_layout = QHBoxLayout()
         self.txdopplersat_lbl = QLabel("Doppler:")
         tx_doppler_freq_layout.addWidget(self.txdopplersat_lbl)
@@ -522,7 +534,7 @@ class MainWindow(QMainWindow):
         
         vbox_uplink.addLayout(tx_doppler_freq_layout)
         
-        # 1x Label: TX Doppler RateSatellite
+        # 1x Label: TX Doppler RateSatellite
         tx_doppler_rate_layout = QHBoxLayout()
         self.txdopplerratesat_lbl = QLabel("Rate:")
         tx_doppler_rate_layout.addWidget(self.txdopplerratesat_lbl)
@@ -879,6 +891,49 @@ class MainWindow(QMainWindow):
         self.web_api_proxy.start_tracking.connect(self.init_worker)
         self.web_api_proxy.stop_tracking.connect(self.the_stop_button_was_clicked)
         
+        # Rotator integration
+        self.rotator = None
+        self.rotator_thread = None
+        self.rotator_error = None
+        if ROTATOR_ENABLED:
+            try:
+                self.rotator = rotator.YaesuRotator(
+                    ROTATOR_SERIAL_PORT,
+                    baudrate=ROTATOR_BAUDRATE,
+                    az_min=ROTATOR_AZ_MIN,
+                    az_max=ROTATOR_AZ_MAX,
+                    el_min=ROTATOR_EL_MIN,
+                    el_max=ROTATOR_EL_MAX
+                )
+            except Exception as e:
+                self.rotator_error = f"Rotator init failed: {e}"
+                print(self.rotator_error)
+                self.rotator = None
+        
+        # Add Park Rotators and Stop Rotation buttons if rotator enabled
+        if ROTATOR_ENABLED:
+            self.park_rotator_button = QPushButton("Park Rotators")
+            self.park_rotator_button.clicked.connect(self.park_rotators)
+            button_layout.addWidget(self.park_rotator_button)
+            self.stop_rotator_button = QPushButton("Stop Rotation")
+            self.stop_rotator_button.clicked.connect(self.stop_rotators)
+            button_layout.addWidget(self.stop_rotator_button)
+            # Add rotator position labels
+            self.rotator_az_label = QLabel("Rotator Azimuth: n/a")
+            self.rotator_el_label = QLabel("Rotator Elevation: n/a")
+            log_layout.addWidget(self.rotator_az_label)
+            log_layout.addWidget(self.rotator_el_label)
+            # Add refresh button
+            self.refresh_rotator_button = QPushButton("Refresh Rotator Position")
+            self.refresh_rotator_button.clicked.connect(self.update_rotator_position)
+            button_layout.addWidget(self.refresh_rotator_button)
+            # Read and display position at startup
+            self.update_rotator_position()
+            # If rotator failed to init, show error
+            if self.rotator_error:
+                self.rotator_az_label.setText(self.rotator_error)
+                self.rotator_el_label.setText("")
+        
     def save_settings(self):
         global LATITUDE
         global LONGITUDE
@@ -1228,7 +1283,10 @@ class MainWindow(QMainWindow):
         self.Startbutton.setEnabled(True)
         self.combo1.setEnabled(True)
         self.combo2.setEnabled(True)
-        
+        # Stop rotator thread and park
+        if ROTATOR_ENABLED:
+            self.stop_rotator_thread()
+            self.park_rotators()
         # Notify web clients of tracking state change
         try:
             web_api.broadcast_tracking_state(False)
@@ -1244,17 +1302,16 @@ class MainWindow(QMainWindow):
         self.syncbutton.setEnabled(True)
         self.offsetstorebutton.setEnabled(True)
         self.Stopbutton.setEnabled(True)
-
         if TRACKING_ACTIVE == False:
             TRACKING_ACTIVE = True
-            
         self.Startbutton.setEnabled(False)
         self.combo1.setEnabled(False)
         self.combo2.setEnabled(False)
-
         self.doppler_worker = Worker(self.calc_doppler)
         self.threadpool.start(self.doppler_worker)
-        
+        # Start rotator thread
+        if ROTATOR_ENABLED:
+            self.start_rotator_thread()
         # Notify web clients of tracking state change
         try:
             web_api.broadcast_tracking_state(True)
@@ -1629,6 +1686,74 @@ class MainWindow(QMainWindow):
 
     # Remove all QMetaObject.invokeMethod and run_on_ui_thread logic for GUI/timer operations in this file.
     # Only start/stop timers in the main thread via these slots.
+
+    def get_current_az_el(self):
+        # Returns (az, el) as floats for the current satellite
+        try:
+            az = float(sat_azi_calc(self.my_satellite.tledata))
+            el = float(sat_ele_calc(self.my_satellite.tledata))
+            return az, el
+        except Exception as e:
+            print(f"Error getting current az/el: {e}")
+            return ROTATOR_AZ_PARK, ROTATOR_EL_PARK
+    def park_rotators(self):
+        if self.rotator:
+            try:
+                self.rotator.park(ROTATOR_AZ_PARK, ROTATOR_EL_PARK)
+                print("Rotator parked.")
+            except Exception as e:
+                print(f"Error parking rotator: {e}")
+    def stop_rotators(self):
+        if self.rotator:
+            try:
+                self.rotator.stop()
+                print("Rotator stopped.")
+            except Exception as e:
+                print(f"Error stopping rotator: {e}")
+    def start_rotator_thread(self):
+        if ROTATOR_ENABLED and self.rotator and not self.rotator_thread:
+            self.rotator_thread = rotator.RotatorThread(
+                self.rotator,
+                self.get_current_az_el,
+                ROTATOR_MIN_ELEVATION,
+                ROTATOR_AZ_PARK,
+                ROTATOR_EL_PARK
+            )
+            self.rotator_thread.daemon = True
+            self.rotator_thread.start()
+            print("Rotator thread started.")
+    def stop_rotator_thread(self):
+        if self.rotator_thread:
+            self.rotator_thread.stop()
+            self.rotator_thread.join(timeout=2)
+            self.rotator_thread = None
+            print("Rotator thread stopped.")
+    def closeEvent(self, event):
+        # Ensure rotator is stopped and parked on exit
+        if ROTATOR_ENABLED:
+            self.stop_rotator_thread()
+            self.park_rotators()
+            if self.rotator:
+                self.rotator.close()
+        event.accept()
+
+    def update_rotator_position(self):
+        if self.rotator:
+            try:
+                az, el = self.rotator.get_position()
+                if az is not None and el is not None:
+                    self.rotator_az_label.setText(f"Rotator Azimuth: {az}°")
+                    self.rotator_el_label.setText(f"Rotator Elevation: {el}°")
+                else:
+                    self.rotator_az_label.setText("Rotator Azimuth: error reading position")
+                    self.rotator_el_label.setText("Rotator Elevation: error reading position")
+            except Exception as e:
+                print(f"Error updating rotator position: {e}")
+                self.rotator_az_label.setText(f"Rotator Azimuth: {e}")
+                self.rotator_el_label.setText("Rotator Elevation: error")
+        elif ROTATOR_ENABLED:
+            self.rotator_az_label.setText("Rotator not initialized")
+            self.rotator_el_label.setText("")
 
 class WorkerSignals(QObject):
     finished = Signal()
