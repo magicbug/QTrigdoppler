@@ -1720,9 +1720,35 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Error getting current az/el: {e}")
             return ROTATOR_AZ_PARK, ROTATOR_EL_PARK
+    def best_rotator_azimuth(self, current_az, target_az, az_max):
+        """
+        Returns the best azimuth to command the rotator to, considering overlap.
+        """
+        current_az = current_az % az_max
+        target_az = target_az % az_max
+        direct_diff = abs(target_az - current_az)
+        overlap_target = target_az
+        if az_max > 360:
+            # Try using overlap (e.g., 370 instead of 10)
+            if target_az < 90 and current_az > 270:
+                overlap_target = target_az + 360
+            elif target_az > 270 and current_az < 90:
+                overlap_target = target_az - 360
+        overlap_diff = abs(overlap_target - current_az)
+        if overlap_diff < direct_diff:
+            return overlap_target
+        else:
+            return target_az
+
     def rotator_set_position(self, az, el):
         if self.rotator:
-            self.rotator.set_position(az, el)
+            # Get current rotator azimuth for shortest-path logic
+            current_az, _ = self.rotator.get_position()
+            if current_az is not None:
+                az_to_send = self.best_rotator_azimuth(current_az, az, ROTATOR_AZ_MAX)
+            else:
+                az_to_send = az
+            self.rotator.set_position(az_to_send, el)
             self.update_rotator_position()
 
     def rotator_park(self, az_park, el_park):
