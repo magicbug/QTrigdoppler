@@ -954,10 +954,12 @@ class MainWindow(QMainWindow):
                 self.rotator_az_label.setText(self.rotator_error)
                 self.rotator_el_label.setText("")
             # Periodically update rotator position
-            self.rotator_update_timer = QTimer()
-            self.rotator_update_timer.setInterval(2000)  # every 2 seconds
-            self.rotator_update_timer.timeout.connect(self.update_rotator_position)
-            self.rotator_update_timer.start()
+            # self.rotator_update_timer = QTimer()
+            # self.rotator_update_timer.setInterval(2000)  # every 2 seconds
+            # self.rotator_update_timer.timeout.connect(self.update_rotator_position)
+            # self.rotator_update_timer.start()
+            # Start background worker for rotator position polling
+            self.start_rotator_position_worker()
         
     def save_settings(self):
         global LATITUDE
@@ -1796,6 +1798,7 @@ class MainWindow(QMainWindow):
             self.park_rotators()
             if self.rotator:
                 self.rotator.close()
+            self.stop_rotator_position_worker()
         event.accept()
 
     def update_rotator_position(self):
@@ -1816,11 +1819,32 @@ class MainWindow(QMainWindow):
             self.rotator_az_label.setText("Rotator not initialized")
             self.rotator_el_label.setText("")
 
+    def start_rotator_position_worker(self):
+        if self.rotator:
+            self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=2.0)
+            self.rotator_position_worker.signals.position.connect(self.handle_rotator_position_update)
+            QThreadPool.globalInstance().start(self.rotator_position_worker)
+
+    def stop_rotator_position_worker(self):
+        if self.rotator_position_worker:
+            self.rotator_position_worker.stop()
+            self.rotator_position_worker = None
+
+    @Slot(object, object)
+    def handle_rotator_position_update(self, az, el):
+        if az is not None and el is not None:
+            self.rotator_az_label.setText(f"Azimuth: {az}°")
+            self.rotator_el_label.setText(f"Elevation: {el}°")
+        else:
+            self.rotator_az_label.setText("Azimuth: error reading position")
+            self.rotator_el_label.setText("Elevation: error reading position")
+
 class WorkerSignals(QObject):
     finished = Signal()
     error = Signal(tuple)
     result = Signal(object)
     progress = Signal(int)
+    position = Signal(object, object)  # az, el
 
 class Worker(QRunnable):
 
@@ -1853,6 +1877,27 @@ class Worker(QRunnable):
             self.signals.result.emit(result)  # Return the result of the processing
         finally:
             self.signals.finished.emit()  # Done
+
+class RotatorPositionWorker(QRunnable):
+    def __init__(self, rotator, poll_interval=2.0):
+        super().__init__()
+        self.rotator = rotator
+        self.poll_interval = poll_interval
+        self.signals = WorkerSignals()
+        self._running = True
+
+    def stop(self):
+        self._running = False
+
+    @Slot()
+    def run(self):
+        while self._running:
+            try:
+                az, el = self.rotator.get_position()
+                self.signals.position.emit(az, el)
+            except Exception as e:
+                self.signals.position.emit(None, None)
+            time.sleep(self.poll_interval)
 
 ## Starts here:
 if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
