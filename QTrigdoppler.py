@@ -918,11 +918,30 @@ class MainWindow(QMainWindow):
             self.stop_rotator_button = QPushButton("Stop Rotation")
             self.stop_rotator_button.clicked.connect(self.stop_rotators)
             button_layout.addWidget(self.stop_rotator_button)
-            # Add rotator position labels
-            self.rotator_az_label = QLabel("Rotator Azimuth: n/a")
-            self.rotator_el_label = QLabel("Rotator Elevation: n/a")
-            log_layout.addWidget(self.rotator_az_label)
-            log_layout.addWidget(self.rotator_el_label)
+            # Add rotator position labels in a styled group box
+            self.rotator_status_box = QGroupBox("Rotator")
+            self.rotator_status_box.setStyleSheet("""
+                QGroupBox {
+                    font-size: 12pt;
+                    font-weight: bold;
+                    border: 2px solid #4f5b62;
+                    border-radius: 6px;
+                    margin-top: 6px;
+                    background-color: #232629;
+                    color: #fff;
+                }
+                QLabel {
+                    font-size: 12pt;
+                    color: #fff;
+                }
+            """)
+            rotator_status_layout = QVBoxLayout()
+            self.rotator_az_label = QLabel("Azimuth: n/a")
+            self.rotator_el_label = QLabel("Elevation: n/a")
+            rotator_status_layout.addWidget(self.rotator_az_label)
+            rotator_status_layout.addWidget(self.rotator_el_label)
+            self.rotator_status_box.setLayout(rotator_status_layout)
+            log_layout.addWidget(self.rotator_status_box)
             # Add refresh button
             self.refresh_rotator_button = QPushButton("Refresh Rotator Position")
             self.refresh_rotator_button.clicked.connect(self.update_rotator_position)
@@ -1757,15 +1776,15 @@ class MainWindow(QMainWindow):
             try:
                 az, el = self.rotator.get_position()
                 if az is not None and el is not None:
-                    self.rotator_az_label.setText(f"Rotator Azimuth: {az}°")
-                    self.rotator_el_label.setText(f"Rotator Elevation: {el}°")
+                    self.rotator_az_label.setText(f"Azimuth: {az}°")
+                    self.rotator_el_label.setText(f"Elevation: {el}°")
                 else:
-                    self.rotator_az_label.setText("Rotator Azimuth: error reading position")
-                    self.rotator_el_label.setText("Rotator Elevation: error reading position")
+                    self.rotator_az_label.setText("Azimuth: error reading position")
+                    self.rotator_el_label.setText("Elevation: error reading position")
             except Exception as e:
                 print(f"Error updating rotator position: {e}")
-                self.rotator_az_label.setText(f"Rotator Azimuth: {e}")
-                self.rotator_el_label.setText("Rotator Elevation: error")
+                self.rotator_az_label.setText(f"Azimuth: {e}")
+                self.rotator_el_label.setText("Elevation: error")
         elif ROTATOR_ENABLED:
             self.rotator_az_label.setText("Rotator not initialized")
             self.rotator_el_label.setText("")
