@@ -4,7 +4,13 @@ import time
 
 class YaesuRotator:
     def __init__(self, port, baudrate=4800, az_min=0, az_max=450, el_min=0, el_max=180, timeout=1):
-        self.ser = serial.Serial(port, baudrate, timeout=timeout)
+        self.ser = serial.Serial(
+            port,
+            baudrate,
+            timeout=timeout,
+            rtscts=False,   # Hardware flow control OFF
+            xonxoff=False   # Software flow control OFF
+        )
         self.az_min = az_min
         self.az_max = az_max
         self.el_min = el_min
@@ -14,60 +20,66 @@ class YaesuRotator:
     def set_position(self, az, el):
         az = max(self.az_min, min(self.az_max, int(round(az))))
         el = max(self.el_min, min(self.el_max, int(round(el))))
-        # Try lowercase with \n (old code style)
-        cmd1 = f"az{az:03d} el{el:03d}\n"
-        # Try uppercase with \r (GS-232 style)
-        cmd2 = f"AZ{az:03d} EL{el:03d}\r"
-        # Try uppercase with \n
-        cmd3 = f"AZ{az:03d} EL{el:03d}\n"
-        # Try lowercase with \r
-        cmd4 = f"az{az:03d} el{el:03d}\r"
-        for cmd in [cmd1, cmd2, cmd3, cmd4]:
-            with self.lock:
-                print(f"[Rotator] Sending position command: {repr(cmd)}")
-                self.ser.write(cmd.encode())
-                time.sleep(0.1)  # Give the controller a moment
+        cmd = f"W{az:03d} {el:03d}\r"
+        with self.lock:
+            print(f"[Rotator] Sending: {repr(cmd)}")
+            self.ser.write(cmd.encode())
+            time.sleep(0.1)
 
     def park(self, az_park, el_park):
         self.set_position(az_park, el_park)
 
     def stop(self):
         with self.lock:
-            print("[Rotator] Sending stop command: 'S'\n and 'S'\r")
-            self.ser.write(b'S\n')
-            time.sleep(0.05)
+            print("[Rotator] Sending stop command: 'S\\r'")
             self.ser.write(b'S\r')
+
+    def get_position(self):
+        with self.lock:
+            self.ser.reset_input_buffer()
+            print("[Rotator] Sending get_position command: 'C2\\r'")
+            self.ser.write(b'C2\r')
+            time.sleep(0.1)
+            response = self.ser.readline().decode(errors='ignore').strip()
+            print(f"[Rotator] Raw response: {repr(response)}")
+            try:
+                # Expected: 'AZ=aaa EL=eee' or just 'AZ=aaa' or 'EL=eee'
+                az = None
+                el = None
+                parts = response.split()
+                for part in parts:
+                    if part.startswith('AZ='):
+                        az = int(part[3:])
+                    elif part.startswith('EL='):
+                        el = int(part[3:])
+                if az is not None and el is not None:
+                    return az, el
+                # fallback: try single queries if C2 didn't work
+                if az is None:
+                    print("[Rotator] Querying azimuth only with 'C\\r'")
+                    self.ser.write(b'C\r')
+                    time.sleep(0.1)
+                    az_response = self.ser.readline().decode(errors='ignore').strip()
+                    print(f"[Rotator] Azimuth response: {repr(az_response)}")
+                    if az_response.startswith('AZ='):
+                        az = int(az_response[3:])
+                if el is None:
+                    print("[Rotator] Querying elevation only with 'B\\r'")
+                    self.ser.write(b'B\r')
+                    time.sleep(0.1)
+                    el_response = self.ser.readline().decode(errors='ignore').strip()
+                    print(f"[Rotator] Elevation response: {repr(el_response)}")
+                    if el_response.startswith('EL='):
+                        el = int(el_response[3:])
+                if az is not None and el is not None:
+                    return az, el
+            except Exception as e:
+                print(f"Error parsing rotator position: {e}, response: {response}")
+            return None, None
 
     def close(self):
         with self.lock:
             self.ser.close()
-
-    def get_position(self):
-        responses = []
-        # Try lowercase 'c' with \n, uppercase 'C' with \r, and both with both endings
-        cmds = [b'c\n', b'C\n', b'c\r', b'C\r']
-        for cmd in cmds:
-            with self.lock:
-                self.ser.reset_input_buffer()
-                print(f"[Rotator] Sending get_position command: {repr(cmd)}")
-                self.ser.write(cmd)
-                time.sleep(0.1)
-                response = self.ser.readline().decode(errors='ignore').strip()
-                print(f"[Rotator] Raw response: {repr(response)}")
-                responses.append(response)
-                # Try to parse response
-                try:
-                    parts = response.split()
-                    if len(parts) >= 2:
-                        # Try both uppercase and lowercase prefixes
-                        if parts[0].lower().startswith('az') and parts[1].lower().startswith('el'):
-                            az = int(parts[0][2:])
-                            el = int(parts[1][2:])
-                            return az, el
-                except Exception as e:
-                    print(f"Error parsing rotator position: {e}, response: {response}")
-        print(f"[Rotator] All responses tried, none parsed: {responses}")
-        return None, None
 
 class RotatorThread(threading.Thread):
     def __init__(self, rotator, get_az_el_func, min_elevation, az_park, el_park, poll_interval=1.0):

@@ -933,6 +933,11 @@ class MainWindow(QMainWindow):
             if self.rotator_error:
                 self.rotator_az_label.setText(self.rotator_error)
                 self.rotator_el_label.setText("")
+            # Periodically update rotator position
+            self.rotator_update_timer = QTimer()
+            self.rotator_update_timer.setInterval(2000)  # every 2 seconds
+            self.rotator_update_timer.timeout.connect(self.update_rotator_position)
+            self.rotator_update_timer.start()
         
     def save_settings(self):
         global LATITUDE
@@ -1696,20 +1701,29 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Error getting current az/el: {e}")
             return ROTATOR_AZ_PARK, ROTATOR_EL_PARK
+    def rotator_set_position(self, az, el):
+        if self.rotator:
+            self.rotator.set_position(az, el)
+            self.update_rotator_position()
+
+    def rotator_park(self, az_park, el_park):
+        if self.rotator:
+            self.rotator.park(az_park, el_park)
+            self.update_rotator_position()
+
+    def rotator_stop(self):
+        if self.rotator:
+            self.rotator.stop()
+            self.update_rotator_position()
+
     def park_rotators(self):
-        if self.rotator:
-            try:
-                self.rotator.park(ROTATOR_AZ_PARK, ROTATOR_EL_PARK)
-                print("Rotator parked.")
-            except Exception as e:
-                print(f"Error parking rotator: {e}")
+        self.rotator_park(ROTATOR_AZ_PARK, ROTATOR_EL_PARK)
+        print("Rotator parked.")
+
     def stop_rotators(self):
-        if self.rotator:
-            try:
-                self.rotator.stop()
-                print("Rotator stopped.")
-            except Exception as e:
-                print(f"Error stopping rotator: {e}")
+        self.rotator_stop()
+        print("Rotator stopped.")
+
     def start_rotator_thread(self):
         if ROTATOR_ENABLED and self.rotator and not self.rotator_thread:
             self.rotator_thread = rotator.RotatorThread(
@@ -1722,6 +1736,7 @@ class MainWindow(QMainWindow):
             self.rotator_thread.daemon = True
             self.rotator_thread.start()
             print("Rotator thread started.")
+            self.update_rotator_position()
     def stop_rotator_thread(self):
         if self.rotator_thread:
             self.rotator_thread.stop()
