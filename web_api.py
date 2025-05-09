@@ -232,19 +232,14 @@ def handle_connect():
 @socketio.on('get_status')
 def handle_get_status():
     if main_window:
-        # Return current application status
         status = {
             'tracking': main_window.Stopbutton.isEnabled(),
             'satellite': main_window.my_satellite.name if hasattr(main_window, 'my_satellite') else None,
             'transponder': getattr(main_window, 'my_transponder_name', None) if hasattr(main_window, 'my_transponder_name') else None,
             'rx_offset': main_window.rxoffsetbox.value() if hasattr(main_window, 'rxoffsetbox') else 0
         }
-        
-        # Add subtone if available
         if hasattr(main_window, 'combo3'):
             status['subtone'] = main_window.combo3.currentText()
-        
-        # Add more detailed satellite information if available
         if hasattr(main_window, 'my_satellite') and main_window.my_satellite.name:
             sat = main_window.my_satellite
             status.update({
@@ -257,22 +252,38 @@ def handle_get_status():
                     'tle_age': sat.tle_age if hasattr(sat, 'tle_age') else None
                 }
             })
-            
-            # Add elevation and azimuth if available
             if hasattr(main_window, 'log_sat_status_ele_val') and hasattr(main_window, 'log_sat_status_azi_val'):
                 status['satellite_position'] = {
                     'elevation': main_window.log_sat_status_ele_val.text(),
                     'azimuth': main_window.log_sat_status_azi_val.text()
                 }
-            
-            # Add doppler info
             if hasattr(main_window, 'rxdoppler_val') and hasattr(main_window, 'txdoppler_val'):
                 status['doppler'] = {
                     'downlink': main_window.rxdoppler_val.text(),
                     'uplink': main_window.txdoppler_val.text()
                 }
-        
-        # Use socket directly since this is already in a request context
+        # Add rotator enabled flag
+        rotator_enabled = getattr(main_window, 'ROTATOR_ENABLED', False)
+        status['rotator_enabled'] = rotator_enabled
+        # Add rotator info
+        if rotator_enabled and hasattr(main_window, 'rotator_az_label') and hasattr(main_window, 'rotator_el_label'):
+            def strip_prefix(text, prefix):
+                if text.startswith(prefix):
+                    return text[len(prefix):].strip()
+                return text
+            az = main_window.rotator_az_label.text()
+            el = main_window.rotator_el_label.text()
+            az = strip_prefix(az, 'Azimuth:')
+            el = strip_prefix(el, 'Elevation:')
+            status['rotator'] = {
+                'azimuth': az,
+                'elevation': el
+            }
+        elif not rotator_enabled:
+            status['rotator'] = {
+                'azimuth': 'Disabled',
+                'elevation': 'Disabled'
+            }
         emit('status', status)
 
 @socketio.on('start_tracking')
@@ -563,6 +574,18 @@ def handle_debug_main_window():
             # Use socket directly since this is already in a request context
             emit('status', {'error': f'Error in debug handler: {str(e)}'})
 
+@socketio.on('park_rotator')
+def handle_park_rotator():
+    if main_window and hasattr(main_window, 'park_rotators'):
+        main_window.park_rotators()
+        handle_get_status()
+
+@socketio.on('stop_rotator')
+def handle_stop_rotator():
+    if main_window and hasattr(main_window, 'stop_rotators'):
+        main_window.stop_rotators()
+        handle_get_status()
+
 def run_socketio():
     try:
         # Try to read port from config file
@@ -604,22 +627,16 @@ def broadcast_tracking_state(is_tracking):
     safe_emit('status', {'tracking': is_tracking})
 
 def broadcast_full_status():
-    """Broadcast full status to all web clients"""
     if main_window:
         try:
-            # Create status object
             status = {
                 'tracking': main_window.Stopbutton.isEnabled(),
                 'satellite': main_window.my_satellite.name if hasattr(main_window, 'my_satellite') else None,
                 'transponder': getattr(main_window, 'my_transponder_name', None) if hasattr(main_window, 'my_transponder_name') else None,
                 'rx_offset': main_window.rxoffsetbox.value() if hasattr(main_window, 'rxoffsetbox') else 0
             }
-            
-            # Add subtone if available
             if hasattr(main_window, 'combo3'):
                 status['subtone'] = main_window.combo3.currentText()
-            
-            # Add more detailed satellite information if available
             if hasattr(main_window, 'my_satellite') and main_window.my_satellite.name:
                 sat = main_window.my_satellite
                 status.update({
@@ -632,30 +649,43 @@ def broadcast_full_status():
                         'tle_age': sat.tle_age if hasattr(sat, 'tle_age') else None
                     }
                 })
-                
-                # Add elevation and azimuth if available
                 if hasattr(main_window, 'log_sat_status_ele_val') and hasattr(main_window, 'log_sat_status_azi_val'):
                     status['satellite_position'] = {
                         'elevation': main_window.log_sat_status_ele_val.text(),
                         'azimuth': main_window.log_sat_status_azi_val.text()
                     }
-                
-                # Add doppler info
                 if hasattr(main_window, 'rxdoppler_val') and hasattr(main_window, 'txdoppler_val'):
                     status['doppler'] = {
                         'downlink': main_window.rxdoppler_val.text(),
                         'uplink': main_window.txdoppler_val.text()
                     }
-            
-            # Broadcast status
+            # Add rotator enabled flag
+            rotator_enabled = getattr(main_window, 'ROTATOR_ENABLED', False)
+            status['rotator_enabled'] = rotator_enabled
+            # Add rotator info
+            if rotator_enabled and hasattr(main_window, 'rotator_az_label') and hasattr(main_window, 'rotator_el_label'):
+                def strip_prefix(text, prefix):
+                    if text.startswith(prefix):
+                        return text[len(prefix):].strip()
+                    return text
+                az = main_window.rotator_az_label.text()
+                el = main_window.rotator_el_label.text()
+                az = strip_prefix(az, 'Azimuth:')
+                el = strip_prefix(el, 'Elevation:')
+                status['rotator'] = {
+                    'azimuth': az,
+                    'elevation': el
+                }
+            elif not rotator_enabled:
+                status['rotator'] = {
+                    'azimuth': 'Disabled',
+                    'elevation': 'Disabled'
+                }
             safe_emit('status', status)
-            
-            # Also try to update satellite list
             try:
                 handle_get_satellite_list()
             except Exception as e:
                 print(f"Error getting satellite list for broadcast: {e}")
-                
         except Exception as e:
             print(f"Error broadcasting full status: {e}")
 

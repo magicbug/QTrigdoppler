@@ -143,6 +143,10 @@
         <div class="control-section">
             <h3>Satellite Information</h3>
             <div id="satellite-info">No satellite selected</div>
+            <div id="rotator-controls" style="margin-top:10px; display:flex; gap:10px;">
+                <button id="parkRotatorBtn" onclick="parkRotator()">Park Rotator</button>
+                <button id="stopRotatorBtn" onclick="stopRotator()">Stop Rotation</button>
+            </div>
         </div>
     </div>
     
@@ -329,47 +333,52 @@
         
         // Function to update the satellite information display
         function updateSatelliteInfo(data) {
-            if (data.satellite && (data.satellite_info || data.satellite_position || data.doppler)) {
+            var rotatorControls = document.getElementById('rotator-controls');
+            if (data.satellite && (data.satellite_info || data.satellite_position || data.doppler || data.rotator)) {
                 var info = data.satellite_info || {};
                 var position = data.satellite_position || {};
                 var doppler = data.doppler || {};
-                
+                var rotator = data.rotator || {};
+                var rotatorEnabled = data.rotator_enabled !== undefined ? data.rotator_enabled : true;
                 var html = '<table class="info-table">';
-                
-                // Basic info
                 html += '<tr><th colspan="2">Selected Satellite</th></tr>';
                 html += '<tr><td>Name</td><td>' + (info.name || data.satellite || 'N/A') + '</td></tr>';
                 html += '<tr><td>Transponder</td><td>' + (data.transponder || 'N/A') + '</td></tr>';
                 html += '<tr><td>TLE Age</td><td>' + (info.tle_age || 'N/A') + '</td></tr>';
-                
-                // Frequencies
                 html += '<tr><th colspan="2">Frequencies</th></tr>';
                 html += '<tr><td>Downlink</td><td>' + (info.downlink_freq ? formatFreq(info.downlink_freq) : 'N/A') + ' (' + (info.downlink_mode || 'N/A') + ')</td></tr>';
                 html += '<tr><td>Uplink</td><td>' + (info.uplink_freq ? formatFreq(info.uplink_freq) : 'N/A') + ' (' + (info.uplink_mode || 'N/A') + ')</td></tr>';
-                
-                // Radio settings
                 html += '<tr><th colspan="2">Radio Settings</th></tr>';
                 html += '<tr><td>Subtone</td><td>' + (data.subtone || 'None') + '</td></tr>';
                 html += '<tr><td>RX Offset</td><td>' + (data.rx_offset !== undefined ? data.rx_offset + ' Hz' : 'N/A') + '</td></tr>';
-                
-                // Position
                 if (position.elevation || position.azimuth) {
                     html += '<tr><th colspan="2">Position</th></tr>';
                     html += '<tr><td>Elevation</td><td>' + (position.elevation || 'N/A') + '</td></tr>';
                     html += '<tr><td>Azimuth</td><td>' + (position.azimuth || 'N/A') + '</td></tr>';
                 }
-                
-                // Doppler
+                if (rotator.azimuth || rotator.elevation) {
+                    html += '<tr><th colspan="2">Rotator</th></tr>';
+                    if (!rotatorEnabled) {
+                        html += '<tr><td colspan="2">Rotator is disabled</td></tr>';
+                    } else {
+                        html += '<tr><td>Rotator Azimuth</td><td>' + (rotator.azimuth || 'N/A') + '</td></tr>';
+                        html += '<tr><td>Rotator Elevation</td><td>' + (rotator.elevation || 'N/A') + '</td></tr>';
+                    }
+                }
                 if (doppler.downlink || doppler.uplink) {
                     html += '<tr><th colspan="2">Doppler Shift</th></tr>';
                     html += '<tr><td>Downlink</td><td>' + (doppler.downlink || 'N/A') + '</td></tr>';
                     html += '<tr><td>Uplink</td><td>' + (doppler.uplink || 'N/A') + '</td></tr>';
                 }
-                
                 html += '</table>';
                 satelliteInfoDiv.innerHTML = html;
+                // Show/hide rotator controls
+                if (rotatorControls) {
+                    rotatorControls.style.display = rotatorEnabled ? 'flex' : 'none';
+                }
             } else {
                 satelliteInfoDiv.innerHTML = 'No satellite selected or no data available';
+                if (rotatorControls) rotatorControls.style.display = 'none';
             }
         }
         
@@ -703,6 +712,17 @@
             rxOffsetInput.value = current + amount;
             rxOffsetDirty = true;
             setRxOffset(); // Immediately send the new value
+        }
+
+        function parkRotator() {
+            if (!socket || !socket.connected) return;
+            logDebug('Emit: park_rotator');
+            socket.emit('park_rotator');
+        }
+        function stopRotator() {
+            if (!socket || !socket.connected) return;
+            logDebug('Emit: stop_rotator');
+            socket.emit('stop_rotator');
         }
     </script>
 </body>

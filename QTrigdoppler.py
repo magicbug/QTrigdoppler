@@ -892,6 +892,7 @@ class MainWindow(QMainWindow):
         self.web_api_proxy.stop_tracking.connect(self.the_stop_button_was_clicked)
         
         # Rotator integration
+        self.ROTATOR_ENABLED = ROTATOR_ENABLED
         self.rotator = None
         self.rotator_thread = None
         self.rotator_error = None
