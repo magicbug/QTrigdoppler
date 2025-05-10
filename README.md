@@ -193,3 +193,7 @@ socket.on('status', (data) => {
 - The server must be running and accessible from your network for remote clients to connect.
 
 For more advanced integration, see the code in `web_api_client.html` or contact the project maintainers.
+
+# Compile using pyinstaller
+
+`pyinstaller --onefile QTrigdoppler.py --exclude PySide6 --exclude PyQt6 --splash images/splash.jpg`
