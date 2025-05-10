@@ -196,4 +196,4 @@ For more advanced integration, see the code in `web_api_client.html` or contact 
 
 # Compile using pyinstaller
 
-`pyinstaller --onefile QTrigdoppler.py --exclude PySide6 --exclude PyQt6 --splash images/splash.jpg`
+`pyinstaller --onefile QTrigdoppler.py --exclude PyQt6 --splash images/splash.jpg`
