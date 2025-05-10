@@ -14,7 +14,7 @@ import time
 import re
 import urllib.request
 import traceback
-import icom
+from lib import icom
 import os
 import numpy as np
 import threading
@@ -25,9 +25,7 @@ from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from qt_material import apply_stylesheet
-import web_api  # Import the web API module
-import web_api_proxy
-import rotator
+from lib import rotator
 
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -69,6 +67,11 @@ ROTATOR_AZ_MAX = configur.getint('rotator', 'az_max', fallback=450)
 ROTATOR_EL_MIN = configur.getint('rotator', 'gel_min', fallback=0)
 ROTATOR_EL_MAX = configur.getint('rotator', 'el_max', fallback=180)
 ROTATOR_MIN_ELEVATION = configur.getint('rotator', 'min_elevation', fallback=5)
+# Webapi config
+if configur.has_section('web_api') and configur.getboolean('web_api', 'enabled'):
+    WEBAPI_ENABLED = True
+else:
+    WEBAPI_ENABLED = False
 
 if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
@@ -84,6 +87,9 @@ if configur.get('misc', 'display_map') == "True":
 elif configur.get('misc', 'display_map') == "False":
     DISPLAY_MAP = False
 
+if configur.has_section('web_api') and configur.getboolean('web_api', 'enabled'):
+    from lib import web_api  # Import the web API module
+    from lib import web_api_proxy
 
 ### Global constants
 C = 299792458.
@@ -337,7 +343,47 @@ class MainWindow(QMainWindow):
 
         self.counter = 0
         self.my_satellite = Satellite()
+        
+        if WEBAPI_ENABLED:
+            # Register this window with the web API
+            web_api.register_window(self)
+        
+            # Start web API server in a separate thread if enabled
+            self.web_api_thread = threading.Thread(target=web_api.run_socketio, daemon=True)
+            self.web_api_thread.start()
+            print(f"Web API server started on port {configur.get('web_api', 'port', fallback='5000')}")
+        
+            # Set up the web API proxy for thread-safe GUI/timer operations
+            self.web_api_proxy = web_api_proxy.WebApiGuiProxy()
+            self.web_api_proxy.select_satellite.connect(self.slot_select_satellite)
+            self.web_api_proxy.select_transponder.connect(self.slot_select_transponder)
+            self.web_api_proxy.set_subtone.connect(self.slot_set_subtone)
+            self.web_api_proxy.set_rx_offset.connect(self.slot_set_rx_offset)
+            self.web_api_proxy.start_tracking.connect(self.init_worker)
+            self.web_api_proxy.stop_tracking.connect(self.the_stop_button_was_clicked)
+            
+        # Rotator integration
+        self.ROTATOR_ENABLED = ROTATOR_ENABLED
+        self.rotator = None
+        self.rotator_thread = None
+        self.rotator_error = None
+        if ROTATOR_ENABLED:
+            try:
+                self.rotator = rotator.YaesuRotator(
+                    ROTATOR_SERIAL_PORT,
+                    baudrate=ROTATOR_BAUDRATE,
+                    az_min=ROTATOR_AZ_MIN,
+                    az_max=ROTATOR_AZ_MAX,
+                    el_min=ROTATOR_EL_MIN,
+                    el_max=ROTATOR_EL_MAX
+                )
+            except Exception as e:
+                self.rotator_error = f"Rotator init failed: {e}"
+                print(self.rotator_error)
+                self.rotator = None
 
+
+        
         self.setWindowTitle("QTRigDoppler")
         #self.setGeometry(3840*2, 0, 718, 425)
         
@@ -567,6 +613,21 @@ class MainWindow(QMainWindow):
         self.offsetstorebutton.clicked.connect(self.save_settings)
         button_layout.addWidget(self.offsetstorebutton)
         self.offsetstorebutton.setEnabled(False)
+        
+        # Rotator buttons
+        if ROTATOR_ENABLED:
+            # Park Button
+            self.park_rotator_button = QPushButton("Park Rotators")
+            self.park_rotator_button.clicked.connect(self.park_rotators)
+            button_layout.addWidget(self.park_rotator_button)
+            # Stop Button
+            self.stop_rotator_button = QPushButton("Stop Rotation")
+            self.stop_rotator_button.clicked.connect(self.stop_rotators)
+            button_layout.addWidget(self.stop_rotator_button)
+            # Add refresh button
+            self.refresh_rotator_button = QPushButton("Refresh Rotator Position")
+            self.refresh_rotator_button.clicked.connect(self.update_rotator_position)
+            button_layout.addWidget(self.refresh_rotator_button)
 
         # 1x QPushButton (Exit)
         self.Exitbutton = QPushButton("Exit")
@@ -580,13 +641,13 @@ class MainWindow(QMainWindow):
         self.log_sat_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 12pt;} QLabel{font-size: 12pt;}")
         log_sat_status_layout = QGridLayout()
         
-        self.log_sat_status_ele_lbl = QLabel("Elevation:")
+        self.log_sat_status_ele_lbl = QLabel("🛰 Elevation:")
         log_sat_status_layout.addWidget(self.log_sat_status_ele_lbl, 0, 0)
 
         self.log_sat_status_ele_val = QLabel("0.0 °")
         log_sat_status_layout.addWidget(self.log_sat_status_ele_val, 0, 1)
         
-        self.log_sat_status_azi_lbl = QLabel("Azimuth:")
+        self.log_sat_status_azi_lbl = QLabel("🛰 Azimuth:")
         log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 1, 0)
 
         self.log_sat_status_azi_val = QLabel("0.0 °")
@@ -642,6 +703,30 @@ class MainWindow(QMainWindow):
         
         self.log_rig_status.setLayout(log_rig_status_layout)
         log_layout.addWidget(self.log_rig_status, stretch=1)
+        
+        if ROTATOR_ENABLED:
+            # Add rotator position labels in a styled group box
+            self.rotator_status_box = QGroupBox("")
+            self.rotator_status_box.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 12pt;} QLabel{font-size: 12pt;}")
+            rotator_status_layout = QGridLayout()
+            self.rotator_az_label = QLabel("📡 Azimuth:")
+            self.rotator_el_label = QLabel("📡 Elevation:")
+            self.rotator_az_val = QLabel("0.0°")
+            self.rotator_el_val = QLabel("0.0°")
+            rotator_status_layout.addWidget(self.rotator_el_label, 0, 0)
+            rotator_status_layout.addWidget(self.rotator_az_label, 1, 0)
+            rotator_status_layout.addWidget(self.rotator_el_val, 0, 1)
+            rotator_status_layout.addWidget(self.rotator_az_val, 1, 1)
+            self.rotator_status_box.setLayout(rotator_status_layout)
+            log_layout.addWidget(self.rotator_status_box, stretch=1)
+            
+            #Read and display position at startup
+            self.update_rotator_position()
+            #If rotator failed to init, show error
+            if self.rotator_error:
+                self.rotator_az_val.setText("error")
+                self.rotator_el_val.setText("error")
+            self.start_rotator_position_worker()
         
         ## Map layout
         if DISPLAY_MAP:
@@ -872,94 +957,7 @@ class MainWindow(QMainWindow):
         self.utc_clock_timer.setInterval(500)
         self.utc_clock_timer.timeout.connect(self.recurring_utc_clock_timer)
         self.utc_clock_timer.start()
-        
-        # Register this window with the web API
-        web_api.register_window(self)
-        
-        # Start web API server in a separate thread if enabled
-        if configur.has_section('web_api') and configur.getboolean('web_api', 'enabled'):
-            self.web_api_thread = threading.Thread(target=web_api.run_socketio, daemon=True)
-            self.web_api_thread.start()
-            print(f"Web API server started on port {configur.get('web_api', 'port', fallback='5000')}")
-        
-        # Set up the web API proxy for thread-safe GUI/timer operations
-        self.web_api_proxy = web_api_proxy.WebApiGuiProxy()
-        self.web_api_proxy.select_satellite.connect(self.slot_select_satellite)
-        self.web_api_proxy.select_transponder.connect(self.slot_select_transponder)
-        self.web_api_proxy.set_subtone.connect(self.slot_set_subtone)
-        self.web_api_proxy.set_rx_offset.connect(self.slot_set_rx_offset)
-        self.web_api_proxy.start_tracking.connect(self.init_worker)
-        self.web_api_proxy.stop_tracking.connect(self.the_stop_button_was_clicked)
-        
-        # Rotator integration
-        self.ROTATOR_ENABLED = ROTATOR_ENABLED
-        self.rotator = None
-        self.rotator_thread = None
-        self.rotator_error = None
-        if ROTATOR_ENABLED:
-            try:
-                self.rotator = rotator.YaesuRotator(
-                    ROTATOR_SERIAL_PORT,
-                    baudrate=ROTATOR_BAUDRATE,
-                    az_min=ROTATOR_AZ_MIN,
-                    az_max=ROTATOR_AZ_MAX,
-                    el_min=ROTATOR_EL_MIN,
-                    el_max=ROTATOR_EL_MAX
-                )
-            except Exception as e:
-                self.rotator_error = f"Rotator init failed: {e}"
-                print(self.rotator_error)
-                self.rotator = None
-        
-        # Add Park Rotators and Stop Rotation buttons if rotator enabled
-        if ROTATOR_ENABLED:
-            self.park_rotator_button = QPushButton("Park Rotators")
-            self.park_rotator_button.clicked.connect(self.park_rotators)
-            button_layout.addWidget(self.park_rotator_button)
-            self.stop_rotator_button = QPushButton("Stop Rotation")
-            self.stop_rotator_button.clicked.connect(self.stop_rotators)
-            button_layout.addWidget(self.stop_rotator_button)
-            # Add rotator position labels in a styled group box
-            self.rotator_status_box = QGroupBox("Rotator")
-            self.rotator_status_box.setStyleSheet("""
-                QGroupBox {
-                    font-size: 12pt;
-                    font-weight: bold;
-                    border: 2px solid #4f5b62;
-                    border-radius: 6px;
-                    margin-top: 6px;
-                    background-color: #232629;
-                    color: #fff;
-                }
-                QLabel {
-                    font-size: 12pt;
-                    color: #fff;
-                }
-            """)
-            rotator_status_layout = QVBoxLayout()
-            self.rotator_az_label = QLabel("Azimuth: n/a")
-            self.rotator_el_label = QLabel("Elevation: n/a")
-            rotator_status_layout.addWidget(self.rotator_az_label)
-            rotator_status_layout.addWidget(self.rotator_el_label)
-            self.rotator_status_box.setLayout(rotator_status_layout)
-            log_layout.addWidget(self.rotator_status_box)
-            # Add refresh button
-            self.refresh_rotator_button = QPushButton("Refresh Rotator Position")
-            self.refresh_rotator_button.clicked.connect(self.update_rotator_position)
-            button_layout.addWidget(self.refresh_rotator_button)
-            # Read and display position at startup
-            self.update_rotator_position()
-            # If rotator failed to init, show error
-            if self.rotator_error:
-                self.rotator_az_label.setText(self.rotator_error)
-                self.rotator_el_label.setText("")
-            # Periodically update rotator position
-            # self.rotator_update_timer = QTimer()
-            # self.rotator_update_timer.setInterval(2000)  # every 2 seconds
-            # self.rotator_update_timer.timeout.connect(self.update_rotator_position)
-            # self.rotator_update_timer.start()
-            # Start background worker for rotator position polling
-            self.start_rotator_position_worker()
+            
         
     def save_settings(self):
         global LATITUDE
@@ -1037,10 +1035,11 @@ class MainWindow(QMainWindow):
             self.my_satellite.F_cal = f_cal = i
             
             # Notify web clients of RX offset change
-            try:
-                web_api.safe_emit('status', {'rx_offset': i})
-            except Exception as e:
-                print(f"Error broadcasting RX offset change to web clients: {e}")
+            if WEBAPI_ENABLED:
+                try:
+                    web_api.safe_emit('status', {'rx_offset': i})
+                except Exception as e:
+                    print(f"Error broadcasting RX offset change to web clients: {e}")
     
     def rxoffset_button_pushed(self, i):
             new_value = self.rxoffsetbox.value() + int(i)
@@ -1048,10 +1047,11 @@ class MainWindow(QMainWindow):
             
             # Notify web clients of RX offset change (note: setValue will trigger the valueChanged signal, 
             # but we'll add this for clarity and as a backup)
-            try:
-                web_api.safe_emit('status', {'rx_offset': new_value})
-            except Exception as e:
-                print(f"Error broadcasting RX offset button change to web clients: {e}")
+            if WEBAPI_ENABLED:
+                try:
+                    web_api.safe_emit('status', {'rx_offset': new_value})
+                except Exception as e:
+                    print(f"Error broadcasting RX offset button change to web clients: {e}")
     def update_tle_file(self):
         self.the_stop_button_was_clicked()
         try:
@@ -1094,11 +1094,12 @@ class MainWindow(QMainWindow):
             raise MyError()
             
         # Notify web clients of the satellite change
-        try:
-            web_api.broadcast_satellite_change(satname)
-        except Exception as e:
-            print(f"Error broadcasting satellite change to web clients: {e}")
-            
+        if WEBAPI_ENABLED:
+            try:
+                web_api.broadcast_satellite_change(satname)
+            except Exception as e:
+                print(f"Error broadcasting satellite change to web clients: {e}")
+                
     def tpx_changed(self, tpxname):
         global F0
         global I0
@@ -1239,10 +1240,11 @@ class MainWindow(QMainWindow):
                 print(f"Error in fallback timer start: {e2}")
         
         # Notify web clients of the transponder change
-        try:
-            web_api.broadcast_transponder_change(tpxname)
-        except Exception as e:
-            print(f"Error broadcasting transponder change to web clients: {e}")
+        if WEBAPI_ENABLED:
+            try:
+                web_api.broadcast_transponder_change(tpxname)
+            except Exception as e:
+                print(f"Error broadcasting transponder change to web clients: {e}")
             
     def tone_changed(self, tone_name):
         
@@ -1288,10 +1290,11 @@ class MainWindow(QMainWindow):
             icomTrx.setVFO("VFOA")
             
         # Notify web clients of the subtone change
-        try:
-            web_api.broadcast_subtone_change(tone_name)
-        except Exception as e:
-            print(f"Error broadcasting subtone change to web clients: {e}")
+        if WEBAPI_ENABLED:
+            try:
+                web_api.broadcast_subtone_change(tone_name)
+            except Exception as e:
+                print(f"Error broadcasting subtone change to web clients: {e}")
 
     def the_exit_button_was_clicked(self):
         self.the_stop_button_was_clicked()
@@ -1315,10 +1318,11 @@ class MainWindow(QMainWindow):
             self.stop_rotator_thread()
             self.park_rotators()
         # Notify web clients of tracking state change
-        try:
-            web_api.broadcast_tracking_state(False)
-        except Exception as e:
-            print(f"Error broadcasting tracking stop to web clients: {e}")
+        if WEBAPI_ENABLED:
+            try:
+                web_api.broadcast_tracking_state(False)
+            except Exception as e:
+                print(f"Error broadcasting tracking stop to web clients: {e}")
 
     def the_sync_button_was_clicked(self):
         self.my_satellite.F = self.my_satellite.F_init
@@ -1340,10 +1344,11 @@ class MainWindow(QMainWindow):
         if ROTATOR_ENABLED:
             self.start_rotator_thread()
         # Notify web clients of tracking state change
-        try:
-            web_api.broadcast_tracking_state(True)
-        except Exception as e:
-            print(f"Error broadcasting tracking start to web clients: {e}")
+        if WEBAPI_ENABLED:
+            try:
+                web_api.broadcast_tracking_state(True)
+            except Exception as e:
+                print(f"Error broadcasting tracking start to web clients: {e}")
 
     def calc_doppler(self, progress_callback):
         global CVIADDR
@@ -1806,18 +1811,18 @@ class MainWindow(QMainWindow):
             try:
                 az, el = self.rotator.get_position()
                 if az is not None and el is not None:
-                    self.rotator_az_label.setText(f"Azimuth: {az}°")
-                    self.rotator_el_label.setText(f"Elevation: {el}°")
+                    self.rotator_az_val.setText(f"{az}°")
+                    self.rotator_el_val.setText(f"{el}°")
                 else:
-                    self.rotator_az_label.setText("Azimuth: error reading position")
-                    self.rotator_el_label.setText("Elevation: error reading position")
+                    self.rotator_az_val.setText("Pos. error")
+                    self.rotator_el_val.setText("Pos. error")
             except Exception as e:
                 print(f"Error updating rotator position: {e}")
-                self.rotator_az_label.setText(f"Azimuth: {e}")
-                self.rotator_el_label.setText("Elevation: error")
+                self.rotator_az_val.setText("error")
+                self.rotator_el_val.setText("error")
         elif ROTATOR_ENABLED:
-            self.rotator_az_label.setText("Rotator not initialized")
-            self.rotator_el_label.setText("")
+            self.rotator_az_val.setText("")
+            self.rotator_el_val.setText("")
 
     def start_rotator_position_worker(self):
         if self.rotator:
@@ -1833,11 +1838,11 @@ class MainWindow(QMainWindow):
     @Slot(object, object)
     def handle_rotator_position_update(self, az, el):
         if az is not None and el is not None:
-            self.rotator_az_label.setText(f"Azimuth: {az}°")
-            self.rotator_el_label.setText(f"Elevation: {el}°")
+            self.rotator_az_val.setText(f"{az}°")
+            self.rotator_el_val.setText(f"{el}°")
         else:
-            self.rotator_az_label.setText("Azimuth: error reading position")
-            self.rotator_el_label.setText("Elevation: error reading position")
+            self.rotator_az_val.setText("Pos. error")
+            self.rotator_el_val.setText("Pos. error")
 
 class WorkerSignals(QObject):
     finished = Signal()
@@ -1907,7 +1912,7 @@ if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
 
 app = QApplication(sys.argv)
 window = MainWindow()
-apply_stylesheet(app, theme='dark_lightgreen.xml')
+apply_stylesheet(app, theme="dark_lightgreen.xml")
 tooltip_stylesheet = """
         QToolTip {
             color: white;
@@ -1944,7 +1949,6 @@ tooltip_stylesheet_rpi = """
         QPushButton{font-size: 20pt;}
     """
 app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
-#window.setWindowFlag(Qt.FramelessWindowHint)
 window.show()
 app.exec()
 
