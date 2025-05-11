@@ -7,18 +7,38 @@
  <img alt="Shows QTRigDoppler GUI." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
 </picture> 
 
-## RigDoppler features doppler shift control for ICOM radios.
+## RigDoppler features doppler shift control for ICOM radios
 
 Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
-Adapted v0.3 and QT by EA4HCF Pedro Cabrera (@PCabreraCamara)  
+Adapted by EA4HCF Pedro Cabrera (@PCabreraCamara)  
 Extended and modified by DL3JOP Joshua Petry (@dl3jop)
+Contributions in this repo by:
+Joshua, Dl3JOP
+Peter, 2M0SQL
 
-Attention: I'm looking for bug reports and new features. Every pull-request/issue is welcomed.<br/>
-Note: Read the Readme regarding setup and initial installation.<br/>
-Note: The software is tested on my two IC-910H (EU as well as US version). The IC-9700 should work as well but I did not check that. Please report your findings!<br/>
+## What QTRigdoppler does
 
-## Installation guide
-### Ubuntu 24.10 or higher
+QTRigdoppler keeps track of satellites and their transponders. It handles mutliple tasks: <br/>
+ 1) Tracking satellites and calculating the doppler shifts of their used frequencies.<br/>
+ 2) Update VFOs of a connected ICOM IC-910 (and IC-9700) for fully automatic frequency tracking.<br/>
+ 3) Depending on the transpoder type: FM/SSB Voice or FM/SSB Data, the software determines the best tracking approch.<br/>
+ 4) Rotators can be connected to sync their postion with the current satellite.<br/>
+ 5) A websocket option enable integration into software like [Zenith](https://github.com/magicbug/Zenith).<br/>
+ 6) There is an optional map you can use to plot the satellites position<br/>
+ 
+## Installation and Usage
+
+You can run QTRigdoppler as a pre-compiled binary available from the release section. The binary should work on all major Linux dsitributions. Please report any troubles you might encounter.
+To make this possible, the binary conatins a full packed python environment which decreases its speed on startup.<br/>
+
+As an alternative, you can install it yourself follwing the installation guides for Ubuntu or Manjaro.
+
+After installation/download you need to adjust the configuration inthe `Settings` Tab to suit your needs. If you have a US configured IC-910 you need to change the rig type from `EU` to `US` otherwise TSL or TONE won't work
+You might also need to change the serial port of your CI-V to serial adapter. The easiest solution is to run `sudo dmesg -wH` in a terminal and plugging in your serial adpter to get the serial port name.
+Portnames might be `/dev/ttyUSB0`, `/dev/ttyUSB1` .... or `/dev/tty/ACM0` ...
+If you like, you can also edit the `config.ini` to access developer or more advanced options.
+
+### Install on Ubuntu 24.10 or higher
  1) It is assumed that you use Ubuntu 24.10 (or newer) or a derivative of it
  2) Open a terminal
  3) Update package sources by:<br/> `sudo apt update`
@@ -30,52 +50,26 @@ Note: The software is tested on my two IC-910H (EU as well as US version). The I
  9) Start using:<br/> `python3 QTrigdoppler.py`
  10) For every startup from now on repeat step 2,7 and 8 or create a starter in the start menu
 
- 11) TLDR:\
+ TLDR:\
      `sudo apt update`\
      `sudo apt install git python3 python3-pyqt5 python3-qt-material python3-ephem python3-numpy`\
      `sudo adduser [username, remove brackets] dialout`\
      `git clone https://github.com/dl3jop/QTrigdoppler.git`\
      `python3 QTrigdoppler.py`
 
-### Arch or derivatives (e.g.: Manjaro)
+### Install on Arch or derivatives (e.g.: Manjaro)
+The installation process is similar to the one on Ubuntu:
 `sudo pacman -Syu`\
      `sudo pacman -S git python python-pyqt5 python-qt-material python-ephem python-numpy`\
      `sudo usermod -aG uucp [username, remove brackets]`\
      `git clone https://github.com/dl3jop/QTrigdoppler.git`\
      `python3 QTrigdoppler.py`
 
-## Requirements for using the map:  
-Currently, using the map is not advised due to bad perfomance. If you choose to try it, you'll need:<br/>
-`matplotlib
-cartopy
-pyproj`
-  
-    
-# Basic Configuration:
-<picture>
- <source media="(prefers-color-scheme: dark)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
- <source media="(prefers-color-scheme: light)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
- <img alt="Shows the GUI for editing config." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/menu_config.png">
-</picture> 
-
-## Configuration notes
-
-1) maximum and minimun values for RX and TX offset (Hertz) can be adjusted if the per device drift should exceed the normal range.<br/>
-
-2) tle_file must contain ephemeris two line elements to calculate satellite passes over the coordinates in the [qth] section. <br/>
-
-3) sqffile must contain satellites' frequencies (both downlink and uplink), following the same format as the original SatPC32 file. <br/>
-
-4) Doppler Thresholds:
-     - Select the thresholds for FM/SSB doppler correction. Frequencies are not updated when the difference between the current doppler frequency and radio frequency is below the threshold.
-5) Offset Profiles:
-    - Offsets will be automatically loaded when selecting the satellite. Satellite and transponder name must be the same as in the doppler.sqf file:
-      satoffset1 = IO-117,Digipeater,-750,-750
-      where IO-117 is the the satellites name, Digipeater the description/transponder and the two numbers RX/TX offset.
-## Attention:
-After installation/download you need to adjust `config.ini` to suit your needs. If you have a US configured IC-910 you need to change the `rig_type` from `EU` to `US` otherwise TSL or T won't work
-You might also need to change the serial port of your CI-V to serial adapter. The easiest solution is to run `sudo dmesg -wH` in a terminal and plugging in your serial adpter to get the serial port name.
-Portnames might be `/dev/ttyUSB0`, `/dev/ttyUSB1` .... or `/dev/tty/ACM0` ... 
+#### Requirements for using the map:  
+Currently, using the map is not advised due to bad perfomance. If you choose to try it, you'll need these additional python packages:<br/>
+`matplotlib`<br/>
+`cartopy`<br/>
+`pyproj`<br/>
 
 # Changelog
 DL3JOP modifications: <br/>
@@ -100,11 +94,10 @@ DL3JOP modifications: <br/>
   - Refactor tracking loop:
     - no global F0/I0 variables, more abstracted methods to allow eaier implementation of other radios
     
-# Web API and WebSocket Usage
-
-QTrigdoppler includes a web API that allows for remote control of the application through a web browser or other applications. This is useful for satellite tracking from a remote location or for integrating with other software.
-
-## Configuration
+# Adavced information
+    
+## Web API and WebSocket Usage
+### Configuration
 The web API can be configured in the `config.ini` file under the `[web_api]` section:
 
 ```ini
@@ -118,7 +111,7 @@ debug = False
 - `port`: The TCP port the web server will listen on (default: 5000)
 - `debug`: Set to `True` to enable debug output, or `False` for normal operation
 
-## Usage
+### Usage
 When enabled, the web API server starts automatically with QTrigdoppler. You can access the web interface by opening a web browser and navigating to:
 
 ```
@@ -194,6 +187,6 @@ socket.on('status', (data) => {
 
 For more advanced integration, see the code in `web_api_client.html` or contact the project maintainers.
 
-# Compile using pyinstaller
+## Compile using pyinstaller
 
 `pyinstaller --onefile QTrigdoppler.py --exclude PyQt6 --splash images/splash.jpg`
