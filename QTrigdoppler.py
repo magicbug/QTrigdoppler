@@ -72,7 +72,12 @@ if configur.has_section('web_api') and configur.getboolean('web_api', 'enabled')
     WEBAPI_ENABLED = True
 else:
     WEBAPI_ENABLED = False
-
+if configur.has_section('web_api') and configur.getboolean('web_api', 'debug'):
+    WEBAPI_DEBUG_ENABLED = True
+else:
+    WEBAPI_DEBUG_ENABLED = False
+WEBAPI_PORT = configur.getint('web_api', 'port', fallback=5000)
+    
 if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
 elif configur.get('icom', 'fullmode') == "False":
@@ -932,16 +937,177 @@ class MainWindow(QMainWindow):
         settings_layout.addLayout(settings_value_layout)
         settings_layout.addLayout(settings_store_layout)
         
+        ### Advanced Settings Tab
+        adv_settings_value_layout = QHBoxLayout()
+        
+        
+        # Webapi
+        self.adv_settings_webapi_box = QGroupBox("WebAPI")
+        self.adv_settings_webapi_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
+        adv_settings_value_layout.addWidget(self.adv_settings_webapi_box, stretch=1)
+        
+        ## Enable
+        webapi_settings_layout = QGridLayout()
+        self.webapi_en_lbl = QLabel("Active:")
+        webapi_settings_layout.addWidget(self.webapi_en_lbl, 0, 0)
+        
+        self.webapi_enable_button = QCheckBox()
+        webapi_settings_layout.addWidget(self.webapi_enable_button, 0, 1)
+        if WEBAPI_ENABLED == True:
+            self.webapi_enable_button.setChecked(1)
+        elif WEBAPI_ENABLED == False:
+            self.webapi_enable_button.setChecked(0)
+            
+        self.webapi_en_lbl = QLabel("Debug:")
+        webapi_settings_layout.addWidget(self.webapi_en_lbl, 1, 0)    
+        self.webapi_debug_enable_button = QCheckBox()
+        webapi_settings_layout.addWidget(self.webapi_debug_enable_button, 1, 1)
+        if WEBAPI_DEBUG_ENABLED == True:
+            self.webapi_debug_enable_button.setChecked(1)
+        elif WEBAPI_DEBUG_ENABLED == False:
+            self.webapi_debug_enable_button.setChecked(0)
+            
+        self.webapi_port_lbl = QLabel("Port:")
+        webapi_settings_layout.addWidget(self.webapi_port_lbl, 2, 0)
+
+        self.webapi_port_val = QLineEdit()
+        self.webapi_port_val.setMaxLength(5)
+        self.webapi_port_val.setText(str(WEBAPI_PORT))
+        webapi_settings_layout.addWidget(self.webapi_port_val, 2, 1)
+        
+        self.adv_settings_webapi_box.setLayout(webapi_settings_layout)
+
+        
+        # Rotator
+        self.adv_settings_rotator_box = QGroupBox("rotator")
+        self.adv_settings_rotator_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
+        adv_settings_value_layout.addWidget(self.adv_settings_rotator_box, stretch=1)
+        
+        ## Enable
+        rotator_settings_layout = QGridLayout()
+        self.rotator_en_lbl = QLabel("Active:")
+        rotator_settings_layout.addWidget(self.rotator_en_lbl, 0, 0)
+        
+        self.rotator_enable_button = QCheckBox()
+        rotator_settings_layout.addWidget(self.rotator_enable_button, 0, 1)
+        if ROTATOR_ENABLED == True:
+            self.rotator_enable_button.setChecked(1)
+        elif ROTATOR_ENABLED == False:
+            self.rotator_enable_button.setChecked(0)
+            
+        self.rotator_serialport_lbl = QLabel("Port:")
+        rotator_settings_layout.addWidget(self.rotator_serialport_lbl, 1, 0)
+
+        self.rotator_serialport_val = QLineEdit()
+        self.rotator_serialport_val.setMaxLength(50)
+        self.rotator_serialport_val.setText(str(ROTATOR_SERIAL_PORT))
+        rotator_settings_layout.addWidget(self.rotator_serialport_val, 1, 1)
+        
+        self.rotator_serialrate_lbl = QLabel("Baudrate:")
+        rotator_settings_layout.addWidget(self.rotator_serialrate_lbl, 2, 0)
+
+        self.rotator_serialrate_val = QLineEdit()
+        self.rotator_serialrate_val.setMaxLength(6)
+        self.rotator_serialrate_val.setText(str(ROTATOR_BAUDRATE))
+        rotator_settings_layout.addWidget(self.rotator_serialrate_val, 2, 1)
+        
+        self.rotator_azpark_lbl = QLabel("Az Park:")
+        rotator_settings_layout.addWidget(self.rotator_azpark_lbl, 3, 0)
+        self.rotator_azpark_val = QLineEdit()
+        self.rotator_azpark_val.setMaxLength(6)
+        self.rotator_azpark_val.setText(str(ROTATOR_AZ_PARK))
+        rotator_settings_layout.addWidget(self.rotator_azpark_val, 3, 1)
+        
+        self.rotator_elpark_lbl = QLabel("El Park:")
+        rotator_settings_layout.addWidget(self.rotator_elpark_lbl, 4, 0)
+        self.rotator_elpark_val = QLineEdit()
+        self.rotator_elpark_val.setMaxLength(6)
+        self.rotator_elpark_val.setText(str(ROTATOR_EL_PARK))
+        rotator_settings_layout.addWidget(self.rotator_elpark_val, 4, 1)
+        
+        self.rotator_azmin_lbl = QLabel("Az Min:")
+        rotator_settings_layout.addWidget(self.rotator_azmin_lbl, 5, 0)
+        self.rotator_azmin_val = QLineEdit()
+        self.rotator_azmin_val.setMaxLength(6)
+        self.rotator_azmin_val.setText(str(ROTATOR_AZ_MIN))
+        rotator_settings_layout.addWidget(self.rotator_azmin_val, 5, 1)
+        
+        self.rotator_azmax_lbl = QLabel("Az Max:")
+        rotator_settings_layout.addWidget(self.rotator_azmax_lbl, 6, 0)
+        self.rotator_azmax_val = QLineEdit()
+        self.rotator_azmax_val.setMaxLength(6)
+        self.rotator_azmax_val.setText(str(ROTATOR_AZ_MAX))
+        rotator_settings_layout.addWidget(self.rotator_azmax_val, 6, 1)
+        
+        self.rotator_elmin_lbl = QLabel("El Min:")
+        rotator_settings_layout.addWidget(self.rotator_elmin_lbl, 7, 0)
+        self.rotator_elmin_val = QLineEdit()
+        self.rotator_elmin_val.setMaxLength(6)
+        self.rotator_elmin_val.setText(str(ROTATOR_EL_MIN))
+        rotator_settings_layout.addWidget(self.rotator_elmin_val, 7, 1)
+        
+        self.rotator_elmax_lbl = QLabel("El Max:")
+        rotator_settings_layout.addWidget(self.rotator_elmax_lbl, 8, 0)
+        self.rotator_elmax_val = QLineEdit()
+        self.rotator_elmax_val.setMaxLength(6)
+        self.rotator_elmax_val.setText(str(ROTATOR_EL_MAX))
+        rotator_settings_layout.addWidget(self.rotator_elmax_val, 8, 1)
+
+        self.rotator_minelev_lbl = QLabel("Min Elevation:")
+        rotator_settings_layout.addWidget(self.rotator_minelev_lbl, 9, 0)
+        self.rotator_minelev_val = QLineEdit()
+        self.rotator_minelev_val.setMaxLength(6)
+        self.rotator_minelev_val.setText(str(ROTATOR_MIN_ELEVATION))
+        rotator_settings_layout.addWidget(self.rotator_minelev_val, 9, 1)
+            
+        self.adv_settings_rotator_box.setLayout(rotator_settings_layout)
+        
+        
+        # Cloudlog/Wavelof
+        self.adv_settings_log_box = QGroupBox("Logbook")
+        self.adv_settings_log_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
+        adv_settings_value_layout.addWidget(self.adv_settings_log_box, stretch=1)
+        
+        ## Enable
+        log_settings_layout = QGridLayout()
+        self.log_en_lbl = QLabel("Active:")
+        log_settings_layout.addWidget(self.log_en_lbl, 0, 0)
+        
+        self.log_enable_button = QCheckBox()
+        log_settings_layout.addWidget(self.log_enable_button, 0, 1)
+        #if ROTATOR_ENABLED == True:
+        #    self.rotator_enable_button.setChecked(1)
+        #elif ROTATOR_ENABLED == False:
+        #    self.rotator_enable_button.setChecked(0)
+            
+        self.log_url_lbl = QLabel("URL:")
+        log_settings_layout.addWidget(self.log_url_lbl, 1, 0)
+
+        self.log_url_val = QLineEdit()
+        self.log_url_val.setMaxLength(100)
+        self.log_url_val.setText(str("localhost"))
+        log_settings_layout.addWidget(self.log_url_val, 1, 1)
+        
+        self.adv_settings_log_box.setLayout(log_settings_layout)
+        
+        # Glueing advanced setting layouts together
+        adv_settings_layout = QVBoxLayout()
+        adv_settings_layout.addLayout(adv_settings_value_layout)
+        #settings_layout.addLayout(settings_store_layout)
+        
         
 
         ###  UI Layout / Tab Widget
         self.tab_widget = QTabWidget()
         self.tab_overview = QWidget()
         self.tab_settings = QWidget()
+        self.tab_adv_settings = QWidget()
         self.tab_widget.addTab(self.tab_overview,"Overview")
         self.tab_widget.addTab(self.tab_settings,"Settings")
+        self.tab_widget.addTab(self.tab_adv_settings,"Feature Settings")
         self.tab_overview.setLayout(overview_pagelayout)
         self.tab_settings.setLayout(settings_layout)
+        self.tab_adv_settings.setLayout(adv_settings_layout)
         self.setCentralWidget(self.tab_widget)
         
         QScroller.grabGesture(
