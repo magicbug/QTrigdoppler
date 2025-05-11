@@ -64,7 +64,7 @@ ROTATOR_AZ_PARK = configur.getint('rotator', 'az_park', fallback=0)
 ROTATOR_EL_PARK = configur.getint('rotator', 'el_park', fallback=0)
 ROTATOR_AZ_MIN = configur.getint('rotator', 'az_min', fallback=0)
 ROTATOR_AZ_MAX = configur.getint('rotator', 'az_max', fallback=450)
-ROTATOR_EL_MIN = configur.getint('rotator', 'gel_min', fallback=0)
+ROTATOR_EL_MIN = configur.getint('rotator', 'el_min', fallback=0)
 ROTATOR_EL_MAX = configur.getint('rotator', 'el_max', fallback=180)
 ROTATOR_MIN_ELEVATION = configur.getint('rotator', 'min_elevation', fallback=5)
 # Webapi config
@@ -1141,6 +1141,15 @@ class MainWindow(QMainWindow):
         global OPMODE
         global LAST_TLE_UPDATE
         global RIG_TYPE
+        global ROTATOR_SERIAL_PORT
+        global ROTATOR_BAUDRATE
+        global ROTATOR_AZ_PARK
+        global ROTATOR_EL_PARK
+        global ROTATOR_AZ_MIN
+        global ROTATOR_AZ_MAX
+        global ROTATOR_EL_MIN
+        global ROTATOR_EL_MAX
+        global ROTATOR_MIN_ELEVATION
 
         LATITUDE = self.qth_settings_lat_edit.displayText()
         configur['qth']['latitude'] = str(float(LATITUDE))
@@ -1191,6 +1200,19 @@ class MainWindow(QMainWindow):
         
         # Save TLE update
         configur['misc']['last_tle_update'] = LAST_TLE_UPDATE
+        
+        ROTATOR_ENABLED =self.rotator_enable_button.isChecked()
+        configur['rotator']['enabled'] = str(ROTATOR_ENABLED)
+        configur['rotator']['serial_port'] = ROTATOR_SERIAL_PORT = self.rotator_serialport_val.displayText()
+        configur['rotator']['baudrate'] = ROTATOR_BAUDRATE = self.rotator_serialrate_val.displayText()
+        configur['rotator']['az_park'] = ROTATOR_AZ_PARK = self.rotator_azpark_val.displayText()
+        configur['rotator']['el_park'] = ROTATOR_EL_PARK = self.rotator_elpark_val.displayText()
+        configur['rotator']['az_min'] = ROTATOR_AZ_MIN = self.rotator_azmin_val.displayText()
+        configur['rotator']['az_max'] = ROTATOR_AZ_MAX = self.rotator_azmax_val.displayText()
+        configur['rotator']['el_min'] = ROTATOR_EL_MIN = self.rotator_elmin_val.displayText()
+        configur['rotator']['el_max'] = ROTATOR_EL_MAX = self.rotator_elmax_val.displayText()
+        configur['rotator']['min_elevation'] = ROTATOR_MIN_ELEVATION = self.rotator_minelev_val.displayText()
+
 
         with open('config.ini', 'w') as configfile:
             configur.write(configfile)
