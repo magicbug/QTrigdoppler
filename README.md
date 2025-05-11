@@ -91,6 +91,7 @@ DL3JOP modifications: <br/>
 2M0SQL Modifications:<br>
     1) Changed to PySide<br/>
     2) Implimented Websocket features using Flask and SocketIO
+    3) Added Cloudlog integration: automatic logging of frequency and satellite info via Cloudlog API, configurable in config.ini.
     
 # Roadmap:
   - Adding support for IC-9700 (should be easy as it uses nearly the same comands as the IC-910H)
@@ -193,3 +194,29 @@ socket.on('status', (data) => {
 - The server must be running and accessible from your network for remote clients to connect.
 
 For more advanced integration, see the code in `web_api_client.html` or contact the project maintainers.
+
+## Cloudlog Integration
+
+QTrigdoppler can automatically send frequency and satellite information to [Cloudlog](https://cloudlog.co.uk/) via its API.
+
+### Configuration
+
+Add or update the `[Cloudlog]` section in your `config.ini`:
+
+```ini
+[Cloudlog]
+enabled = True
+api_key = YOUR_API_KEY
+url = https://your.cloudlog.site
+```
+
+- `enabled`: Set to `True` to enable Cloudlog logging, or `False` to disable it.
+- `api_key`: Your Cloudlog API key.
+- `url`: The base URL of your Cloudlog installation (e.g., `https://your.cloudlog.site`). The API endpoint used is `/index.php/api/radio`.
+
+### How it Works
+
+- When you select a new transponder, QTrigdoppler will send the current TX and RX frequencies, modes, and satellite name to Cloudlog.
+- If the mode is `FMN`, it will be sent as `FM` to Cloudlog.
+- All Cloudlog API activity and errors are logged to the console.
+- The feature is non-blocking and will not slow down the GUI.
