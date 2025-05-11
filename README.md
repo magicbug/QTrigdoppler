@@ -7,7 +7,7 @@
  <img alt="Shows QTRigDoppler GUI." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
 </picture> 
 
-## QTRigdoppler features doppler shift control for ICOM radios
+## 📌 QTRigdoppler features doppler shift control for ICOM radios
 
 Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
 Adapted by EA4HCF Pedro Cabrera (@PCabreraCamara)  
@@ -15,8 +15,8 @@ Extended and modified by DL3JOP Joshua Petry (@dl3jop)
 Contributions in this repo by:
 Joshua, Dl3JOP
 Peter, 2M0SQL
-
-## What QTRigdoppler does
+ 
+## 🧠 What QTRigdoppler does
 
 QTRigdoppler keeps track of satellites and their transponders. It handles mutliple tasks: <br/>
  1) Tracking satellites and calculating the doppler shifts of their used frequencies.<br/>
@@ -26,7 +26,7 @@ QTRigdoppler keeps track of satellites and their transponders. It handles mutlip
  5) A websocket option enable integration into software like [Zenith](https://github.com/magicbug/Zenith).<br/>
  6) There is an optional map you can use to plot the satellites position<br/>
  
-## Installation and Usage
+## 📥💻 Installation and Usage
 
 You can run QTRigdoppler as a pre-compiled binary available from the release section. The binary should work on all major Linux dsitributions. Please report any troubles you might encounter.
 To make this possible, the binary conatins a full packed python environment which decreases its speed on startup.<br/>
@@ -65,13 +65,13 @@ The installation process is similar to the one on Ubuntu:<br/>
  `git clone https://github.com/dl3jop/QTrigdoppler.git`\
  `python3 QTrigdoppler.py`
 
-#### Requirements for using the map:  
+#### 🗺️ Requirements for using the map:  
 Currently, using the map is not advised due to bad perfomance. If you choose to try it, you'll need these additional python packages:<br/>
 `matplotlib`<br/>
 `cartopy`<br/>
 `pyproj`<br/>
 
-# Changelog
+# 📋🔄⏳ Changelog
 DL3JOP modifications: <br/>
     1) Removed hamlib<br/>
     2) support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)<br/>
@@ -86,7 +86,7 @@ DL3JOP modifications: <br/>
     1) Changed to PySide<br/>
     2) Implemented Websocket features using Flask and SocketIO
     
-# Roadmap
+# 🎯 Roadmap
   - Adding support for IC-9700 (should be easy as it uses nearly the same comands as the IC-910H)
   - Adding support for FT-8xx radios. Same approch: serial driver, although that will add additonal reworks in the doppler tracking loop to account for two radios
   - Building a much nicer GUI
@@ -94,7 +94,7 @@ DL3JOP modifications: <br/>
   - Refactor tracking loop:
     - no global F0/I0 variables, more abstracted methods to allow eaier implementation of other radios
     
-# Adavced information
+# 🛠️ Advanced information
     
 ## Web API and WebSocket Usage
 ### Configuration
@@ -187,6 +187,6 @@ socket.on('status', (data) => {
 
 For more advanced integration, see the code in `web_api_client.html` or contact the project maintainers.
 
-## Compile using pyinstaller
+## 🛠️ Compile using pyinstaller
 
 `pyinstaller --onefile QTrigdoppler.py --exclude PyQt6 --splash images/splash.jpg`
