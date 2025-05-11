@@ -431,7 +431,15 @@ class MainWindow(QMainWindow):
                 if ',' and not ";" in line:
                     newitem = str(line.split(",")[0].strip())
                     satlist += [newitem]
-        satlist=list(dict.fromkeys(satlist))  
+        satlist = list(dict.fromkeys(satlist))  # Deduplicate
+
+        def sat_sort_key(name):
+            match = re.match(r"([A-Za-z]+)-(\d+)", name)
+            if match:
+                prefix, num = match.groups()
+                return (prefix, int(num))
+            return (name, 0)
+        satlist.sort(key=sat_sort_key)
         self.combo1.addItems(['Select one...'])
         self.combo1.addItems(satlist)
         self.combo1.currentTextChanged.connect(self.sat_changed) 
@@ -1012,6 +1020,9 @@ class MainWindow(QMainWindow):
             # Start background worker for rotator position polling
             self.start_rotator_position_worker()
         
+        self._last_cloudlog_F = None
+        self._last_cloudlog_I = None
+    
     def save_settings(self):
         global LATITUDE
         global LONGITUDE
@@ -1283,6 +1294,8 @@ class MainWindow(QMainWindow):
             sat_name=self.my_satellite.name
         )
         QThreadPool.globalInstance().start(worker)
+        self._last_cloudlog_F = self.my_satellite.F
+        self._last_cloudlog_I = self.my_satellite.I
         
         # Safely start the timer from any thread    
         try:
@@ -1734,7 +1747,26 @@ class MainWindow(QMainWindow):
                 self.map_canvas.lon = sat_lon_calc(self.my_satellite.tledata)
                 self.map_canvas.alt_km = int(round(float(sat_height_calc(self.my_satellite.tledata))))
                 self.map_canvas.draw_map()
-            
+
+            # Cloudlog: only log if F or I changed and satellite is above horizon
+            try:
+                elevation = float(sat_ele_calc(self.my_satellite.tledata))
+            except Exception:
+                elevation = -1
+            F_now = self.my_satellite.F
+            I_now = self.my_satellite.I
+            if elevation > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
+                worker = CloudlogWorker(
+                    sat=self.my_satellite,
+                    tx_freq=I_now,
+                    rx_freq=F_now,
+                    tx_mode=self.my_satellite.upmode,
+                    rx_mode=self.my_satellite.downmode,
+                    sat_name=self.my_satellite.name
+                )
+                QThreadPool.globalInstance().start(worker)
+                self._last_cloudlog_F = F_now
+                self._last_cloudlog_I = I_now
         except:
             print("Error in label timer")
             traceback.print_exc()
