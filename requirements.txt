@@ -9,3 +9,4 @@ cartopy
 pyproj
 Flask
 Flask-SocketIO
+requests

@@ -25,7 +25,10 @@ from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from qt_material import apply_stylesheet
+import requests
+
 from lib import rotator
+
 
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -67,6 +70,13 @@ ROTATOR_AZ_MAX = configur.getint('rotator', 'az_max', fallback=450)
 ROTATOR_EL_MIN = configur.getint('rotator', 'el_min', fallback=0)
 ROTATOR_EL_MAX = configur.getint('rotator', 'el_max', fallback=180)
 ROTATOR_MIN_ELEVATION = configur.getint('rotator', 'min_elevation', fallback=5)
+
+
+# Cloudlog config
+CLOUDLOG_API_KEY = configur.get('Cloudlog', 'api_key', fallback=None)
+CLOUDLOG_URL = configur.get('Cloudlog', 'url', fallback=None)
+CLOUDLOG_ENABLED = configur.getboolean('Cloudlog', 'enabled', fallback=False)
+
 # Webapi config
 if configur.has_section('web_api') and configur.getboolean('web_api', 'enabled'):
     WEBAPI_ENABLED = True
@@ -202,6 +212,50 @@ def sat_next_event_calc(ephemdata):
 def MyError():
     print("Failed to find required file!")
     sys.exit()
+    
+# Function to send data to Cloudlog (now only used by worker)
+def send_to_cloudlog(sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name):
+    if not CLOUDLOG_ENABLED:
+        print("Cloudlog: Disabled in config.ini")
+        return
+    if not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
+        print("Cloudlog API key or URL not set in config.ini")
+        return
+    # Convert FMN to FM for Cloudlog
+    tx_mode_send = 'FM' if tx_mode == 'FMN' else tx_mode
+    rx_mode_send = 'FM' if rx_mode == 'FMN' else rx_mode
+    url = CLOUDLOG_URL.rstrip('/') + '/index.php/api/radio'
+    payload = {
+        "key": CLOUDLOG_API_KEY,
+        "radio": "QTRigDoppler",
+        "frequency": str(int(tx_freq)),
+        "mode": tx_mode_send,
+        "frequency_rx": str(int(rx_freq)),
+        "mode_rx": rx_mode_send,
+        "prop_mode": "SAT",
+        "sat_name": sat_name,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=5)
+        if response.status_code == 200:
+            print("Cloudlog API: Success")
+        else:
+            print(f"Cloudlog API: Failed with status {response.status_code}: {response.text}")
+    except Exception as e:
+        print(f"Cloudlog API: Exception occurred: {e}")
+
+# CloudlogWorker for background posting
+class CloudlogWorker(QRunnable):
+    def __init__(self, sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name):
+        super().__init__()
+        self.sat = sat
+        self.tx_freq = tx_freq
+        self.rx_freq = rx_freq
+        self.tx_mode = tx_mode
+        self.rx_mode = rx_mode
+        self.sat_name = sat_name
+    def run(self):
+        send_to_cloudlog(self.sat, self.tx_freq, self.rx_freq, self.tx_mode, self.rx_mode, self.sat_name)
 
 #i = 0
 useroffsets = []
@@ -431,7 +485,15 @@ class MainWindow(QMainWindow):
                 if ',' and not ";" in line:
                     newitem = str(line.split(",")[0].strip())
                     satlist += [newitem]
-        satlist=list(dict.fromkeys(satlist))  
+        satlist = list(dict.fromkeys(satlist))  # Deduplicate
+
+        def sat_sort_key(name):
+            match = re.match(r"([A-Za-z]+)-(\d+)", name)
+            if match:
+                prefix, num = match.groups()
+                return (prefix, int(num))
+            return (name, 0)
+        satlist.sort(key=sat_sort_key)
         self.combo1.addItems(['Select one...'])
         self.combo1.addItems(satlist)
         self.combo1.currentTextChanged.connect(self.sat_changed) 
@@ -1146,6 +1208,9 @@ class MainWindow(QMainWindow):
         self.utc_clock_timer.start()
             
         
+        self._last_cloudlog_F = None
+        self._last_cloudlog_I = None
+    
     def save_settings(self):
         global LATITUDE
         global LONGITUDE
@@ -1437,6 +1502,19 @@ class MainWindow(QMainWindow):
             tleage = int(data[index+1][20:23])
             self.my_satellite.tle_age = day_of_year - tleage
             self.log_tle_state_val.setText("{0} day(s)".format(self.my_satellite.tle_age))
+
+        # Send to Cloudlog in background after updating satellite/transponder info
+        worker = CloudlogWorker(
+            sat=self.my_satellite,
+            tx_freq=self.my_satellite.I,
+            rx_freq=self.my_satellite.F,
+            tx_mode=self.my_satellite.upmode,
+            rx_mode=self.my_satellite.downmode,
+            sat_name=self.my_satellite.name
+        )
+        QThreadPool.globalInstance().start(worker)
+        self._last_cloudlog_F = self.my_satellite.F
+        self._last_cloudlog_I = self.my_satellite.I
         
         # Safely start the timer from any thread    
         try:
@@ -1892,7 +1970,26 @@ class MainWindow(QMainWindow):
                 self.map_canvas.lon = sat_lon_calc(self.my_satellite.tledata)
                 self.map_canvas.alt_km = int(round(float(sat_height_calc(self.my_satellite.tledata))))
                 self.map_canvas.draw_map()
-            
+
+            # Cloudlog: only log if F or I changed and satellite is above horizon
+            try:
+                elevation = float(sat_ele_calc(self.my_satellite.tledata))
+            except Exception:
+                elevation = -1
+            F_now = self.my_satellite.F
+            I_now = self.my_satellite.I
+            if elevation > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
+                worker = CloudlogWorker(
+                    sat=self.my_satellite,
+                    tx_freq=I_now,
+                    rx_freq=F_now,
+                    tx_mode=self.my_satellite.upmode,
+                    rx_mode=self.my_satellite.downmode,
+                    sat_name=self.my_satellite.name
+                )
+                QThreadPool.globalInstance().start(worker)
+                self._last_cloudlog_F = F_now
+                self._last_cloudlog_I = I_now
         except:
             print("Error in label timer")
             traceback.print_exc()
