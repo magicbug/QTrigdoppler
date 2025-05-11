@@ -983,6 +983,9 @@ class MainWindow(QMainWindow):
         self.adv_settings_rotator_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
         adv_settings_value_layout.addWidget(self.adv_settings_rotator_box, stretch=1)
         
+        self.rotator_settings_layout_scroller = QScrollArea()
+        self.rotator_settings_layout_scroller_widget = QWidget()
+        
         ## Enable
         rotator_settings_layout = QGridLayout()
         self.rotator_en_lbl = QLabel("Active:")
@@ -1059,11 +1062,19 @@ class MainWindow(QMainWindow):
         self.rotator_minelev_val.setMaxLength(6)
         self.rotator_minelev_val.setText(str(ROTATOR_MIN_ELEVATION))
         rotator_settings_layout.addWidget(self.rotator_minelev_val, 9, 1)
+        
+        self.rotator_settings_layout_scroller.setLayout(rotator_settings_layout)
+        self.rotator_settings_layout_scroller.setWidget(self.rotator_settings_layout_scroller_widget)
+        self.rotator_settings_layout_scroller.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.rotator_settings_layout_scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.rotator_settings_layout_scroller.setWidgetResizable(True)
+        self.rotator_settings_layout_scroller_layout = QHBoxLayout()
+        self.rotator_settings_layout_scroller_layout.addWidget(self.rotator_settings_layout_scroller)
             
-        self.adv_settings_rotator_box.setLayout(rotator_settings_layout)
+        self.adv_settings_rotator_box.setLayout(self.rotator_settings_layout_scroller_layout)
         
         
-        # Cloudlog/Wavelof
+        # Cloudlog/Wavelog
         self.adv_settings_log_box = QGroupBox("Logbook")
         self.adv_settings_log_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
         adv_settings_value_layout.addWidget(self.adv_settings_log_box, stretch=1)
@@ -1090,9 +1101,19 @@ class MainWindow(QMainWindow):
         
         self.adv_settings_log_box.setLayout(log_settings_layout)
         
+        
+        #Store button
+        adv_settings_store_layout = QVBoxLayout()
+        
+        self.SafeADVSettingsButton = QPushButton("Store Settings - requires restart")
+        self.SafeADVSettingsButton.clicked.connect(self.save_settings)
+        adv_settings_store_layout.addWidget(self.SafeADVSettingsButton)
+        self.SafeADVSettingsButton.setEnabled(True)
+        
         # Glueing advanced setting layouts together
         adv_settings_layout = QVBoxLayout()
         adv_settings_layout.addLayout(adv_settings_value_layout)
+        adv_settings_layout.addLayout(adv_settings_store_layout)
         #settings_layout.addLayout(settings_store_layout)
         
         
@@ -1212,6 +1233,12 @@ class MainWindow(QMainWindow):
         configur['rotator']['el_min'] = ROTATOR_EL_MIN = self.rotator_elmin_val.displayText()
         configur['rotator']['el_max'] = ROTATOR_EL_MAX = self.rotator_elmax_val.displayText()
         configur['rotator']['min_elevation'] = ROTATOR_MIN_ELEVATION = self.rotator_minelev_val.displayText()
+        
+        WEBAPI_ENABLED = self.webapi_enable_button.isChecked()
+        WEBAPI_DEBUG_ENABLED = self.webapi_debug_enable_button.isChecked()
+        configur['web_api']['enabled'] = str(WEBAPI_ENABLED)
+        configur['web_api']['debug'] = str(WEBAPI_DEBUG_ENABLED)
+        configur['web_api']['port'] = WEBAPI_PORT = self.webapi_port_val.displayText()
 
 
         with open('config.ini', 'w') as configfile:
