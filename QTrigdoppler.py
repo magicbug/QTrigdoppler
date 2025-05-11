@@ -28,6 +28,7 @@ from qt_material import apply_stylesheet
 import web_api  # Import the web API module
 import web_api_proxy
 import rotator
+import requests
 
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -69,6 +70,56 @@ ROTATOR_AZ_MAX = configur.getint('rotator', 'az_max', fallback=450)
 ROTATOR_EL_MIN = configur.getint('rotator', 'gel_min', fallback=0)
 ROTATOR_EL_MAX = configur.getint('rotator', 'el_max', fallback=180)
 ROTATOR_MIN_ELEVATION = configur.getint('rotator', 'min_elevation', fallback=5)
+
+# Cloudlog config
+CLOUDLOG_API_KEY = configur.get('Cloudlog', 'api_key', fallback=None)
+CLOUDLOG_URL = configur.get('Cloudlog', 'url', fallback=None)
+CLOUDLOG_ENABLED = configur.getboolean('Cloudlog', 'enabled', fallback=False)
+
+# Function to send data to Cloudlog (now only used by worker)
+def send_to_cloudlog(sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name):
+    if not CLOUDLOG_ENABLED:
+        print("Cloudlog: Disabled in config.ini")
+        return
+    if not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
+        print("Cloudlog API key or URL not set in config.ini")
+        return
+    # Convert FMN to FM for Cloudlog
+    tx_mode_send = 'FM' if tx_mode == 'FMN' else tx_mode
+    rx_mode_send = 'FM' if rx_mode == 'FMN' else rx_mode
+    url = CLOUDLOG_URL.rstrip('/') + '/index.php/api/radio'
+    payload = {
+        "key": CLOUDLOG_API_KEY,
+        "radio": "QTRigDoppler",
+        "frequency": str(int(tx_freq)),
+        "mode": tx_mode_send,
+        "frequency_rx": str(int(rx_freq)),
+        "mode_rx": rx_mode_send,
+        "prop_mode": "SAT",
+        "sat_name": sat_name,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=5)
+        if response.status_code == 200:
+            print("Cloudlog API: Success")
+        else:
+            print(f"Cloudlog API: Failed with status {response.status_code}: {response.text}")
+    except Exception as e:
+        print(f"Cloudlog API: Exception occurred: {e}")
+
+# CloudlogWorker for background posting
+from PySide6.QtCore import QRunnable
+class CloudlogWorker(QRunnable):
+    def __init__(self, sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name):
+        super().__init__()
+        self.sat = sat
+        self.tx_freq = tx_freq
+        self.rx_freq = rx_freq
+        self.tx_mode = tx_mode
+        self.rx_mode = rx_mode
+        self.sat_name = sat_name
+    def run(self):
+        send_to_cloudlog(self.sat, self.tx_freq, self.rx_freq, self.tx_mode, self.rx_mode, self.sat_name)
 
 if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
@@ -1221,6 +1272,17 @@ class MainWindow(QMainWindow):
             tleage = int(data[index+1][20:23])
             self.my_satellite.tle_age = day_of_year - tleage
             self.log_tle_state_val.setText("{0} day(s)".format(self.my_satellite.tle_age))
+
+        # Send to Cloudlog in background after updating satellite/transponder info
+        worker = CloudlogWorker(
+            sat=self.my_satellite,
+            tx_freq=self.my_satellite.I,
+            rx_freq=self.my_satellite.F,
+            tx_mode=self.my_satellite.upmode,
+            rx_mode=self.my_satellite.downmode,
+            sat_name=self.my_satellite.name
+        )
+        QThreadPool.globalInstance().start(worker)
         
         # Safely start the timer from any thread    
         try:
