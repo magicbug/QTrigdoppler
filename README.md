@@ -1,4 +1,4 @@
-# QT RigDoppler
+# QTRigdoppler
 
 
 <picture>
@@ -7,7 +7,7 @@
  <img alt="Shows QTRigDoppler GUI." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/mainWindow.png">
 </picture> 
 
-## RigDoppler features doppler shift control for ICOM radios
+## QTRigdoppler features doppler shift control for ICOM radios
 
 Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
 Adapted by EA4HCF Pedro Cabrera (@PCabreraCamara)  
@@ -51,19 +51,19 @@ If you like, you can also edit the `config.ini` to access developer or more adva
  10) For every startup from now on repeat step 2,7 and 8 or create a starter in the start menu
 
  TLDR:\
-     `sudo apt update`\
-     `sudo apt install git python3 python3-pyqt5 python3-qt-material python3-ephem python3-numpy`\
-     `sudo adduser [username, remove brackets] dialout`\
-     `git clone https://github.com/dl3jop/QTrigdoppler.git`\
-     `python3 QTrigdoppler.py`
+ `sudo apt update`\
+ `sudo apt install git python3 python3-pyqt5 python3-qt-material python3-ephem python3-numpy`\
+ `sudo adduser [username, remove brackets] dialout`\
+ `git clone https://github.com/dl3jop/QTrigdoppler.git`\
+ `python3 QTrigdoppler.py`
 
 ### Install on Arch or derivatives (e.g.: Manjaro)
-The installation process is similar to the one on Ubuntu:
+The installation process is similar to the one on Ubuntu:<br/>
 `sudo pacman -Syu`\
-     `sudo pacman -S git python python-pyqt5 python-qt-material python-ephem python-numpy`\
-     `sudo usermod -aG uucp [username, remove brackets]`\
-     `git clone https://github.com/dl3jop/QTrigdoppler.git`\
-     `python3 QTrigdoppler.py`
+ `sudo pacman -S git python python-pyqt5 python-qt-material python-ephem python-numpy`\
+ `sudo usermod -aG uucp [username, remove brackets]`\
+ `git clone https://github.com/dl3jop/QTrigdoppler.git`\
+ `python3 QTrigdoppler.py`
 
 #### Requirements for using the map:  
 Currently, using the map is not advised due to bad perfomance. If you choose to try it, you'll need these additional python packages:<br/>
@@ -84,9 +84,9 @@ DL3JOP modifications: <br/>
 
 2M0SQL Modifications:<br>
     1) Changed to PySide<br/>
-    2) Implimented Websocket features using Flask and SocketIO
+    2) Implemented Websocket features using Flask and SocketIO
     
-# Roadmap:
+# Roadmap
   - Adding support for IC-9700 (should be easy as it uses nearly the same comands as the IC-910H)
   - Adding support for FT-8xx radios. Same approch: serial driver, although that will add additonal reworks in the doppler tracking loop to account for two radios
   - Building a much nicer GUI
