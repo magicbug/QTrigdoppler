@@ -10,3 +10,4 @@ pyproj
 Flask
 Flask-SocketIO
 requests
+python-socketio[client]

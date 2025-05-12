@@ -199,13 +199,17 @@ def handle_connect():
                     print(f"Fallback: Using default sqffile: {sqffile}")
                 
                 satlist = []
-                
                 with open(sqffile, 'r') as h:
                     sqfdata = h.readlines() 
                     for line in sqfdata:
-                        if ',' and not ";" in line:
+                        # Skip comment lines
+                        if line.strip().startswith(';'):
+                            continue
+                            
+                        if ',' in line:
                             newitem = str(line.split(",")[0].strip())
-                            satlist.append(newitem)
+                            if newitem:
+                                satlist.append(newitem)
                 
                 # Remove duplicates while preserving order
                 unique_satlist = []
@@ -467,19 +471,24 @@ def handle_get_transponder_list(data):
                     print(f"Using SQFILE from config.ini: {sqffile}")
                 except Exception as e:
                     print(f"Failed to get sqffile from config: {e}")
-            
-            # Method 4: Default fallback
+              # Method 4: Default fallback
             if not sqffile:
                 sqffile = 'doppler.sqf'
                 print(f"Using default sqffile: {sqffile}")
                     
             tpxlist = []
-            
             with open(sqffile, 'r') as h:
                 sqfdata = h.readlines()
                 for line in sqfdata:
-                    if line.startswith(satellite_name):
-                        tpxlist.append(str(line.split(",")[8].strip()))
+                    # Skip comment lines
+                    if line.strip().startswith(';'):
+                        continue
+                        
+                    parts = line.strip().split(',')
+                    if len(parts) > 8 and parts[0].strip() == satellite_name:
+                        tpx_name = parts[8].strip()
+                        if tpx_name:
+                            tpxlist.append(tpx_name)
             
             # Remove duplicates while preserving order
             unique_tpxlist = []
@@ -611,20 +620,56 @@ def broadcast_satellite_change(satellite_name):
             handle_get_transponder_list({'satellite': satellite_name})
         except Exception as e:
             print(f"Error getting transponders after satellite change: {e}")
+        
+        # Also broadcast to remote if available
+        try:
+            import sys
+            if 'lib.remote_client' in sys.modules:
+                from lib import remote_client
+                remote_client.broadcast_satellite_change(satellite_name)
+        except ImportError:
+            pass
 
 def broadcast_transponder_change(transponder_name):
     """Broadcast transponder changes to all web clients"""
     if transponder_name:
         safe_emit('status', {'transponder': transponder_name})
+        
+        # Also broadcast to remote if available
+        try:
+            import sys
+            if 'lib.remote_client' in sys.modules:
+                from lib import remote_client
+                remote_client.broadcast_transponder_change(transponder_name)
+        except ImportError:
+            pass
 
 def broadcast_subtone_change(subtone):
     """Broadcast subtone changes to all web clients"""
     if subtone is not None:
         safe_emit('status', {'subtone': subtone})
+        
+        # Also broadcast to remote if available
+        try:
+            import sys
+            if 'lib.remote_client' in sys.modules:
+                from lib import remote_client
+                remote_client.broadcast_subtone_change(subtone)
+        except ImportError:
+            pass
 
 def broadcast_tracking_state(is_tracking):
     """Broadcast tracking state changes to all web clients"""
     safe_emit('status', {'tracking': is_tracking})
+    
+    # Also broadcast to remote if available
+    try:
+        import sys
+        if 'lib.remote_client' in sys.modules:
+            from lib import remote_client
+            remote_client.broadcast_tracking_state(is_tracking)
+    except ImportError:
+        pass
 
 def broadcast_full_status():
     if main_window:
@@ -686,6 +731,15 @@ def broadcast_full_status():
                 handle_get_satellite_list()
             except Exception as e:
                 print(f"Error getting satellite list for broadcast: {e}")
+                
+            # Also broadcast to remote if available
+            try:
+                import sys
+                if 'lib.remote_client' in sys.modules:
+                    from lib import remote_client
+                    remote_client.broadcast_full_status()
+            except ImportError:
+                pass
         except Exception as e:
             print(f"Error broadcasting full status: {e}")
 
@@ -705,19 +759,26 @@ def load_satellite_list():
             config = configparser.ConfigParser()
             config.read('config.ini')
             sqffile = config.get('satellite', 'sqffile')
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error reading config.ini: {e}")
     if not sqffile:
         sqffile = 'doppler.sqf'
     satellite_list_file = sqffile
     satlist = []
+    
     try:
         with open(sqffile, 'r') as h:
             sqfdata = h.readlines()
             for line in sqfdata:
-                if ',' and not ";" in line:
-                    newitem = str(line.split(",")[0].strip())
-                    satlist.append(newitem)
+                # Skip comment lines
+                if line.strip().startswith(';'):
+                    continue
+                    
+                parts = line.strip().split(',')
+                if parts and len(parts) > 0:
+                    sat_name = parts[0].strip() 
+                    if sat_name:
+                        satlist.append(sat_name)
         # Remove duplicates while preserving order
         unique_satlist = []
         for sat in satlist:

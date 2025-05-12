@@ -98,6 +98,76 @@ DL3JOP modifications: <br/>
     
 # 🛠️ Advanced information
     
+## Remote Server Configuration
+
+QTrigdoppler includes a remote server capability that allows you to host a server independently of the application. This is particularly useful when using the application through Cloudflare tunnels or other port forwarding methods that may cause connection issues with the built-in web server.
+
+### Remote Server Setup
+
+1. The remote server is built on Node.js. Install Node.js on your server, then:
+
+```bash
+# Navigate to the directory where remote_server.js is located
+cd /path/to/QTrigdoppler
+
+# Install required packages
+npm install express socket.io ini
+
+# Start the server
+node remote_server.js
+```
+
+You can also use the provided scripts to set up the remote server:
+- On Windows: Run `setup_remote_server.bat`
+- On Linux/macOS: Run `setup_remote_server.sh`
+
+For running the server as a systemd service on Linux:
+
+```bash
+# Edit the service file to set the correct path
+nano qtrigdoppler-remote.service
+
+# Copy the service file to systemd directory
+sudo cp qtrigdoppler-remote.service /etc/systemd/system/
+
+# Enable and start the service
+sudo systemctl enable qtrigdoppler-remote
+sudo systemctl start qtrigdoppler-remote
+
+# Check status
+sudo systemctl status qtrigdoppler-remote
+```
+
+2. Configure the remote server in `config.ini`:
+
+```ini
+[remote_server]
+enable = True
+url = http://your-server-address:5001
+port = 5001
+debug = False
+```
+
+- `enable`: Set to `True` to enable the remote client connection
+- `url`: The URL where your remote server is hosted
+- `port`: The TCP port for the server (default: 5001)
+- `debug`: Set to `True` to enable debug output
+
+### Using the Remote Server
+
+When enabled, QTrigdoppler will:
+1. Connect to the remote server specified in the config
+2. Register itself as the control source
+3. Synchronize all status changes in real-time
+
+Clients can connect to the remote server using the same web interface as the built-in server:
+
+```
+http://your-server-address:5001/
+```
+
+The remote server provides more stable connections especially through Cloudflare tunnels and similar services.
+
 ## Web API and WebSocket Usage
 ### Configuration
 The web API can be configured in the `config.ini` file under the `[web_api]` section:
