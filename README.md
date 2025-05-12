@@ -100,73 +100,63 @@ DL3JOP modifications: <br/>
     
 ## Remote Server Configuration
 
-QTrigdoppler includes a remote server capability that allows you to host a server independently of the application. This is particularly useful when using the application through Cloudflare tunnels or other port forwarding methods that may cause connection issues with the built-in web server.
+QTrigdoppler includes a remote server component built with Node.js that enables remote control and integration with other applications. Here's how to set it up:
 
-### Remote Server Setup
+### Prerequisites
 
-1. The remote server is built on Node.js. Install Node.js on your server, then:
+1. Install Node.js from [https://nodejs.org/](https://nodejs.org/) or using your system's package manager
+2. Verify the installation by running:
+   ```bash
+   node --version
+   ```
 
-```bash
-# Navigate to the directory where remote_server.js is located
-cd /path/to/QTrigdoppler
+### Installation
 
-# Install required packages
-npm install express socket.io ini
+1. Navigate to the QTrigdoppler directory
+2. Install the required Node.js dependencies:
+   ```bash
+   npm install express socket.io ini
+   ```
 
-# Start the server
-node remote_server.js
-```
+### Configuration
 
-You can also use the provided scripts to set up the remote server:
-- On Windows: Run `setup_remote_server.bat`
-- On Linux/macOS: Run `setup_remote_server.sh`
-
-For running the server as a systemd service on Linux:
-
-```bash
-# Edit the service file to set the correct path
-nano qtrigdoppler-remote.service
-
-# Copy the service file to systemd directory
-sudo cp qtrigdoppler-remote.service /etc/systemd/system/
-
-# Enable and start the service
-sudo systemctl enable qtrigdoppler-remote
-sudo systemctl start qtrigdoppler-remote
-
-# Check status
-sudo systemctl status qtrigdoppler-remote
-```
-
-2. Configure the remote server in `config.ini`:
+The remote server can be configured through the `config.ini` file under the `[remote_server]` section:
 
 ```ini
 [remote_server]
 enable = True
-url = http://your-server-address:5001
+url = http://localhost:5001
 port = 5001
 debug = False
 ```
 
-- `enable`: Set to `True` to enable the remote client connection
-- `url`: The URL where your remote server is hosted
-- `port`: The TCP port for the server (default: 5001)
-- `debug`: Set to `True` to enable debug output
+- `enable`: Set to `True` to enable the remote server
+- `url`: The URL where the server will be accessible
+- `port`: The port number for the server (default: 5001)
+- `debug`: Set to `True` for additional debug logging
 
-### Using the Remote Server
+### Starting the Server
 
-When enabled, QTrigdoppler will:
-1. Connect to the remote server specified in the config
-2. Register itself as the control source
-3. Synchronize all status changes in real-time
-
-Clients can connect to the remote server using the same web interface as the built-in server:
-
-```
-http://your-server-address:5001/
+To start the remote server:
+```bash
+node remote_server.js
 ```
 
-The remote server provides more stable connections especially through Cloudflare tunnels and similar services.
+The server will start on the configured port (default: 5001) and be ready to accept connections from QTrigdoppler clients.
+
+### Features
+
+The remote server provides:
+- WebSocket interface for real-time updates
+- Cross-origin resource sharing (CORS) support
+- Integration capabilities with other applications
+- Tracking of satellite and transponder data
+- Real-time doppler shift information
+- Rotator control support (when enabled)
+
+### Integration
+
+Other applications can connect to the remote server using WebSocket or HTTP protocols. The server exposes various endpoints and events for satellite tracking, frequency control, and rotator management.
 
 ## Web API and WebSocket Usage
 ### Configuration

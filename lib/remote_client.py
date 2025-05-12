@@ -313,16 +313,15 @@ class RemoteClient:
             
         except Exception as e:
             print(f"Error sending transponder list: {e}")
-    
-    # Command handlers
-    def on_cmd_start_tracking(self, data):
+      # Command handlers
+    def on_cmd_start_tracking(self, data=None):
         """Handle start tracking command from server"""
         if self.main_window and hasattr(self.main_window, 'web_api_proxy'):
             self.main_window.web_api_proxy.start_tracking.emit()
             # Send updated status back
             self.send_full_status()
     
-    def on_cmd_stop_tracking(self, data):
+    def on_cmd_stop_tracking(self, data=None):
         """Handle stop tracking command from server"""
         if self.main_window and hasattr(self.main_window, 'web_api_proxy'):
             self.main_window.web_api_proxy.stop_tracking.emit()
@@ -368,15 +367,14 @@ class RemoteClient:
                 self.send_full_status()
             except (ValueError, TypeError):
                 print(f"Invalid RX offset value: {data.get('offset')}")
-    
-    def on_cmd_park_rotator(self, data):
+    def on_cmd_park_rotator(self, data=None):
         """Handle park rotator command from server"""
         if self.main_window and hasattr(self.main_window, 'park_rotators'):
             self.main_window.park_rotators()
             # Send updated status back
             self.send_full_status()
     
-    def on_cmd_stop_rotator(self, data):
+    def on_cmd_stop_rotator(self, data=None):
         """Handle stop rotator command from server"""
         if self.main_window and hasattr(self.main_window, 'stop_rotators'):
             self.main_window.stop_rotators()
