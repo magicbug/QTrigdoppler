@@ -2098,6 +2098,9 @@ class MainWindow(QMainWindow):
             return target_az
 
     def rotator_set_position(self, az, el):
+        # Defensive: ensure az, el are always float to avoid TypeError
+        az = float(az)
+        el = float(el)
         if self.rotator:
             # Get current rotator azimuth for shortest-path logic
             current_az, _ = self.rotator.get_position()
@@ -2109,6 +2112,9 @@ class MainWindow(QMainWindow):
             self.update_rotator_position()
 
     def rotator_park(self, az_park, el_park):
+        # Defensive: ensure arguments are always float to avoid TypeError in rotator.set_position
+        az_park = float(az_park)
+        el_park = float(el_park)
         if self.rotator:
             self.rotator.park(az_park, el_park)
             self.update_rotator_position()
@@ -2153,6 +2159,11 @@ class MainWindow(QMainWindow):
             if self.rotator:
                 self.rotator.close()
             self.stop_rotator_position_worker()
+        # Defensive: clear threadpool to avoid QRunnable errors
+        try:
+            self.threadpool.clear()
+        except Exception as e:
+            print(f"Error clearing threadpool: {e}")
         event.accept()
 
     def update_rotator_position(self):
@@ -2180,8 +2191,12 @@ class MainWindow(QMainWindow):
             QThreadPool.globalInstance().start(self.rotator_position_worker)
 
     def stop_rotator_position_worker(self):
-        if self.rotator_position_worker:
-            self.rotator_position_worker.stop()
+        # Defensive: safely stop worker and avoid double-deletion
+        if hasattr(self, 'rotator_position_worker') and self.rotator_position_worker:
+            try:
+                self.rotator_position_worker.stop()
+            except Exception as e:
+                print(f"Error stopping rotator position worker: {e}")
             self.rotator_position_worker = None
 
     @Slot(object, object)
