@@ -419,7 +419,6 @@ def handle_get_satellite_list():
                     'current': current_sat
                 })
                 print(f"Emitted satellite list using safe_emit")
-            print(f"Served cached satellite list: {len(unique_satlist)} satellites")
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
