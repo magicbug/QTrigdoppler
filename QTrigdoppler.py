@@ -874,7 +874,7 @@ class MainWindow(QMainWindow):
         qth_settings_layout.addWidget(self.qth_settings_long_edit, 1, 1)        
         
         # Altitude
-        self.qth_settings_alt_lbl = QLabel("QTH Altitude:")
+        self.qth_settings_alt_lbl = QLabel("QTH Altitude (meters):")
         qth_settings_layout.addWidget(self.qth_settings_alt_lbl, 2, 0)
         self.qth_settings_alt_edit = QLineEdit()
         self.qth_settings_alt_edit.setMaxLength(10)

@@ -18,6 +18,11 @@ class YaesuRotator:
         self.lock = threading.Lock()
 
     def set_position(self, az, el):
+        try:
+            az = float(az)
+            el = float(el)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid az/el values: az={az}, el={el}")
         az = max(self.az_min, min(self.az_max, int(round(az))))
         el = max(self.el_min, min(self.el_max, int(round(el))))
         cmd = f"W{az:03d} {el:03d}\r"
@@ -120,4 +125,4 @@ class RotatorThread(threading.Thread):
         try:
             self.rotator.stop()
         except Exception as e:
-            print(f"Error stopping rotator: {e}") 
+            print(f"Error stopping rotator: {e}")
