@@ -24,11 +24,14 @@ from configparser import ConfigParser
 from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
+from PySide6.QtCore import Qt, Signal, Slot, QObject, QMetaObject, Q_ARG, QThreadPool
 from qt_material import apply_stylesheet
 import requests
 import logging
 from lib import rotator
 from serial.tools import list_ports
+from lib.pass_recorder import PassRecorder
+import sounddevice as sd
 
 
 ### Read config and import additional libraries if needed
@@ -1221,8 +1224,106 @@ class MainWindow(QMainWindow):
         adv_settings_layout.addLayout(adv_settings_store_layout)
         #settings_layout.addLayout(settings_store_layout)
         
+        # --- Pass Recording Settings UI ---
+        self.passrec_settings_box = QGroupBox("Pass Recording")
+        self.passrec_settings_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
+        passrec_settings_layout = QGridLayout()
+        # Enable checkbox
+        self.passrec_enable_checkbox = QCheckBox("Enable Pass Recording")
+        self.passrec_enable_checkbox.setChecked(configur.getboolean('passrecording', 'enabled', fallback=False))
+        passrec_settings_layout.addWidget(self.passrec_enable_checkbox, 0, 0, 1, 2)
+        # Soundcard dropdown
+        self.passrec_soundcard_label = QLabel("Soundcard:")
+        passrec_settings_layout.addWidget(self.passrec_soundcard_label, 1, 0)
+        self.passrec_soundcard_dropdown = QComboBox()
+        devices = sd.query_devices()
+        input_devices = [(i, d) for i, d in enumerate(devices) if d['max_input_channels'] > 0]
+        for idx, dev in input_devices:
+            hostapi = sd.query_hostapis(dev['hostapi'])['name'] if 'hostapi' in dev else ''
+            # Create a more readable label for the device
+            friendly_name = dev['name'].replace("[", "").replace("]", "").strip()
+            if "Default" in friendly_name or "default" in friendly_name:
+                label = f"Default Device"
+            else:
+                label = f"{friendly_name}"
+                
+            # Store the technical details as tooltip
+            tech_details = f"{dev['name']} [{hostapi}] (index {idx})"
+            self.passrec_soundcard_dropdown.addItem(label, idx)
+            # Also store the device name and full details for persistence
+            self.passrec_soundcard_dropdown.setItemData(self.passrec_soundcard_dropdown.count()-1, dev['name'], Qt.UserRole + 1)
+            self.passrec_soundcard_dropdown.setItemData(self.passrec_soundcard_dropdown.count()-1, tech_details, Qt.ToolTipRole)
+        # Set current
+        current_card = configur.get('passrecording', 'soundcard', fallback='default')
+        if current_card == 'default':
+            self.passrec_soundcard_dropdown.setCurrentIndex(0)
+        else:
+            try:
+                # Try to find the device by name instead of index
+                found = False
+                for i in range(self.passrec_soundcard_dropdown.count()):
+                    if self.passrec_soundcard_dropdown.itemData(i, Qt.UserRole + 1) == current_card:
+                        self.passrec_soundcard_dropdown.setCurrentIndex(i)
+                        found = True
+                        break
+                # If name not found, try using it as an index (for backwards compatibility)
+                if not found:
+                    try:
+                        index = int(current_card)
+                        if 0 <= index < self.passrec_soundcard_dropdown.count():
+                            self.passrec_soundcard_dropdown.setCurrentIndex(index)
+                    except:
+                        self.passrec_soundcard_dropdown.setCurrentIndex(0)
+            except:
+                self.passrec_soundcard_dropdown.setCurrentIndex(0)
+        passrec_settings_layout.addWidget(self.passrec_soundcard_dropdown, 1, 1)
         
-
+        # Add an audio level meter
+        self.passrec_level_label = QLabel("Input Level:")
+        passrec_settings_layout.addWidget(self.passrec_level_label, 8, 0)
+        self.passrec_level_meter = AudioLevelMeter()
+        passrec_settings_layout.addWidget(self.passrec_level_meter, 8, 1)
+        
+        # Add monitor button
+        self.passrec_monitor_button = QPushButton("Start Monitoring")
+        passrec_settings_layout.addWidget(self.passrec_monitor_button, 9, 0, 1, 2)
+        self.passrec_monitor_button.clicked.connect(self.toggle_audio_monitoring)
+        
+        # Save dir
+        self.passrec_savedir_label = QLabel("Save Directory:")
+        passrec_settings_layout.addWidget(self.passrec_savedir_label, 2, 0)
+        self.passrec_savedir_edit = QLineEdit(configur.get('passrecording', 'save_dir', fallback='./recordings'))
+        passrec_settings_layout.addWidget(self.passrec_savedir_edit, 2, 1)
+        # Min elevation
+        self.passrec_minelev_label = QLabel("Min Elevation (deg):")
+        passrec_settings_layout.addWidget(self.passrec_minelev_label, 3, 0)
+        self.passrec_minelev_spin = QDoubleSpinBox()
+        self.passrec_minelev_spin.setRange(0, 90)
+        self.passrec_minelev_spin.setValue(configur.getfloat('passrecording', 'min_elevation', fallback=20.0))
+        passrec_settings_layout.addWidget(self.passrec_minelev_spin, 3, 1)
+        # Audio settings (advanced)
+        self.passrec_samplerate_label = QLabel("Sample Rate:")
+        passrec_settings_layout.addWidget(self.passrec_samplerate_label, 4, 0)
+        self.passrec_samplerate_spin = QSpinBox()
+        self.passrec_samplerate_spin.setRange(8000, 192000)
+        self.passrec_samplerate_spin.setValue(configur.getint('passrecording', 'sample_rate', fallback=44100))
+        passrec_settings_layout.addWidget(self.passrec_samplerate_spin, 4, 1)
+        self.passrec_channels_label = QLabel("Channels:")
+        passrec_settings_layout.addWidget(self.passrec_channels_label, 5, 0)
+        self.passrec_channels_spin = QSpinBox()
+        self.passrec_channels_spin.setRange(1, 2)
+        self.passrec_channels_spin.setValue(configur.getint('passrecording', 'channels', fallback=1))
+        passrec_settings_layout.addWidget(self.passrec_channels_spin, 5, 1)
+        self.passrec_bitdepth_label = QLabel("Bit Depth:")
+        passrec_settings_layout.addWidget(self.passrec_bitdepth_label, 6, 0)
+        self.passrec_bitdepth_spin = QSpinBox()
+        self.passrec_bitdepth_spin.setRange(8, 32)
+        self.passrec_bitdepth_spin.setValue(configur.getint('passrecording', 'bit_depth', fallback=16))
+        passrec_settings_layout.addWidget(self.passrec_bitdepth_spin, 6, 1)
+        self.passrec_settings_box.setLayout(passrec_settings_layout)
+        adv_settings_value_layout.addWidget(self.passrec_settings_box, stretch=1)
+        # --- End Pass Recording Settings UI ---
+        
         ###  UI Layout / Tab Widget
         self.tab_widget = QTabWidget()
         self.tab_overview = QWidget()
@@ -1253,6 +1354,11 @@ class MainWindow(QMainWindow):
         
         self._last_cloudlog_F = None
         self._last_cloudlog_I = None
+        self.pass_recorder = PassRecorder(configur)
+        # --- Pass Recording Status Label ---
+        self.recording_status_label = QLabel("Recording: No")
+        self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: #007700}")
+        log_layout.addWidget(self.recording_status_label, stretch=1)
     
     def save_settings(self):
         global LATITUDE
@@ -1360,9 +1466,37 @@ class MainWindow(QMainWindow):
         configur['web_api']['debug'] = str(WEBAPI_DEBUG_ENABLED)
         configur['web_api']['port'] = WEBAPI_PORT = self.webapi_port_val.displayText()
 
+        # Pass Recording settings
+        configur['passrecording']['enabled'] = str(self.passrec_enable_checkbox.isChecked())
+        # Store the device name instead of the index
+        selected_idx = self.passrec_soundcard_dropdown.currentIndex()
+        if selected_idx >= 0:
+            # First try to get the full device name (most reliable)
+            device_name = self.passrec_soundcard_dropdown.itemData(selected_idx, Qt.UserRole + 1)
+            if device_name:
+                configur['passrecording']['soundcard'] = device_name
+                logging.info(f"Saved audio device by name: {device_name}")
+            else:
+                # Fallback to index if name isn't available (should not happen)
+                device_idx = self.passrec_soundcard_dropdown.itemData(selected_idx)
+                if device_idx is not None:
+                    configur['passrecording']['soundcard'] = str(device_idx)
+                    logging.info(f"Saved audio device by index: {device_idx}")
+                else:
+                    configur['passrecording']['soundcard'] = 'default'
+                    logging.info("Saved default audio device")
+        else:
+            configur['passrecording']['soundcard'] = 'default'
+            logging.info("Saved default audio device")
+        configur['passrecording']['save_dir'] = self.passrec_savedir_edit.text()
+        configur['passrecording']['min_elevation'] = str(self.passrec_minelev_spin.value())
+        configur['passrecording']['sample_rate'] = str(self.passrec_samplerate_spin.value())
+        configur['passrecording']['channels'] = str(self.passrec_channels_spin.value())
+        configur['passrecording']['bit_depth'] = str(self.passrec_bitdepth_spin.value())
 
         with open('config.ini', 'w') as configfile:
             configur.write(configfile)
+        self.pass_recorder.update_config(configur)
 
     def rxoffset_value_changed(self, i):
             global f_cal
@@ -1659,6 +1793,8 @@ class MainWindow(QMainWindow):
         self.Startbutton.setEnabled(True)
         self.combo1.setEnabled(True)
         self.combo2.setEnabled(True)
+        # Set pass recorder to inactive tracking state
+        self.pass_recorder.set_tracking_active(False)
         # Stop rotator thread and park
         if ROTATOR_ENABLED:
             self.stop_rotator_thread()
@@ -1686,6 +1822,8 @@ class MainWindow(QMainWindow):
         self.combo2.setEnabled(False)
         self.doppler_worker = Worker(self.calc_doppler)
         self.threadpool.start(self.doppler_worker)
+        # Set pass recorder to active tracking state
+        self.pass_recorder.set_tracking_active(True)
         # Start rotator thread
         if ROTATOR_ENABLED:
             self.start_rotator_thread()
@@ -2020,6 +2158,9 @@ class MainWindow(QMainWindow):
             # Cloudlog: only log if F or I changed and satellite is above horizon
             try:
                 elevation = float(sat_ele_calc(self.my_satellite.tledata))
+                # Update pass recorder with current elevation
+                if self.my_satellite.name:
+                    self.on_satellite_update(elevation, self.my_satellite.name)
             except Exception:
                 elevation = -1
             F_now = self.my_satellite.F
@@ -2168,6 +2309,18 @@ class MainWindow(QMainWindow):
             if self.rotator:
                 self.rotator.close()
             self.stop_rotator_position_worker()
+            
+        # Stop audio monitoring if active
+        if hasattr(self, 'audio_monitor_active') and self.audio_monitor_active:
+            if hasattr(self, 'audio_monitor_stream') and self.audio_monitor_stream:
+                try:
+                    self.audio_monitor_stream.stop()
+                    self.audio_monitor_stream.close()
+                    self.audio_monitor_stream = None
+                    self.audio_monitor_active = False
+                except Exception as e:
+                    logging.error(f"Error stopping audio monitor on exit: {e}")
+            
         # Defensive: clear threadpool to avoid QRunnable errors
         try:
             self.threadpool.clear()
@@ -2207,6 +2360,114 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 logging.error(f"Error stopping rotator position worker: {e}")
             self.rotator_position_worker = None
+            
+    def toggle_audio_monitoring(self):
+        """Start or stop audio level monitoring"""
+        if hasattr(self, 'audio_monitor_active') and self.audio_monitor_active:
+            # Stop monitoring
+            self.audio_monitor_active = False
+            self.passrec_monitor_button.setText("Start Monitoring")
+            if hasattr(self, 'audio_monitor_stream') and self.audio_monitor_stream:
+                self.audio_monitor_stream.stop()
+                self.audio_monitor_stream.close()
+                self.audio_monitor_stream = None
+        else:
+            # Start monitoring
+            self.audio_monitor_active = True
+            self.passrec_monitor_button.setText("Stop Monitoring")
+            
+            # Get the selected device using the same logic as recording
+            device = None
+            selected_idx = self.passrec_soundcard_dropdown.currentIndex()
+            if selected_idx >= 0:
+                device_name = self.passrec_soundcard_dropdown.itemData(selected_idx, Qt.UserRole + 1)
+                
+                # Try to find device by name first (more reliable)
+                if device_name:
+                    devices = sd.query_devices()
+                    for i, dev in enumerate(devices):
+                        if dev['name'] == device_name and dev['max_input_channels'] > 0:
+                            device = i
+                            logging.info(f"Found monitoring device by name: {device_name} (index {i})")
+                            break
+                    
+                    # If not found by exact name, try partial match
+                    if device is None:
+                        for i, dev in enumerate(devices):
+                            if device_name in dev['name'] and dev['max_input_channels'] > 0:
+                                device = i
+                                logging.info(f"Found similar monitoring device: {dev['name']} (index {i})")
+                                break
+                
+                # If not found by name, use the index
+                if device is None:
+                    device_idx = self.passrec_soundcard_dropdown.itemData(selected_idx)
+                    if device_idx is not None:
+                        try:
+                            device = int(device_idx)
+                            logging.info(f"Using monitoring device by index: {device}")
+                        except (ValueError, TypeError):
+                            logging.warning(f"Could not use device index: {device_idx}")
+            
+            if device is None:
+                logging.info("Using default audio input device for monitoring")
+                try:
+                    device = sd.default.device[0]  # Default input device
+                except Exception as e:
+                    logging.error(f"Error getting default device: {e}")
+            
+            # Create callback for audio processing with debug logging
+            def audio_callback(indata, frames, time, status):
+                if status:
+                    logging.warning(f"Audio monitoring status: {status}")
+                
+                # Calculate RMS amplitude (volume level)
+                level = np.linalg.norm(indata)
+                
+                # Log levels occasionally to help debug
+                if frames % 100 == 0:
+                    logging.debug(f"Monitor audio level: {level:.4f}")
+                
+                # Scale to percentage (0-100)
+                # Apply a logarithmic scaling to make low levels more visible
+                if level > 0:
+                    log_level = 20 * np.log10(level) + 90  # Convert to dB scale (normalized)
+                    percentage = min(100, max(0, int(log_level)))
+                else:
+                    percentage = 0
+                
+                # Update UI in thread-safe way
+                QMetaObject.invokeMethod(self.passrec_level_meter, "setValue", 
+                                        Qt.QueuedConnection, Q_ARG(int, percentage))
+            
+            # Start the audio stream
+            try:
+                logging.info(f"Starting audio level monitoring with device: {device}")
+                self.audio_monitor_stream = sd.InputStream(
+                    device=device,
+                    channels=1,
+                    callback=audio_callback,
+                    blocksize=1024,
+                    samplerate=44100
+                )
+                self.audio_monitor_stream.start()
+                
+                # Update UI to confirm monitoring is active
+                self.passrec_level_meter.setStyleSheet("""
+                    QProgressBar {
+                        border: 1px solid #3A3939;
+                        border-radius: 4px;
+                        text-align: center;
+                    }
+                    QProgressBar::chunk {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, 
+                                                   stop:0 #00FF00, stop:0.6 #FFFF00, stop:0.8 #FF8800, stop:1 #FF0000);
+                    }
+                """)
+            except Exception as e:
+                logging.error(f"Error starting audio monitoring: {e}")
+                self.audio_monitor_active = False
+                self.passrec_monitor_button.setText("Start Monitoring")
 
     @Slot(object, object)
     def handle_rotator_position_update(self, az, el):
@@ -2216,6 +2477,17 @@ class MainWindow(QMainWindow):
         else:
             self.rotator_az_val.setText("Pos. error")
             self.rotator_el_val.setText("Pos. error")
+
+    def update_passrecorder_status(self):
+        if self.pass_recorder.is_recording():
+            self.recording_status_label.setText("Recording: Yes")
+            self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: #bb2222}")
+        else:
+            self.recording_status_label.setText("Recording: No")
+            self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: #007700}")
+    def on_satellite_update(self, elevation, satname):
+        self.pass_recorder.update_elevation(elevation, satname)
+        self.update_passrecorder_status()
 
 class WorkerSignals(QObject):
     finished = Signal()
@@ -2276,6 +2548,27 @@ class RotatorPositionWorker(QRunnable):
             except Exception as e:
                 self.signals.position.emit(None, None)
             time.sleep(self.poll_interval)
+
+class AudioLevelMeter(QProgressBar):
+    """Custom progress bar for displaying audio input levels"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimum(0)
+        self.setMaximum(100)
+        self.setValue(0)
+        self.setTextVisible(True)
+        self.setFormat("%v%")
+        # Use a gradient from green to yellow to red
+        self.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #3A3939;
+                border-radius: 4px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00FF00, stop:0.5 #FFFF00, stop:1 #FF0000);
+            }
+        """)
 
 ## Starts here:
 if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
