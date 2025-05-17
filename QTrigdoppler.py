@@ -26,7 +26,7 @@ from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from qt_material import apply_stylesheet
 import requests
-
+import logging
 from lib import rotator
 
 
@@ -38,7 +38,7 @@ try:
         configur = ConfigParser()
         configur.read('config.ini')
 except IOError:
-    print("Failed to find configuration file!")
+    logging.critical("Failed to find configuration file!")
     sys.exit()
 
 # Set environment variables
@@ -216,16 +216,16 @@ def sat_next_event_calc(ephemdata):
     return "Error"
 ## Error "handler"    
 def MyError():
-    print("Failed to find required file!")
+    logging.error("Failed to find required file!")
     sys.exit()
     
 # Function to send data to Cloudlog (now only used by worker)
 def send_to_cloudlog(sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name):
     if not CLOUDLOG_ENABLED:
-        print("Cloudlog: Disabled in config.ini")
+        logging.info("Cloudlog: Disabled in config.ini")
         return
     if not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
-        print("Cloudlog API key or URL not set in config.ini")
+        logging.warning("Cloudlog API key or URL not set in config.ini")
         return
     # Convert FMN to FM for Cloudlog
     tx_mode_send = 'FM' if tx_mode == 'FMN' else tx_mode
@@ -244,11 +244,11 @@ def send_to_cloudlog(sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name):
     try:
         response = requests.post(url, json=payload, timeout=5)
         if response.status_code == 200:
-            print("Cloudlog API: Success")
+            logging.info("Cloudlog API: Success")
         else:
-            print(f"Cloudlog API: Failed with status {response.status_code}: {response.text}")
+            logging.error(f"Cloudlog API: Failed with status {response.status_code}: {response.text}")
     except Exception as e:
-        print(f"Cloudlog API: Exception occurred: {e}")
+        logging.error(f"Cloudlog API: Exception occurred: {e}")
 
 # CloudlogWorker for background posting
 class CloudlogWorker(QRunnable):
@@ -417,7 +417,7 @@ class MainWindow(QMainWindow):
             # Start web API server in a separate thread if enabled
             self.web_api_thread = threading.Thread(target=web_api.run_socketio, daemon=True)
             self.web_api_thread.start()
-            print(f"Web API server started on port {configur.get('web_api', 'port', fallback='5000')}")
+            logging.info(f"Web API server started on port {configur.get('web_api', 'port', fallback='5000')}")
         
             # Set up the web API proxy for thread-safe GUI/timer operations
             self.web_api_proxy = web_api_proxy.WebApiGuiProxy()
@@ -442,7 +442,7 @@ class MainWindow(QMainWindow):
             
             # Register with remote client
             remote_client.register_window(self)
-            print(f"Remote client registered with server: {configur.get('remote_server', 'url', fallback='http://localhost:5001')}")
+            logging.info(f"Remote client registered with server: {configur.get('remote_server', 'url', fallback='http://localhost:5001')}")
             
         # Rotator integration
         self.ROTATOR_ENABLED = ROTATOR_ENABLED
@@ -461,7 +461,7 @@ class MainWindow(QMainWindow):
                 )
             except Exception as e:
                 self.rotator_error = f"Rotator init failed: {e}"
-                print(self.rotator_error)
+                loffinf.error(self.rotator_error)
                 self.rotator = None
 
 
@@ -534,12 +534,11 @@ class MainWindow(QMainWindow):
         self.tpx_list_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)        
         QScroller.grabGesture(self.tpx_list_view.viewport(), QScroller.LeftMouseButtonGesture)
         # Ensure the currentTextChanged signal is connected to tpx_changed
-        try:
-            self.combo2.currentTextChanged.disconnect()  # Disconnect any existing connections first
-        except:
-            pass  # Ignore if there were no connections
+        #try:
+        #    self.combo2.currentTextChanged.disconnect()  # Disconnect any existing connections first
+        #except:
+        #    pass  # Ignore if there were no connections
         self.combo2.currentTextChanged.connect(self.tpx_changed) 
-        print("Connected combo2.currentTextChanged to tpx_changed")
         combo_layout.addWidget(self.combo2)
         
         self.tonetext = QLabel("Subtone:")
@@ -555,7 +554,6 @@ class MainWindow(QMainWindow):
         doppler_thres_layout.addWidget(self.dopplerthreslabel)
         self.dopplerthresval = QLabel("0.0")
         doppler_thres_layout.addWidget(self.dopplerthresval)
-        #combo_layout.addLayout(doppler_thres_layout)
         
         # 1x Label: RX Offset
         self.rxoffsetboxtitle = QLabel("RX Offset:")
@@ -1356,7 +1354,7 @@ class MainWindow(QMainWindow):
                 try:
                     web_api.safe_emit('status', {'rx_offset': i})
                 except Exception as e:
-                    print(f"Error broadcasting RX offset change to web clients: {e}")
+                    logging.error(f"Error broadcasting RX offset change to web clients: {e}")
     
     def rxoffset_button_pushed(self, i):
             new_value = self.rxoffsetbox.value() + int(i)
@@ -1368,7 +1366,7 @@ class MainWindow(QMainWindow):
                 try:
                     web_api.safe_emit('status', {'rx_offset': new_value})
                 except Exception as e:
-                    print(f"Error broadcasting RX offset button change to web clients: {e}")
+                    logging.error(f"Error broadcasting RX offset button change to web clients: {e}")
     def update_tle_file(self):
         self.the_stop_button_was_clicked()
         try:
@@ -1381,8 +1379,8 @@ class MainWindow(QMainWindow):
             if self.my_satellite.name != '':
                 self.sat_changed(self.my_satellite.name)
         except Exception as e:
-            print("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
-            print(e)
+            logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
+            logging.error(e)
             self.tleupdate_stat_lbl.setText("❌")
             
     def sat_changed(self, satname):
@@ -1415,7 +1413,7 @@ class MainWindow(QMainWindow):
             try:
                 web_api.broadcast_satellite_change(satname)
             except Exception as e:
-                print(f"Error broadcasting satellite change to web clients: {e}")
+                logging.error(f"Error broadcasting satellite change to web clients: {e}")
                 
     def tpx_changed(self, tpxname):
         global F0
@@ -1425,7 +1423,7 @@ class MainWindow(QMainWindow):
         global MAX_OFFSET_RX
         global RX_TPX_ONLY
         
-        print(f"tpx_changed called with transponder: {tpxname}")
+        logging.debug(f"tpx_changed called with transponder: {tpxname}")
         self.my_transponder_name = tpxname
         
         try:
@@ -1436,7 +1434,7 @@ class MainWindow(QMainWindow):
                     if lineb.startswith(";") == 0:
                         if lineb.split(",")[8].strip() == tpxname and lineb.split(",")[0].strip() == self.my_satellite.name:
                             found_match = True
-                            print(f"Found matching transponder in SQFILE: {tpxname} for satellite {self.my_satellite.name}")
+                            logging.debug(f"Found matching transponder in SQFILE: {tpxname} for satellite {self.my_satellite.name}")
                             self.my_satellite.F = self.my_satellite.F_init = float(lineb.split(",")[1].strip())*1000
                             self.rxfreq.setText(str('{:,}'.format(self.my_satellite.F))+ " Hz")
                             F0 = self.my_satellite.F + f_cal
@@ -1469,26 +1467,26 @@ class MainWindow(QMainWindow):
                             break
                 
                 if not found_match:
-                    print(f"Warning: No matching entry found for transponder: {tpxname} and satellite: {self.my_satellite.name}")
+                    logging.info(f"Warning: No matching entry found for transponder: {tpxname} and satellite: {self.my_satellite.name}")
         except IOError as e:
-            print(f"IO Error when processing transponder change: {e}")
+            logging.error(f"IO Error when processing transponder change: {e}")
             raise MyError()
 
-        print(f"Setting RX offset to 0")
+        logging.debug(f"Setting RX offset to 0")
         self.rxoffsetbox.setValue(0)
         for tpx in useroffsets:
             if tpx[0] == self.my_satellite.name and tpx[1] == tpxname:
                 usrrxoffset=int(tpx[2])
-                print(f"Found user offset for this satellite+transponder: {usrrxoffset}")
+                logging.debug(f"Found user offset for this satellite+transponder: {usrrxoffset}")
                 if usrrxoffset < MAX_OFFSET_RX and usrrxoffset > -MAX_OFFSET_RX:
-                    print(f"Setting RX offset to: {usrrxoffset}")
+                    logging.debug(f"Setting RX offset to: {usrrxoffset}")
                     self.rxoffsetbox.setMaximum(MAX_OFFSET_RX)
                     self.rxoffsetbox.setMinimum(-MAX_OFFSET_RX)
                     self.rxoffsetbox.setValue(usrrxoffset)
                     self.my_satellite.new_cal = 1
                     self.my_satellite.F_cal = f_cal = usrrxoffset
                 else:
-                    print(f"User offset {usrrxoffset} outside allowed range [-{MAX_OFFSET_RX}, {MAX_OFFSET_RX}]")
+                    logging.debug(f"User offset {usrrxoffset} outside allowed range [-{MAX_OFFSET_RX}, {MAX_OFFSET_RX}]")
                     self.rxoffsetbox.setValue(0)
                 
                 
@@ -1497,18 +1495,18 @@ class MainWindow(QMainWindow):
         # Safely stop the timer from any thread
         try:
             QMetaObject.invokeMethod(self.timer, "stop", Qt.QueuedConnection)
-            print("Timer stopped safely")
+            logging.debug("Timer stopped safely")
         except Exception as e:
-            print(f"Error stopping timer: {e}")
+            logging.error(f"Error stopping timer: {e}")
             # Fallback: try direct stop if invokeMethod failed
             try:
                 if QThread.currentThread() == self.thread():
                     self.timer.stop()
-                    print("Timer stopped directly")
+                    logging.debug("Timer stopped directly")
                 else:
-                    print("Cannot stop timer - not in main thread")
+                    logging.error("Cannot stop timer - not in main thread")
             except Exception as e2:
-                print(f"Error in fallback timer stop: {e2}")
+                logging.error(f"Error in fallback timer stop: {e2}")
                 
         try:
             with open(TLEFILE, 'r') as f:
@@ -1516,19 +1514,19 @@ class MainWindow(QMainWindow):
                 tle_found = False
                 for index, line in enumerate(data):
                     if str(self.my_satellite.name) in line:
-                        print(f"Found TLE data for satellite: {self.my_satellite.name}")
+                        logging.debug(f"Found TLE data for satellite: {self.my_satellite.name}")
                         self.my_satellite.tledata = ephem.readtle(data[index], data[index+1], data[index+2])
                         tle_found = True
                         break
                         
                 if not tle_found:
-                    print(f"Warning: No TLE data found for satellite: {self.my_satellite.name}")
+                    logging.warning(f"Warning: No TLE data found for satellite: {self.my_satellite.name}")
         except IOError as e:
-            print(f"IO Error when reading TLE file: {e}")
+            logging.error(f"IO Error when reading TLE file: {e}")
             raise MyError()
         
         if self.my_satellite.tledata == "":
-            print("TLE data is empty, disabling tracking buttons")
+            logging.info("TLE data is empty, disabling tracking buttons")
             self.Startbutton.setEnabled(False)
             self.syncbutton.setEnabled(False)
             self.offsetstorebutton.setEnabled(False)
@@ -1556,25 +1554,25 @@ class MainWindow(QMainWindow):
         # Safely start the timer from any thread    
         try:
             QMetaObject.invokeMethod(self.timer, "start", Qt.QueuedConnection)
-            print("Timer started safely")
+            logging.debug("Timer started safely")
         except Exception as e:
-            print(f"Error starting timer: {e}")
+            logging.error(f"Error starting timer: {e}")
             # Fallback: try direct start if invokeMethod failed
             try:
                 if QThread.currentThread() == self.thread():
                     self.timer.start()
-                    print("Timer started directly")
+                    logging.debug("Timer started directly")
                 else:
-                    print("Cannot start timer - not in main thread")
+                    logging.error("Cannot start timer - not in main thread")
             except Exception as e2:
-                print(f"Error in fallback timer start: {e2}")
+                logging.error(f"Error in fallback timer start: {e2}")
         
         # Notify web clients of the transponder change
         if WEBAPI_ENABLED:
             try:
                 web_api.broadcast_transponder_change(tpxname)
             except Exception as e:
-                print(f"Error broadcasting transponder change to web clients: {e}")
+                logging.error(f"Error broadcasting transponder change to web clients: {e}")
             
     def tone_changed(self, tone_name):
         
@@ -1624,7 +1622,7 @@ class MainWindow(QMainWindow):
             try:
                 web_api.broadcast_subtone_change(tone_name)
             except Exception as e:
-                print(f"Error broadcasting subtone change to web clients: {e}")
+                logging.error(f"Error broadcasting subtone change to web clients: {e}")
 
     def the_exit_button_was_clicked(self):
         self.the_stop_button_was_clicked()
@@ -1638,8 +1636,6 @@ class MainWindow(QMainWindow):
         INTERACTIVE = False
         self.threadpool.clear()
         self.Stopbutton.setEnabled(False)
-        #self.offsetstorebutton.setEnabled(False)
-        #self.syncbutton.setEnabled(False)
         self.Startbutton.setEnabled(True)
         self.combo1.setEnabled(True)
         self.combo2.setEnabled(True)
@@ -1652,7 +1648,7 @@ class MainWindow(QMainWindow):
             try:
                 web_api.broadcast_tracking_state(False)
             except Exception as e:
-                print(f"Error broadcasting tracking stop to web clients: {e}")
+                logging.error(f"Error broadcasting tracking stop to web clients: {e}")
 
     def the_sync_button_was_clicked(self):
         self.my_satellite.F = self.my_satellite.F_init
@@ -1678,7 +1674,7 @@ class MainWindow(QMainWindow):
             try:
                 web_api.broadcast_tracking_state(True)
             except Exception as e:
-                print(f"Error broadcasting tracking start to web clients: {e}")
+                logging.error(f"Error broadcasting tracking start to web clients: {e}")
 
     def calc_doppler(self, progress_callback):
         global CVIADDR
@@ -1758,7 +1754,7 @@ class MainWindow(QMainWindow):
                         icomTrx.setMode("CW") 
                         doppler_thres = DOPPLER_THRES_LINEAR
                     else:
-                        print("*** Downlink mode not implemented yet: {bad}".format(bad=self.my_satellite.downmode))
+                        logging.warning("*** Downlink mode not implemented yet: {bad}".format(bad=self.my_satellite.downmode))
                         sys.exit()
                     doppler_thres = int(doppler_thres)
                     self.dopplerthresval.setText(str(doppler_thres) + " Hz")
@@ -1777,10 +1773,10 @@ class MainWindow(QMainWindow):
                     elif self.my_satellite.upmode == "CW":
                         icomTrx.setMode("CW") 
                     else:
-                        print("*** Uplink mode not implemented yet: {bad}".format(bad=self.my_satellite.upmode))
+                        logging.warning("*** Uplink mode not implemented yet: {bad}".format(bad=self.my_satellite.upmode))
                         sys.exit()
                 elif RADIO != "910":
-                    print("*** Not implemented yet mate***")
+                    logging.error("*** Not implemented yet mate***")
                     sys.exit()
 
                 icomTrx.setVFO("Main") 
@@ -1801,15 +1797,11 @@ class MainWindow(QMainWindow):
                 
                 if self.my_satellite.rig_satmode == 1:
                     icomTrx.setVFO("Main")
-                    #icomTrx.setToneOn(0)
-                    #self.combo3.setCurrentIndex(0);
                     icomTrx.setFrequency(str(int(F0)))
                     icomTrx.setVFO("SUB")
                     icomTrx.setFrequency(str(int(I0)))
                 else:
                     icomTrx.setVFO("VFOA")
-                    #icomTrx.setToneOn(0)
-                    #self.combo3.setCurrentIndex(0);
                     icomTrx.setFrequency(str(int(F0)))
                     if RX_TPX_ONLY == False:
                         icomTrx.setVFO("VFOB")
@@ -1879,9 +1871,6 @@ class MainWindow(QMainWindow):
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal))
-                            #print("RXdo: "+str(new_rx_doppler))
-                            #print("satf: "+str(self.my_satellite.F))
-                            #print("FCAL: "+str(self.my_satellite.F_cal))
                             if abs(new_rx_doppler-F0) > doppler_thres:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
@@ -1936,7 +1925,7 @@ class MainWindow(QMainWindow):
                         # Check for RX -> TX transition
                         if  ptt_state_old and ptt_state == 0 and abs(new_tx_doppler-I0) > doppler_thres:
                             #icomTrx.setVFO("VFOB")
-                            print("TX inititated")
+                            logging.debug("TX inititated")
                             tx_doppler = new_tx_doppler
                             I0 = tx_doppler
                             icomTrx.setFrequency(str(tx_doppler))
@@ -1949,13 +1938,13 @@ class MainWindow(QMainWindow):
                         
                     self.my_satellite.new_cal = 0
                     time.sleep(0.01)
-                    b = datetime.now()
-                    c = b - a
+                    #b = datetime.now()
+                    #c = b - a
                     #print("Ups:" +str(1000000/c.microseconds))  
                     
 
         except:
-            print("Failed to open ICOM rig")
+            logging.critical("Failed to open ICOM rig")
             sys.exit()
     
     def recurring_utc_clock_timer(self):
@@ -2028,7 +2017,7 @@ class MainWindow(QMainWindow):
                 self._last_cloudlog_F = F_now
                 self._last_cloudlog_I = I_now
         except:
-            print("Error in label timer")
+            logging.warning("Error in label timer")
             traceback.print_exc()
 
     @Slot(str)
@@ -2075,7 +2064,7 @@ class MainWindow(QMainWindow):
             el = float(sat_ele_calc(self.my_satellite.tledata))
             return az, el
         except Exception as e:
-            print(f"Error getting current az/el: {e}")
+            logging.error(f"Error getting current az/el: {e}")
             return ROTATOR_AZ_PARK, ROTATOR_EL_PARK
     def best_rotator_azimuth(self, current_az, target_az, az_max):
         """
@@ -2126,11 +2115,11 @@ class MainWindow(QMainWindow):
 
     def park_rotators(self):
         self.rotator_park(ROTATOR_AZ_PARK, ROTATOR_EL_PARK)
-        print("Rotator parked.")
+        logging.info("Rotator parked.")
 
     def stop_rotators(self):
         self.rotator_stop()
-        print("Rotator stopped.")
+        logging.info("Rotator stopped.")
 
     def start_rotator_thread(self):
         if ROTATOR_ENABLED and self.rotator and not self.rotator_thread:
@@ -2143,14 +2132,14 @@ class MainWindow(QMainWindow):
             )
             self.rotator_thread.daemon = True
             self.rotator_thread.start()
-            print("Rotator thread started.")
+            logging.debug("Rotator thread started.")
             self.update_rotator_position()
     def stop_rotator_thread(self):
         if self.rotator_thread:
             self.rotator_thread.stop()
             self.rotator_thread.join(timeout=2)
             self.rotator_thread = None
-            print("Rotator thread stopped.")
+            logging.debug("Rotator thread stopped.")
     def closeEvent(self, event):
         # Ensure rotator is stopped and parked on exit
         if ROTATOR_ENABLED:
@@ -2163,7 +2152,7 @@ class MainWindow(QMainWindow):
         try:
             self.threadpool.clear()
         except Exception as e:
-            print(f"Error clearing threadpool: {e}")
+            logging.error(f"Error clearing threadpool: {e}")
         event.accept()
 
     def update_rotator_position(self):
@@ -2177,7 +2166,7 @@ class MainWindow(QMainWindow):
                     self.rotator_az_val.setText("Pos. error")
                     self.rotator_el_val.setText("Pos. error")
             except Exception as e:
-                print(f"Error updating rotator position: {e}")
+                logging.error(f"Error updating rotator position: {e}")
                 self.rotator_az_val.setText("error")
                 self.rotator_el_val.setText("error")
         elif ROTATOR_ENABLED:
@@ -2196,7 +2185,7 @@ class MainWindow(QMainWindow):
             try:
                 self.rotator_position_worker.stop()
             except Exception as e:
-                print(f"Error stopping rotator position worker: {e}")
+                logging.error(f"Error stopping rotator position worker: {e}")
             self.rotator_position_worker = None
 
     @Slot(object, object)
@@ -2270,7 +2259,7 @@ class RotatorPositionWorker(QRunnable):
 
 ## Starts here:
 if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
-    print("***  Icom radio not supported: {badmodel}".format(badmodel=RADIO))
+    logging.critical("***  Icom radio not supported: {badmodel}".format(badmodel=RADIO))
     sys.exit()
 
 
