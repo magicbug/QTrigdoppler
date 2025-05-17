@@ -18,11 +18,15 @@ class YaesuRotator:
         self.lock = threading.Lock()
 
     def set_position(self, az, el):
+        try:
+            az = float(az)
+            el = float(el)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid az/el values: az={az}, el={el}")
         az = max(self.az_min, min(self.az_max, int(round(az))))
         el = max(self.el_min, min(self.el_max, int(round(el))))
         cmd = f"W{az:03d} {el:03d}\r"
         with self.lock:
-            print(f"[Rotator] Sending: {repr(cmd)}")
             self.ser.write(cmd.encode())
             time.sleep(0.1)
 
@@ -31,17 +35,14 @@ class YaesuRotator:
 
     def stop(self):
         with self.lock:
-            print("[Rotator] Sending stop command: 'S\\r'")
             self.ser.write(b'S\r')
 
     def get_position(self):
         with self.lock:
             self.ser.reset_input_buffer()
-            print("[Rotator] Sending get_position command: 'C2\\r'")
             self.ser.write(b'C2\r')
             time.sleep(0.1)
             response = self.ser.readline().decode(errors='ignore').strip()
-            print(f"[Rotator] Raw response: {repr(response)}")
             try:
                 # Expected: 'AZ=aaa EL=eee' or just 'AZ=aaa' or 'EL=eee'
                 az = None
@@ -56,19 +57,15 @@ class YaesuRotator:
                     return az, el
                 # fallback: try single queries if C2 didn't work
                 if az is None:
-                    print("[Rotator] Querying azimuth only with 'C\\r'")
                     self.ser.write(b'C\r')
                     time.sleep(0.1)
                     az_response = self.ser.readline().decode(errors='ignore').strip()
-                    print(f"[Rotator] Azimuth response: {repr(az_response)}")
                     if az_response.startswith('AZ='):
                         az = int(az_response[3:])
                 if el is None:
-                    print("[Rotator] Querying elevation only with 'B\\r'")
                     self.ser.write(b'B\r')
                     time.sleep(0.1)
                     el_response = self.ser.readline().decode(errors='ignore').strip()
-                    print(f"[Rotator] Elevation response: {repr(el_response)}")
                     if el_response.startswith('EL='):
                         el = int(el_response[3:])
                 if az is not None and el is not None:
@@ -128,4 +125,4 @@ class RotatorThread(threading.Thread):
         try:
             self.rotator.stop()
         except Exception as e:
-            print(f"Error stopping rotator: {e}") 
+            print(f"Error stopping rotator: {e}")

@@ -106,6 +106,12 @@ if configur.has_section('web_api') and configur.getboolean('web_api', 'enabled')
     from lib import web_api  # Import the web API module
     from lib import web_api_proxy
 
+# Import the remote client if section exists
+REMOTE_ENABLED = False
+if configur.has_section('remote_server') and configur.getboolean('remote_server', 'enable'):
+    from lib import remote_client
+    REMOTE_ENABLED = True
+
 ### Global constants
 C = 299792458.
 subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
@@ -260,8 +266,9 @@ class CloudlogWorker(QRunnable):
 #i = 0
 useroffsets = []
 for (each_key, each_val) in configur.items('offset_profiles'):
-    # Format SATNAME:RXoffset,TXoffset
-    useroffsets += [each_val.split(',')]
+    # Format SATNAME,TRANSPONDER,RXoffset,TXoffset
+    parts = each_val.split(',')
+    useroffsets += [parts]
     #i+=1
 
 # radio frequencies
@@ -396,7 +403,7 @@ class MainWindow(QMainWindow):
         global SQFILE
 
         # Radio
-        global RADIO
+        global RADIO        
         global CVIADDR
         global OPMODE
 
@@ -420,6 +427,22 @@ class MainWindow(QMainWindow):
             self.web_api_proxy.set_rx_offset.connect(self.slot_set_rx_offset)
             self.web_api_proxy.start_tracking.connect(self.init_worker)
             self.web_api_proxy.stop_tracking.connect(self.the_stop_button_was_clicked)
+        
+        # If remote server is enabled, register with remote client
+        if REMOTE_ENABLED:
+            # Make sure we have a web API proxy for signals even if local web API is disabled
+            if not WEBAPI_ENABLED:
+                self.web_api_proxy = web_api_proxy.WebApiGuiProxy()
+                self.web_api_proxy.select_satellite.connect(self.slot_select_satellite)
+                self.web_api_proxy.select_transponder.connect(self.slot_select_transponder)
+                self.web_api_proxy.set_subtone.connect(self.slot_set_subtone)
+                self.web_api_proxy.set_rx_offset.connect(self.slot_set_rx_offset)
+                self.web_api_proxy.start_tracking.connect(self.init_worker)
+                self.web_api_proxy.stop_tracking.connect(self.the_stop_button_was_clicked)
+            
+            # Register with remote client
+            remote_client.register_window(self)
+            print(f"Remote client registered with server: {configur.get('remote_server', 'url', fallback='http://localhost:5001')}")
             
         # Rotator integration
         self.ROTATOR_ENABLED = ROTATOR_ENABLED
@@ -465,15 +488,14 @@ class MainWindow(QMainWindow):
         button_layout = QVBoxLayout()
 
         combo_layout.setAlignment(Qt.AlignVCenter)
-
         control_layout.addLayout(combo_layout, stretch=1)
         control_layout.addLayout(labels_layout, stretch=1)
-        control_layout.addLayout(button_layout, stretch=1)
+        control_layout.addLayout(button_layout, stretch=1);
 
         self.sattext = QLabel("Satellite:")
         self.sattext.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         combo_layout.addWidget(self.sattext)
-
+        
         self.combo1 = QComboBox()
         self.sat_list_view = self.combo1.view()
         self.sat_list_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)        
@@ -482,9 +504,14 @@ class MainWindow(QMainWindow):
         with open(SQFILE, 'r') as h:
             sqfdata = h.readlines() 
             for line in sqfdata:
-                if ',' and not ";" in line:
+                # Skip comment lines
+                if line.strip().startswith(';'):
+                    continue
+                    
+                if ',' in line:
                     newitem = str(line.split(",")[0].strip())
-                    satlist += [newitem]
+                    if newitem:
+                        satlist += [newitem]
         satlist = list(dict.fromkeys(satlist))  # Deduplicate
 
         def sat_sort_key(name):
@@ -847,7 +874,7 @@ class MainWindow(QMainWindow):
         qth_settings_layout.addWidget(self.qth_settings_long_edit, 1, 1)        
         
         # Altitude
-        self.qth_settings_alt_lbl = QLabel("QTH Altitude:")
+        self.qth_settings_alt_lbl = QLabel("QTH Altitude (meters):")
         qth_settings_layout.addWidget(self.qth_settings_alt_lbl, 2, 0)
         self.qth_settings_alt_edit = QLineEdit()
         self.qth_settings_alt_edit.setMaxLength(10)
@@ -1271,15 +1298,16 @@ class MainWindow(QMainWindow):
         configur['icom']['cviaddress'] = CVIADDR
         
         # Saving offsets
-        offset_stored = False
+        offset_stored = False        
         num_offsets = 0
         for (each_key, each_val) in configur.items('offset_profiles'):
             num_offsets = num_offsets+1
             # Iterate through each entry if sat/tpx combo is already in list otherwise adds it. 
-            if each_val.split(",")[0].strip() == self.my_satellite.name and each_val.split(",")[1].strip() == self.my_transponder_name:
+            parts = each_val.split(",")
+            if len(parts) >= 3 and parts[0].strip() == self.my_satellite.name and parts[1].strip() == self.my_transponder_name:
                 offset_stored = True
-                if int(each_val.split(",")[2].strip()) != int(self.rxoffsetbox.value()):
-                    configur['offset_profiles'][each_key] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"        
+                if int(parts[2].strip()) != int(self.rxoffsetbox.value()):
+                    configur['offset_profiles'][each_key] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
         if offset_stored == False and int(self.rxoffsetbox.value()) != 0 and self.combo1.currentIndex() != 0:
             configur['offset_profiles']["satoffset"+str(num_offsets+1)] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
             offset_stored = True
@@ -1287,17 +1315,26 @@ class MainWindow(QMainWindow):
         # Save TLE update
         configur['misc']['last_tle_update'] = LAST_TLE_UPDATE
         
-        ROTATOR_ENABLED =self.rotator_enable_button.isChecked()
+        ROTATOR_ENABLED = self.rotator_enable_button.isChecked()
         configur['rotator']['enabled'] = str(ROTATOR_ENABLED)
-        configur['rotator']['serial_port'] = ROTATOR_SERIAL_PORT = self.rotator_serialport_val.displayText()
-        configur['rotator']['baudrate'] = ROTATOR_BAUDRATE = self.rotator_serialrate_val.displayText()
-        configur['rotator']['az_park'] = ROTATOR_AZ_PARK = self.rotator_azpark_val.displayText()
-        configur['rotator']['el_park'] = ROTATOR_EL_PARK = self.rotator_elpark_val.displayText()
-        configur['rotator']['az_min'] = ROTATOR_AZ_MIN = self.rotator_azmin_val.displayText()
-        configur['rotator']['az_max'] = ROTATOR_AZ_MAX = self.rotator_azmax_val.displayText()
-        configur['rotator']['el_min'] = ROTATOR_EL_MIN = self.rotator_elmin_val.displayText()
-        configur['rotator']['el_max'] = ROTATOR_EL_MAX = self.rotator_elmax_val.displayText()
-        configur['rotator']['min_elevation'] = ROTATOR_MIN_ELEVATION = self.rotator_minelev_val.displayText()
+        ROTATOR_SERIAL_PORT = self.rotator_serialport_val.displayText()
+        configur['rotator']['serial_port'] = ROTATOR_SERIAL_PORT
+        ROTATOR_BAUDRATE = int(self.rotator_serialrate_val.displayText())
+        configur['rotator']['baudrate'] = str(ROTATOR_BAUDRATE)
+        ROTATOR_AZ_PARK = int(self.rotator_azpark_val.displayText())
+        configur['rotator']['az_park'] = str(ROTATOR_AZ_PARK)
+        ROTATOR_EL_PARK = int(self.rotator_elpark_val.displayText())
+        configur['rotator']['el_park'] = str(ROTATOR_EL_PARK)
+        ROTATOR_AZ_MIN = int(self.rotator_azmin_val.displayText())
+        configur['rotator']['az_min'] = str(ROTATOR_AZ_MIN)
+        ROTATOR_AZ_MAX = int(self.rotator_azmax_val.displayText())
+        configur['rotator']['az_max'] = str(ROTATOR_AZ_MAX)
+        ROTATOR_EL_MIN = int(self.rotator_elmin_val.displayText())
+        configur['rotator']['el_min'] = str(ROTATOR_EL_MIN)
+        ROTATOR_EL_MAX = int(self.rotator_elmax_val.displayText())
+        configur['rotator']['el_max'] = str(ROTATOR_EL_MAX)
+        ROTATOR_MIN_ELEVATION = int(self.rotator_minelev_val.displayText())
+        configur['rotator']['min_elevation'] = str(ROTATOR_MIN_ELEVATION)
         
         WEBAPI_ENABLED = self.webapi_enable_button.isChecked()
         WEBAPI_DEBUG_ENABLED = self.webapi_debug_enable_button.isChecked()
@@ -2061,6 +2098,9 @@ class MainWindow(QMainWindow):
             return target_az
 
     def rotator_set_position(self, az, el):
+        # Defensive: ensure az, el are always float to avoid TypeError
+        az = float(az)
+        el = float(el)
         if self.rotator:
             # Get current rotator azimuth for shortest-path logic
             current_az, _ = self.rotator.get_position()
@@ -2072,6 +2112,9 @@ class MainWindow(QMainWindow):
             self.update_rotator_position()
 
     def rotator_park(self, az_park, el_park):
+        # Defensive: ensure arguments are always float to avoid TypeError in rotator.set_position
+        az_park = float(az_park)
+        el_park = float(el_park)
         if self.rotator:
             self.rotator.park(az_park, el_park)
             self.update_rotator_position()
@@ -2116,6 +2159,11 @@ class MainWindow(QMainWindow):
             if self.rotator:
                 self.rotator.close()
             self.stop_rotator_position_worker()
+        # Defensive: clear threadpool to avoid QRunnable errors
+        try:
+            self.threadpool.clear()
+        except Exception as e:
+            print(f"Error clearing threadpool: {e}")
         event.accept()
 
     def update_rotator_position(self):
@@ -2143,8 +2191,12 @@ class MainWindow(QMainWindow):
             QThreadPool.globalInstance().start(self.rotator_position_worker)
 
     def stop_rotator_position_worker(self):
-        if self.rotator_position_worker:
-            self.rotator_position_worker.stop()
+        # Defensive: safely stop worker and avoid double-deletion
+        if hasattr(self, 'rotator_position_worker') and self.rotator_position_worker:
+            try:
+                self.rotator_position_worker.stop()
+            except Exception as e:
+                print(f"Error stopping rotator position worker: {e}")
             self.rotator_position_worker = None
 
     @Slot(object, object)

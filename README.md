@@ -98,6 +98,66 @@ DL3JOP modifications: <br/>
     
 # 🛠️ Advanced information
     
+## Remote Server Configuration
+
+QTrigdoppler includes a remote server component built with Node.js that enables remote control and integration with other applications. Here's how to set it up:
+
+### Prerequisites
+
+1. Install Node.js from [https://nodejs.org/](https://nodejs.org/) or using your system's package manager
+2. Verify the installation by running:
+   ```bash
+   node --version
+   ```
+
+### Installation
+
+1. Navigate to the QTrigdoppler directory
+2. Install the required Node.js dependencies:
+   ```bash
+   npm install express socket.io ini
+   ```
+
+### Configuration
+
+The remote server can be configured through the `config.ini` file under the `[remote_server]` section:
+
+```ini
+[remote_server]
+enable = True
+url = http://localhost:5001
+port = 5001
+debug = False
+```
+
+- `enable`: Set to `True` to enable the remote server
+- `url`: The URL where the server will be accessible
+- `port`: The port number for the server (default: 5001)
+- `debug`: Set to `True` for additional debug logging
+
+### Starting the Server
+
+To start the remote server:
+```bash
+node remote_server.js
+```
+
+The server will start on the configured port (default: 5001) and be ready to accept connections from QTrigdoppler clients.
+
+### Features
+
+The remote server provides:
+- WebSocket interface for real-time updates
+- Cross-origin resource sharing (CORS) support
+- Integration capabilities with other applications
+- Tracking of satellite and transponder data
+- Real-time doppler shift information
+- Rotator control support (when enabled)
+
+### Integration
+
+Other applications can connect to the remote server using WebSocket or HTTP protocols. The server exposes various endpoints and events for satellite tracking, frequency control, and rotator management.
+
 ## Web API and WebSocket Usage
 ### Configuration
 The web API can be configured in the `config.ini` file under the `[web_api]` section:

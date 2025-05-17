@@ -1,0 +1,16 @@
+{
+  "name": "qtrigdoppler-remote-server",
+  "version": "1.0.0",
+  "description": "Remote server for QTrigdoppler application",
+  "main": "remote_server.js",
+  "scripts": {
+    "start": "node remote_server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ini": "^4.1.1",
+    "socket.io": "^4.7.2"
+  }
+}
