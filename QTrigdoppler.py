@@ -59,7 +59,6 @@ RIG_SERIAL_PORT = configur.get('icom', 'serialport')
 RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
-DISPLAY_MAP = False
 # Rotator config
 ROTATOR_ENABLED = configur.getboolean('rotator', 'enabled', fallback=False)
 ROTATOR_SERIAL_PORT = configur.get('rotator', 'serial_port', fallback='COM4')
