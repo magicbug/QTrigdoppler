@@ -462,7 +462,7 @@ class MainWindow(QMainWindow):
                 )
             except Exception as e:
                 self.rotator_error = f"Rotator init failed: {e}"
-                loffinf.error(self.rotator_error)
+                logging.error(self.rotator_error)
                 self.rotator = None
 
 
