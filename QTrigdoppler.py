@@ -1720,7 +1720,8 @@ class MainWindow(QMainWindow):
         
         # Set high priority for doppler calculations
         # This ensures doppler calculations run at higher priority than WebSocket communications
-        self.threadpool.start(self.doppler_worker, QThread.HighestPriority)
+        # For PySide6, we need to use the integer priority value directly
+        self.threadpool.start(self.doppler_worker, QThread.HighestPriority.value)
         
         # Set pass recorder to active tracking state
         self.pass_recorder.set_tracking_active(True)
