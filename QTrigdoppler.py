@@ -2308,12 +2308,13 @@ class MainWindow(QMainWindow):
             self.rotator_el_val.setText("Pos. error")
 
     def update_passrecorder_status(self):
-        if self.pass_recorder.is_recording():
-            self.recording_status_label.setText("✔")
-            self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: green}")
-        else:
-            self.recording_status_label.setText("✘")
-            self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: red}")
+        if PASS_RECORDER_ENABLED:
+            if self.pass_recorder.is_recording():
+                self.recording_status_label.setText("✔")
+                self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: green}")
+            else:
+                self.recording_status_label.setText("✘")
+                self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: red}")
     def on_satellite_update(self, elevation, satname):
         try:
             # Ensure elevation is a float
