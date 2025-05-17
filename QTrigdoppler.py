@@ -82,6 +82,12 @@ CLOUDLOG_API_KEY = configur.get('Cloudlog', 'api_key', fallback=None)
 CLOUDLOG_URL = configur.get('Cloudlog', 'url', fallback=None)
 CLOUDLOG_ENABLED = configur.getboolean('Cloudlog', 'enabled', fallback=False)
 
+# Passrecoder config
+if configur.has_section('passrecording') and configur.getboolean('passrecording', 'enabled'):
+    PASS_RECORDER_ENABLED = True
+else:
+    PASS_RECORDER_ENABLED = False
+
 # Webapi config
 if configur.has_section('web_api') and configur.getboolean('web_api', 'enabled'):
     WEBAPI_ENABLED = True
@@ -121,8 +127,6 @@ if configur.has_section('remote_server') and configur.getboolean('remote_server'
 subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
 if DISPLAY_MAP:
     GEOD = Geod(ellps="WGS84")
-
-
 
 #i = 0
 useroffsets = []
@@ -647,12 +651,23 @@ class MainWindow(QMainWindow):
         self.log_time_val = QLabel(datetime.now(timezone.utc).strftime('%H:%M:%S')+"z")
         log_rig_status_layout.addWidget(self.log_time_val, 1, 1)
         
+        if PASS_RECORDER_ENABLED:
+            # --- Pass Recording Status Label ---
+            self.recording_text_label = QLabel("Recording:")
+            self.recording_status_label = QLabel("✘")
+            self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: red}")
+            log_rig_status_layout.addWidget(self.recording_text_label,2,0)
+            log_rig_status_layout.addWidget(self.recording_status_label,2,1)
+        
         self.log_layout_vline_right = QFrame()
         self.log_layout_vline_right.setFrameShape(QFrame.VLine)
         self.log_layout_vline_right.setFrameShadow(QFrame.Plain)
         self.log_layout_vline_right.setStyleSheet("background-color: #4f5b62;border: none;")
         self.log_layout_vline_right.setFixedWidth(2)
-        log_rig_status_layout.addWidget(self.log_layout_vline_right, 0, 2, 2, 1)
+        if PASS_RECORDER_ENABLED:
+            log_rig_status_layout.addWidget(self.log_layout_vline_right, 0, 2, 3, 1)
+        else:
+            log_rig_status_layout.addWidget(self.log_layout_vline_right, 0, 2, 2, 1)
         
         self.log_rig_status.setLayout(log_rig_status_layout)
         log_layout.addWidget(self.log_rig_status, stretch=1)
@@ -1112,8 +1127,8 @@ class MainWindow(QMainWindow):
             self.passrec_soundcard_dropdown.setItemData(self.passrec_soundcard_dropdown.count()-1, dev['name'], Qt.UserRole + 1)
             self.passrec_soundcard_dropdown.setItemData(self.passrec_soundcard_dropdown.count()-1, tech_details, Qt.ToolTipRole)
         # Set current
-        current_card = configur.get('passrecording', 'soundcard', fallback='default')
-        if current_card == 'default':
+        current_card = configur.get('passrecording', 'soundcard', fallback='default dev')
+        if current_card == 'default dev':
             self.passrec_soundcard_dropdown.setCurrentIndex(0)
         else:
             try:
@@ -1213,10 +1228,6 @@ class MainWindow(QMainWindow):
         self._last_cloudlog_F = None
         self._last_cloudlog_I = None
         self.pass_recorder = PassRecorder(configur)
-        # --- Pass Recording Status Label ---
-        self.recording_status_label = QLabel("Recording: No")
-        self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: #007700}")
-        log_layout.addWidget(self.recording_status_label, stretch=1)
     
     def save_settings(self):
         global LATITUDE
@@ -2292,11 +2303,11 @@ class MainWindow(QMainWindow):
 
     def update_passrecorder_status(self):
         if self.pass_recorder.is_recording():
-            self.recording_status_label.setText("Recording: Yes")
-            self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: #bb2222}")
+            self.recording_status_label.setText("✔")
+            self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: green}")
         else:
-            self.recording_status_label.setText("Recording: No")
-            self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: #007700}")
+            self.recording_status_label.setText("✘")
+            self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: red}")
     def on_satellite_update(self, elevation, satname):
         self.pass_recorder.update_elevation(elevation, satname)
         self.update_passrecorder_status()
