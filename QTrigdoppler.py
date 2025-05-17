@@ -1836,18 +1836,18 @@ class MainWindow(QMainWindow):
                     logging.warning("Cloudlog API key or URL not set in config.ini")
                 else:
                     worker = CloudlogWorker(
-                    sat=self.my_satellite,
-                    tx_freq=self.my_satellite.I,
-                    rx_freq=self.my_satellite.F,
-                    tx_mode=self.my_satellite.upmode,
-                    rx_mode=self.my_satellite.downmode,
-                    sat_name=self.my_satellite.name,
-                    log_url=CLOUDLOG_URL,
-                    log_api_key=CLOUDLOG_API_KEY
-                )
-                QThreadPool.globalInstance().start(worker)
-                self._last_cloudlog_F = self.my_satellite.F
-                self._last_cloudlog_I = self.my_satellite.I
+                        sat=self.my_satellite,
+                        tx_freq=self.my_satellite.I,
+                        rx_freq=self.my_satellite.F,
+                        tx_mode=self.my_satellite.upmode,
+                        rx_mode=self.my_satellite.downmode,
+                        sat_name=self.my_satellite.name,
+                        log_url=CLOUDLOG_URL,
+                        log_api_key=CLOUDLOG_API_KEY
+                    )
+                    QThreadPool.globalInstance().start(worker)
+                    self._last_cloudlog_F = self.my_satellite.F
+                    self._last_cloudlog_I = self.my_satellite.I
         except:
             logging.warning("Error in label timer")
             traceback.print_exc()
