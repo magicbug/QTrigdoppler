@@ -130,8 +130,6 @@ for (each_key, each_val) in configur.items('offset_profiles'):
     #i+=1
 
 # radio frequencies
-F0=0.0
-I0=0.0
 f_cal = 0
 i_cal = 0
 doppler_thres = 0
@@ -175,6 +173,8 @@ class Satellite:
     tledata = ""
     tle_age = "n/a"
     rig_satmode = 0
+    F_RIG = 0.0
+    I_RIG = 0.0
     
 if DISPLAY_MAP:
     class SatMapCanvas(FigureCanvas):
@@ -1294,8 +1294,6 @@ class MainWindow(QMainWindow):
                 logging.error(f"Error broadcasting satellite change to web clients: {e}")
                 
     def tpx_changed(self, tpxname):
-        global F0
-        global I0
         global f_cal
         global i_cal
         global MAX_OFFSET_RX
@@ -1315,10 +1313,10 @@ class MainWindow(QMainWindow):
                             logging.debug(f"Found matching transponder in SQFILE: {tpxname} for satellite {self.my_satellite.name}")
                             self.my_satellite.F = self.my_satellite.F_init = float(lineb.split(",")[1].strip())*1000
                             self.rxfreq.setText(str('{:,}'.format(self.my_satellite.F))+ " Hz")
-                            F0 = self.my_satellite.F + f_cal
+                            self.my_satellite.F_RIG = self.my_satellite.F + f_cal
                             self.my_satellite.I = self.my_satellite.I_init = float(lineb.split(",")[2].strip())*1000
                             self.txfreq.setText(str('{:,}'.format(self.my_satellite.I)) + " Hz")
-                            I0 = self.my_satellite.I + i_cal
+                            self.my_satellite.I_RIG = self.my_satellite.I + i_cal
                             self.my_satellite.downmode =  lineb.split(",")[3].strip()
                             self.my_satellite.upmode =  lineb.split(",")[4].strip()
                             self.my_satellite.mode =  lineb.split(",")[5].strip()
@@ -1566,17 +1564,14 @@ class MainWindow(QMainWindow):
         global myloc
         global f_cal
         global i_cal
-        global F0
-        global I0
         global doppler_thres
         
         try:
                 #################################
                 #       INIT RADIOS
                 #################################
-                if RADIO == "9700" and self.my_satellite.rig_satmode == 0: #not implemented yet
-                    pass
-                elif RADIO == "910" and self.my_satellite.rig_satmode == 0 and RX_TPX_ONLY == False:
+
+                if RADIO == "910" and self.my_satellite.rig_satmode == 0 and RX_TPX_ONLY == False:
                     icomTrx.setSatelliteMode(0)
                     icomTrx.setSplitOn(1)
                 elif RADIO == "910" and self.my_satellite.rig_satmode == 0 and RX_TPX_ONLY == True:
@@ -1586,25 +1581,24 @@ class MainWindow(QMainWindow):
                     icomTrx.setSatelliteMode(1)
                     icomTrx.setSplitOn(0)
                 elif ( RADIO == "705" or "818" ) and OPMODE == False and self.my_satellite.rig_satmode == 0: #not implemented yet
-                    pass
+                    logging.error("*** Not implemented yet mate***")
+                    sys.exit()
 
                 #################################
                 #       SETUP DOWNLINK & UPLINK
                 #################################
-                
-                # IC 910
+
                 if RADIO == "910":
                     # Testing current satmode config for V/U or U/V and swapping if needed
-                    
-                    if True: #self.my_satellite.rig_satmode == 1:
-                        icomTrx.setVFO("Main")
-                        curr_band = int(icomTrx.getFrequency())
-                        if curr_band > 400000000 and F0 < 400000000:
-                            icomTrx.setExchange()
-                        elif curr_band < 200000000 and F0 > 200000000:
-                            icomTrx.setExchange()
+                    icomTrx.setVFO("Main")
+                    curr_band = int(icomTrx.getFrequency())
+                    if curr_band > 400000000 and self.my_satellite.F_RIG < 400000000:
+                        icomTrx.setExchange()
+                    elif curr_band < 200000000 and self.my_satellite.F_RIG > 200000000:
+                        icomTrx.setExchange()
                             
                     doppler_thres, INTERACTIVE = icomTrx.setup_vfos(self.my_satellite.rig_satmode,self.my_satellite.downmode, self.my_satellite.upmode, DOPPLER_THRES_FM, DOPPLER_THRES_LINEAR)
+                    
                 elif RADIO != "910":
                     logging.error("*** Not implemented yet mate***")
                     sys.exit()
@@ -1614,8 +1608,8 @@ class MainWindow(QMainWindow):
                 date_val = strftime('%Y/%m/%d %H:%M:%S', gmtime())
                 myloc.date = ephem.Date(date_val)
 
-                F0 = rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F, myloc)
-                I0 = tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc)
+                self.my_satellite.F_RIG = rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F, myloc)
+                self.my_satellite.I_RIG = tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc)
                 self.rxdoppler_val.setText(str('{:,}'.format(float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F, myloc)))))
                 self.txdoppler_val.setText(str('{:,}'.format(float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I, myloc)))))
                 user_Freq = 0;
@@ -1627,15 +1621,15 @@ class MainWindow(QMainWindow):
                 
                 if self.my_satellite.rig_satmode == 1:
                     icomTrx.setVFO("Main")
-                    icomTrx.setFrequency(str(int(F0)))
+                    icomTrx.setFrequency(str(int(self.my_satellite.F_RIG)))
                     icomTrx.setVFO("SUB")
-                    icomTrx.setFrequency(str(int(I0)))
+                    icomTrx.setFrequency(str(int(self.my_satellite.I_RIG)))
                 else:
                     icomTrx.setVFO("VFOA")
-                    icomTrx.setFrequency(str(int(F0)))
+                    icomTrx.setFrequency(str(int(self.my_satellite.F_RIG)))
                     if RX_TPX_ONLY == False:
                         icomTrx.setVFO("VFOB")
-                        icomTrx.setFrequency(str(int(I0)))
+                        icomTrx.setFrequency(str(int(self.my_satellite.I_RIG)))
                         INTERACTIVE = False #for SSB packet sats
                         icomTrx.setVFO("VFOA")
                     else:
@@ -1674,34 +1668,34 @@ class MainWindow(QMainWindow):
                         # check for valid received freq and if dial is not moving (last two read frequencies are the same)
                         if user_Freq > 0 and updated_rx == 1 and vfo_not_moving and self.my_satellite.new_cal == 0:
                             # check if there is an offset from the dial and move up/downlink accordingly
-                            if abs(user_Freq - F0) > 1:
+                            if abs(user_Freq - self.my_satellite.F_RIG) > 1:
                                 if True:
-                                    if user_Freq > F0:
-                                        delta_F = user_Freq - F0
+                                    if user_Freq > self.my_satellite.F_RIG:
+                                        delta_F = user_Freq - self.my_satellite.F_RIG
                                         if self.my_satellite.mode == "REV":
                                             self.my_satellite.I -= delta_F
-                                            I0 -= delta_F
+                                            self.my_satellite.I_RIG -= delta_F
                                             self.my_satellite.F += delta_F
                                         else:
                                             self.my_satellite.I += delta_F
-                                            I0 += delta_F
+                                            self.my_satellite.I_RIG += delta_F
                                             self.my_satellite.F += delta_F
                                     else:
-                                        delta_F = F0 - user_Freq
+                                        delta_F = self.my_satellite.F_RIG - user_Freq
                                         if self.my_satellite.mode == "REV":
                                             self.my_satellite.I += delta_F
-                                            I0 += delta_F
+                                            self.my_satellite.I_RIG += delta_F
                                             self.my_satellite.F -= delta_F
                                         else:
                                             self.my_satellite.I -= delta_F
-                                            I0 -= delta_F
+                                            self.my_satellite.I_RIG -= delta_F
                                             self.my_satellite.F -= delta_F
-                                    F0 = user_Freq
+                                    self.my_satellite.F_RIG = user_Freq
                                             
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc))
-                            if abs(new_rx_doppler-F0) > doppler_thres:
+                            if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("Main")
@@ -1709,10 +1703,10 @@ class MainWindow(QMainWindow):
                                     icomTrx.setVFO("VFOA")
                                 
                                 icomTrx.setFrequency(str(rx_doppler))
-                                F0 = rx_doppler
+                                self.my_satellite.F_RIG = rx_doppler
                         
                             new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc))
-                            if abs(new_tx_doppler-I0) > doppler_thres:
+                            if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres:
                                 tx_doppler = new_tx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("SUB")
@@ -1723,24 +1717,24 @@ class MainWindow(QMainWindow):
                                         time.sleep(0.1)
                                         
                                 icomTrx.setFrequency(str(tx_doppler))
-                                I0 = tx_doppler
+                                self.my_satellite.I_RIG = tx_doppler
                             time.sleep(0.2)
                     # FM sats, no dial input accepted!
                     elif self.my_satellite.rig_satmode == 1:
                         new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
-                        if abs(new_rx_doppler-F0) > doppler_thres or tracking_init == 1:
+                        if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres or tracking_init == 1:
                                 tracking_init = 0
                                 rx_doppler = new_rx_doppler
                                 icomTrx.setVFO("MAIN")
                                 icomTrx.setFrequency(str(rx_doppler))
-                                F0 = rx_doppler
-                        if abs(new_tx_doppler-I0) > doppler_thres or tracking_init == 1:
+                                self.my_satellite.F_RIG = rx_doppler
+                        if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres or tracking_init == 1:
                                 tracking_init = 0
                                 tx_doppler = new_tx_doppler
                                 icomTrx.setVFO("SUB")
                                 icomTrx.setFrequency(str(tx_doppler))
-                                I0 = tx_doppler
+                                self.my_satellite.I_RIG = tx_doppler
                                 icomTrx.setVFO("MAIN")
                         if doppler_thres > 0:
                             time.sleep(FM_update_time) # Slower update rate on FM, max on linear sats
@@ -1753,15 +1747,15 @@ class MainWindow(QMainWindow):
                         ptt_state_old = ptt_state
                         ptt_state = icomTrx.isPttOff()
                         # Check for RX -> TX transition
-                        if  ptt_state_old and ptt_state == 0 and abs(new_tx_doppler-I0) > doppler_thres:
+                        if  ptt_state_old and ptt_state == 0 and abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres:
                             #icomTrx.setVFO("VFOB")
                             logging.debug("TX inititated")
                             tx_doppler = new_tx_doppler
-                            I0 = tx_doppler
+                            self.my_satellite.I_RIG = tx_doppler
                             icomTrx.setFrequency(str(tx_doppler))
-                        if  ptt_state and abs(new_rx_doppler-F0) > doppler_thres:
+                        if  ptt_state and abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres:
                             rx_doppler = new_rx_doppler
-                            F0 = rx_doppler
+                            self.my_satellite.F_RIG = rx_doppler
                             icomTrx.setVFO("VFOA")
                             icomTrx.setFrequency(str(rx_doppler))
                         time.sleep(0.025)
@@ -1813,9 +1807,9 @@ class MainWindow(QMainWindow):
             self.txdoppler_val.setText(str('{:,}'.format(self.my_satellite.up_doppler)) + " Hz")
             self.rxdopplerrate_val.setText(str(format(self.my_satellite.down_doppler_rate, '.2f')) + " Hz/s")
             self.txdopplerrate_val.setText(str(format(self.my_satellite.up_doppler_rate, '.2f')) + " Hz/s")
-            self.rxfreq.setText(str('{:,}'.format(F0))+ " Hz")
+            self.rxfreq.setText(str('{:,}'.format(self.my_satellite.F_RIG))+ " Hz")
             self.rxfreq_onsat.setText(str('{:,}'.format(self.my_satellite.F))+ " Hz")
-            self.txfreq.setText(str('{:,}'.format(I0))+ " Hz")
+            self.txfreq.setText(str('{:,}'.format(self.my_satellite.I_RIG))+ " Hz")
             self.txfreq_onsat.setText(str('{:,}'.format(self.my_satellite.I))+ " Hz")
             self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata, myloc)) + " °")
             self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata, myloc)) + " °")
