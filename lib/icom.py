@@ -22,6 +22,7 @@ Comments: changed to IC-910 support, 9700/9100 deprecated
 
 import serial
 import time
+import logging
 
 
 class icom:
@@ -279,4 +280,63 @@ class icom:
         if b[-2] == 1:
             ret = False
         return ret
+        
+    def setup_vfos(self, satmode, downmode, upmode, doppler_thres_fm, doppler_thres_linear):
+        doppler_thres = 100
+        interactive = True
+        if satmode == 1:
+            self.setVFO("Main")
+        else:
+            self.setVFO("VFOA")
+        if downmode == "FM":
+            self.setMode("FM")
+            doppler_thres = doppler_thres_fm
+            interactive = False
+        elif downmode == "FMN":
+            self.setMode("FM")
+            doppler_thres = doppler_thres_fm
+            interactive = False
+        elif downmode ==  "LSB":
+            interactive = True
+            self.setMode("LSB")
+            doppler_thres = doppler_thres_linear
+        elif downmode ==  "USB":
+            interactive = True
+            self.setMode("USB")
+            doppler_thres = doppler_thres_linear
+        elif downmode ==  "DATA-LSB":
+            interactive = False
+            self.setMode("LSB")
+            doppler_thres = 0
+        elif downmode ==  "DATA-USB":
+            interactive = False
+            self.setMode("USB")
+            doppler_thres = 0      
+        elif downmode == "CW":
+            interactive = True
+            self.setMode("CW") 
+            doppler_thres = DOPPLER_THRES_LINEAR
+        else:
+            logging.warning("*** Downlink mode not implemented yet: {bad}".format(bad=self.my_satellite.downmode))
+            sys.exit()
+        
+        if satmode == 1:
+            self.setVFO("SUB")
+        else:
+            self.setVFO("VFOB")
+        if upmode == "FM":
+            self.setMode("FM")
+        elif upmode == "FMN":
+            self.setMode("FM")
+        elif upmode == "LSB" or downmode ==  "DATA-LSB":
+            self.setMode("LSB")
+        elif upmode == "USB" or downmode ==  "DATA-USB":
+            self.setMode("USB")
+        elif upmode == "CW":
+            self.setMode("CW") 
+        else:
+            logging.warning("*** Uplink mode not implemented yet: {bad}".format(bad=self.my_satellite.upmode))
+            sys.exit()
+            
+        return int(doppler_thres), interactive
 

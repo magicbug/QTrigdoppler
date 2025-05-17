@@ -31,6 +31,8 @@ from lib import rotator
 from lib.sat_utils import *
 from lib.logbook_connector import *
 
+logging.basicConfig(level = logging.WARNING)
+
 ### Read config and import additional libraries if needed
 # parsing config file
 try:
@@ -1432,21 +1434,21 @@ class MainWindow(QMainWindow):
             self._last_cloudlog_F = self.my_satellite.F
             self._last_cloudlog_I = self.my_satellite.I
             
-            # Safely start the timer from any thread    
+        # Safely start the timer from any thread    
+        try:
+            QMetaObject.invokeMethod(self.timer, "start", Qt.QueuedConnection)
+            logging.debug("Timer started safely")
+        except Exception as e:
+            logging.error(f"Error starting timer: {e}")
+            # Fallback: try direct start if invokeMethod failed
             try:
-                QMetaObject.invokeMethod(self.timer, "start", Qt.QueuedConnection)
-                logging.debug("Timer started safely")
-            except Exception as e:
-                logging.error(f"Error starting timer: {e}")
-                # Fallback: try direct start if invokeMethod failed
-                try:
-                    if QThread.currentThread() == self.thread():
-                        self.timer.start()
-                        logging.debug("Timer started directly")
-                    else:
-                        logging.error("Cannot start timer - not in main thread")
-                except Exception as e2:
-                    logging.error(f"Error in fallback timer start: {e2}")
+                if QThread.currentThread() == self.thread():
+                    self.timer.start()
+                    logging.debug("Timer started directly")
+                else:
+                    logging.error("Cannot start timer - not in main thread")
+            except Exception as e2:
+                logging.error(f"Error in fallback timer start: {e2}")
         
         # Notify web clients of the transponder change
         if WEBAPI_ENABLED:
@@ -1602,60 +1604,7 @@ class MainWindow(QMainWindow):
                         elif curr_band < 200000000 and F0 > 200000000:
                             icomTrx.setExchange()
                             
-                    if self.my_satellite.rig_satmode == 1:
-                        icomTrx.setVFO("Main")
-                    else:
-                        icomTrx.setVFO("VFOA")
-                    if self.my_satellite.downmode == "FM":
-                        icomTrx.setMode("FM")
-                        doppler_thres = DOPPLER_THRES_FM
-                        INTERACTIVE = False
-                    elif self.my_satellite.downmode == "FMN":
-                        icomTrx.setMode("FM")
-                        doppler_thres = DOPPLER_THRES_FM
-                        INTERACTIVE = False
-                    elif self.my_satellite.downmode ==  "LSB":
-                        INTERACTIVE = True
-                        icomTrx.setMode("LSB")
-                        doppler_thres = DOPPLER_THRES_LINEAR
-                    elif self.my_satellite.downmode ==  "USB":
-                        INTERACTIVE = True
-                        icomTrx.setMode("USB")
-                        doppler_thres = DOPPLER_THRES_LINEAR
-                    elif self.my_satellite.downmode ==  "DATA-LSB":
-                        INTERACTIVE = False
-                        icomTrx.setMode("LSB")
-                        doppler_thres = 0
-                    elif self.my_satellite.downmode ==  "DATA-USB":
-                        INTERACTIVE = False
-                        icomTrx.setMode("USB")
-                        doppler_thres = 0      
-                    elif self.my_satellite.downmode == "CW":
-                        INTERACTIVE = True
-                        icomTrx.setMode("CW") 
-                        doppler_thres = DOPPLER_THRES_LINEAR
-                    else:
-                        logging.warning("*** Downlink mode not implemented yet: {bad}".format(bad=self.my_satellite.downmode))
-                        sys.exit()
-                    doppler_thres = int(doppler_thres)
-                    self.dopplerthresval.setText(str(doppler_thres) + " Hz")
-                    if self.my_satellite.rig_satmode == 1:
-                        icomTrx.setVFO("SUB")
-                    else:
-                        icomTrx.setVFO("VFOB")
-                    if self.my_satellite.upmode == "FM":
-                        icomTrx.setMode("FM")
-                    elif self.my_satellite.upmode == "FMN":
-                        icomTrx.setMode("FM")
-                    elif self.my_satellite.upmode == "LSB" or self.my_satellite.downmode ==  "DATA-LSB":
-                        icomTrx.setMode("LSB")
-                    elif self.my_satellite.upmode == "USB" or self.my_satellite.downmode ==  "DATA-USB":
-                        icomTrx.setMode("USB")
-                    elif self.my_satellite.upmode == "CW":
-                        icomTrx.setMode("CW") 
-                    else:
-                        logging.warning("*** Uplink mode not implemented yet: {bad}".format(bad=self.my_satellite.upmode))
-                        sys.exit()
+                    doppler_thres, INTERACTIVE = icomTrx.setup_vfos(self.my_satellite.rig_satmode,self.my_satellite.downmode, self.my_satellite.upmode, DOPPLER_THRES_FM, DOPPLER_THRES_LINEAR)
                 elif RADIO != "910":
                     logging.error("*** Not implemented yet mate***")
                     sys.exit()
@@ -1846,6 +1795,7 @@ class MainWindow(QMainWindow):
         try:
             date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
             myloc.date = ephem.Date(date_val)
+            
             
             self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
             self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F, myloc))
