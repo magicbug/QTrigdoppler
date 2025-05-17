@@ -596,7 +596,7 @@ class MainWindow(QMainWindow):
         # Output log
         
         self.log_sat_status = QGroupBox()
-        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 12pt;} QLabel{font-size: 12pt;}")
+        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:0px;padding-bottom:0px; margin-top:0px;font-size: 16pt;} QLabel{font-size: 16pt;}")
         log_sat_status_layout = QGridLayout()
         
         self.log_sat_status_ele_lbl = QLabel("🛰 Elevation:")
