@@ -924,41 +924,54 @@ class MainWindow(QMainWindow):
         self.radicvi.setText(CVIADDR)
         radio_settings_layout.addWidget(self.radicvi, 2, 1)
         
+        self.rig_serialport_lbl = QLabel("Port:")
+        radio_settings_layout.addWidget(self.rig_serialport_lbl, 3, 0)
+
+        # Replace QLineEdit with QComboBox for COM port selection
+        self.rig_serialport_val = QComboBox()
+        available_ports = [port.device for port in list_ports.comports()]
+        self.rig_serialport_val.addItems(available_ports)
+        # Add the saved port if not in the list
+        if str(SERIALPORT) not in available_ports:
+            self.rig_serialport_val.addItem(str(SERIALPORT))
+        self.rig_serialport_val.setCurrentText(str(SERIALPORT))
+        radio_settings_layout.addWidget(self.rig_serialport_val, 3, 1)
+        
         # 1x Label step RX
         self.qthsteprx_lbl = QLabel("Step (Hz) for RX offset:")
-        radio_settings_layout.addWidget(self.qthsteprx_lbl, 3, 0)
+        radio_settings_layout.addWidget(self.qthsteprx_lbl, 4, 0)
 
         self.qthsteprx = QLineEdit()
         self.qthsteprx.setMaxLength(10)
         self.qthsteprx.setText(str(STEP_RX))
-        radio_settings_layout.addWidget(self.qthsteprx, 3, 1)
+        radio_settings_layout.addWidget(self.qthsteprx, 4, 1)
 
         # 1x Label Max Offset RX
         self.qthmaxoffrx_lbl = QLabel("Max Offset (Hz) for RX:")
-        radio_settings_layout.addWidget(self.qthmaxoffrx_lbl, 4, 0)
+        radio_settings_layout.addWidget(self.qthmaxoffrx_lbl, 5, 0)
 
         self.qthmaxoffrx = QLineEdit()
         self.qthmaxoffrx.setMaxLength(6)
         self.qthmaxoffrx.setText(str(MAX_OFFSET_RX))
-        radio_settings_layout.addWidget(self.qthmaxoffrx, 4, 1)
+        radio_settings_layout.addWidget(self.qthmaxoffrx, 5, 1)
 
         # 1x Label doppler fm threshold
         self.doppler_fm_threshold_lbl = QLabel("Doppler threshold for FM")
-        radio_settings_layout.addWidget(self.doppler_fm_threshold_lbl, 5, 0)
+        radio_settings_layout.addWidget(self.doppler_fm_threshold_lbl, 6, 0)
 
         self.doppler_fm_threshold = QLineEdit()
         self.doppler_fm_threshold.setMaxLength(6)
         self.doppler_fm_threshold.setText(str(DOPPLER_THRES_FM))
-        radio_settings_layout.addWidget(self.doppler_fm_threshold, 5, 1)
+        radio_settings_layout.addWidget(self.doppler_fm_threshold, 6, 1)
         
         # 1x Label doppler linear threshold
         self.doppler_linear_threshold_lbl = QLabel("Doppler threshold for Linear")
-        radio_settings_layout.addWidget(self.doppler_linear_threshold_lbl, 6, 0)
+        radio_settings_layout.addWidget(self.doppler_linear_threshold_lbl, 7, 0)
 
         self.doppler_linear_threshold = QLineEdit()
         self.doppler_linear_threshold.setMaxLength(6)
         self.doppler_linear_threshold.setText(str(DOPPLER_THRES_LINEAR))
-        radio_settings_layout.addWidget(self.doppler_linear_threshold, 6, 1)
+        radio_settings_layout.addWidget(self.doppler_linear_threshold, 7, 1)
         
         #self.settings_radio_box.setLayout(radio_settings_layout)
         self.radio_settings_layout_scroller_widget.setLayout(radio_settings_layout)
@@ -1300,6 +1313,8 @@ class MainWindow(QMainWindow):
 
         CVIADDR = str(self.radicvi.displayText())
         configur['icom']['cviaddress'] = CVIADDR
+        SERIALPORT = self.rig_serialport_val.currentText()
+        configur['icom']['serialport'] = SERIALPORT
         
         # Saving offsets
         offset_stored = False        
