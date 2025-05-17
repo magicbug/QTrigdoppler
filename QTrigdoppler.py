@@ -32,8 +32,6 @@ from lib import rotator
 from lib.sat_utils import *
 from lib.logbook_connector import *
 
-
-
 ### Read config and import additional libraries if needed
 # parsing config file
 try:
