@@ -1830,17 +1830,24 @@ class MainWindow(QMainWindow):
             F_now = self.my_satellite.F
             I_now = self.my_satellite.I
             if elevation > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
-                worker = CloudlogWorker(
+                if not CLOUDLOG_ENABLED:
+                    logging.debug("Cloudlog: Disabled in config.ini")
+                elif not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
+                    logging.warning("Cloudlog API key or URL not set in config.ini")
+                else:
+                    worker = CloudlogWorker(
                     sat=self.my_satellite,
-                    tx_freq=I_now,
-                    rx_freq=F_now,
+                    tx_freq=self.my_satellite.I,
+                    rx_freq=self.my_satellite.F,
                     tx_mode=self.my_satellite.upmode,
                     rx_mode=self.my_satellite.downmode,
-                    sat_name=self.my_satellite.name
+                    sat_name=self.my_satellite.name,
+                    log_url=CLOUDLOG_URL,
+                    log_api_key=CLOUDLOG_API_KEY
                 )
                 QThreadPool.globalInstance().start(worker)
-                self._last_cloudlog_F = F_now
-                self._last_cloudlog_I = I_now
+                self._last_cloudlog_F = self.my_satellite.F
+                self._last_cloudlog_I = self.my_satellite.I
         except:
             logging.warning("Error in label timer")
             traceback.print_exc()
