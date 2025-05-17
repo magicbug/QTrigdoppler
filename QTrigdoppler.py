@@ -28,6 +28,7 @@ from qt_material import apply_stylesheet
 import requests
 import logging
 from lib import rotator
+from serial.tools import list_ports
 
 
 ### Read config and import additional libraries if needed
@@ -461,7 +462,7 @@ class MainWindow(QMainWindow):
                 )
             except Exception as e:
                 self.rotator_error = f"Rotator init failed: {e}"
-                loffinf.error(self.rotator_error)
+                logging.error(self.rotator_error)
                 self.rotator = None
 
 
@@ -1088,9 +1089,14 @@ class MainWindow(QMainWindow):
         self.rotator_serialport_lbl = QLabel("Port:")
         rotator_settings_layout.addWidget(self.rotator_serialport_lbl, 1, 0)
 
-        self.rotator_serialport_val = QLineEdit()
-        self.rotator_serialport_val.setMaxLength(50)
-        self.rotator_serialport_val.setText(str(ROTATOR_SERIAL_PORT))
+        # Replace QLineEdit with QComboBox for COM port selection
+        self.rotator_serialport_val = QComboBox()
+        available_ports = [port.device for port in list_ports.comports()]
+        self.rotator_serialport_val.addItems(available_ports)
+        # Add the saved port if not in the list
+        if str(ROTATOR_SERIAL_PORT) not in available_ports:
+            self.rotator_serialport_val.addItem(str(ROTATOR_SERIAL_PORT))
+        self.rotator_serialport_val.setCurrentText(str(ROTATOR_SERIAL_PORT))
         rotator_settings_layout.addWidget(self.rotator_serialport_val, 1, 1)
         
         self.rotator_serialrate_lbl = QLabel("Baudrate:")
@@ -1315,7 +1321,7 @@ class MainWindow(QMainWindow):
         
         ROTATOR_ENABLED = self.rotator_enable_button.isChecked()
         configur['rotator']['enabled'] = str(ROTATOR_ENABLED)
-        ROTATOR_SERIAL_PORT = self.rotator_serialport_val.displayText()
+        ROTATOR_SERIAL_PORT = self.rotator_serialport_val.currentText()
         configur['rotator']['serial_port'] = ROTATOR_SERIAL_PORT
         ROTATOR_BAUDRATE = int(self.rotator_serialrate_val.displayText())
         configur['rotator']['baudrate'] = str(ROTATOR_BAUDRATE)
