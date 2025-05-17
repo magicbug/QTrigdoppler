@@ -113,15 +113,15 @@ if configur.get('misc', 'display_map') == "True":
 elif configur.get('misc', 'display_map') == "False":
     DISPLAY_MAP = False
 
-if configur.has_section('web_api') and configur.getboolean('web_api', 'enabled'):
-    from lib import web_api  # Import the web API module
-    from lib import web_api_proxy
-
 # Import the remote client if section exists
 REMOTE_ENABLED = False
 if configur.has_section('remote_server') and configur.getboolean('remote_server', 'enable'):
     from lib import remote_client
     REMOTE_ENABLED = True
+
+if WEBAPI_ENABLED or REMOTE_ENABLED:
+    from lib import web_api  # Import the web API module
+    from lib import web_api_proxy
 
 ### Global constants
 subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
