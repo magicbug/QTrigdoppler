@@ -10,6 +10,7 @@ import socketio
 import os
 import sys
 import configparser
+import logging
 
 class RemoteClient:
     """Client to connect QTrigdoppler to the remote server"""
@@ -52,13 +53,13 @@ class RemoteClient:
         """Connect to the remote server"""
         if not self.connected and not self.reconnecting:
             try:
-                print(f"Connecting to remote server at {self.server_url}")
+                logging.info(f"Connecting to remote server at {self.server_url}")
                 self.reconnecting = True
                 self.sio.connect(self.server_url)
                 self.reconnecting = False
             except Exception as e:
                 self.reconnecting = False
-                print(f"Failed to connect to remote server: {e}")
+                logging.error(f"Failed to connect to remote server: {e}")
                 # Start a reconnection attempt in the background
                 threading.Timer(5.0, self.connect).start()
     
@@ -74,7 +75,7 @@ class RemoteClient:
     
     def on_connect(self):
         """Handler for successful connection"""
-        print("Connected to remote server")
+        logging.info("Connected to remote server")
         self.connected = True
         # Register as QTrigdoppler client
         self.sio.emit('register_qtrig_client')
@@ -83,7 +84,7 @@ class RemoteClient:
     
     def on_disconnect(self):
         """Handler for disconnection"""
-        print("Disconnected from remote server")
+        logging.info("Disconnected from remote server")
         self.connected = False
         self.stop_heartbeat()
         # Attempt to reconnect after a delay if not already reconnecting
@@ -92,7 +93,7 @@ class RemoteClient:
     
     def on_registration_success(self, data):
         """Handler for successful registration as QTrigdoppler client"""
-        print("Registered as QTrigdoppler client")
+        logging.info("Registered as QTrigdoppler client")
         # Send initial data
         if self.main_window:
             self.send_satellite_list()
@@ -120,7 +121,7 @@ class RemoteClient:
                 else:
                     self.sio.emit('heartbeat', {})
             except Exception as e:
-                print(f"Error in heartbeat: {e}")
+                logging.error(f"Error in heartbeat: {e}")
             
             # Wait before next heartbeat
             time.sleep(10)
@@ -166,7 +167,7 @@ class RemoteClient:
                     'azimuth': self.main_window.log_sat_status_azi_val.text() if hasattr(self.main_window.log_sat_status_azi_val, 'text') else str(self.main_window.log_sat_status_azi_val)
                 }
             except Exception as e:
-                print(f"Error getting satellite position: {e}")
+                logging.error(f"Error getting satellite position: {e}")
         
         # Add doppler if available
         if hasattr(self.main_window, 'rxdoppler_val') and hasattr(self.main_window, 'txdoppler_val'):
@@ -175,7 +176,7 @@ class RemoteClient:
                     'downlink': self.main_window.rxdoppler_val.text() if hasattr(self.main_window.rxdoppler_val, 'text') else str(self.main_window.rxdoppler_val),
                     'uplink': self.main_window.txdoppler_val.text() if hasattr(self.main_window.txdoppler_val, 'text') else str(self.main_window.txdoppler_val)                }
             except Exception as e:
-                print(f"Error getting doppler values: {e}")
+                logging.error(f"Error getting doppler values: {e}")
                   # Add rotator enabled flag
         state['rotator_enabled'] = getattr(self.main_window, 'ROTATOR_ENABLED', False)
         
@@ -200,7 +201,7 @@ class RemoteClient:
                     'elevation': el
                 }
             except Exception as e:
-                print(f"Error getting rotator position: {e}")
+                logging.error(f"Error getting rotator position: {e}")
         
         return state
     
@@ -210,7 +211,7 @@ class RemoteClient:
             try:
                 self.sio.emit('heartbeat', {'state': self.get_current_state()})
             except Exception as e:
-                print(f"Error sending full status: {e}")
+                logging.error(f"Error sending full status: {e}")
     
     def send_satellite_list(self):
         """Send satellite list to the server"""
@@ -256,13 +257,13 @@ class RemoteClient:
                 
                 # Send the list to the server
                 self.sio.emit('update_satellite_list', {'satellites': satellite_list})
-                print(f"Sent satellite list: {len(satellite_list)} satellites")
+                logging.info(f"Sent satellite list: {len(satellite_list)} satellites")
                 
             except Exception as e:
-                print(f"Error reading satellite list: {e}")
+                logging.error(f"Error reading satellite list: {e}")
         
         except Exception as e:
-            print(f"Error sending satellite list: {e}")
+            logging.error(f"Error sending satellite list: {e}")
     
     def send_transponder_list(self, satellite_name):
         """Send transponder list for a specific satellite to the server"""
@@ -309,10 +310,10 @@ class RemoteClient:
                 'satellite': satellite_name,
                 'transponders': tpxlist
             })
-            print(f"Sent transponder list: {len(tpxlist)} transponders for {satellite_name}")
+            logging.info(f"Sent transponder list: {len(tpxlist)} transponders for {satellite_name}")
             
         except Exception as e:
-            print(f"Error sending transponder list: {e}")
+            logging.error(f"Error sending transponder list: {e}")
       # Command handlers
     def on_cmd_start_tracking(self, data=None):
         """Handle start tracking command from server"""
@@ -366,7 +367,7 @@ class RemoteClient:
                 # Send updated status back
                 self.send_full_status()
             except (ValueError, TypeError):
-                print(f"Invalid RX offset value: {data.get('offset')}")
+                logging.warning(f"Invalid RX offset value: {data.get('offset')}")
     def on_cmd_park_rotator(self, data=None):
         """Handle park rotator command from server"""
         if self.main_window and hasattr(self.main_window, 'park_rotators'):
@@ -407,11 +408,11 @@ def register_window(window):
             remote_client.register_window(window)
             # Connect to the remote server
             remote_client.connect()
-            print(f"Remote client enabled, connecting to {remote_url}")
+            logging.info(f"Remote client enabled, connecting to {remote_url}")
         else:
-            print("Remote client disabled in config")
+            logging.info("Remote client disabled in config")
     except Exception as e:
-        print(f"Error initializing remote client: {e}")
+        logging.error(f"Error initializing remote client: {e}")
 
 def broadcast_satellite_change(satellite_name):
     """Broadcast satellite changes"""
