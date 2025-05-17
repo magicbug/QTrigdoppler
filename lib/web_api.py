@@ -87,12 +87,26 @@ def status_broadcast_worker():
     while should_run_status_broadcast:
         try:
             if main_window:
+                # Determine broadcast interval based on tracking status
+                tracking_active = False
+                try:
+                    tracking_active = main_window.Stopbutton.isEnabled()
+                except AttributeError:
+                    pass
+                
+                # Send the status broadcast
                 broadcast_full_status()
+                
+                # Adjust sleep interval based on tracking status:
+                # - When tracking: update every 15 seconds
+                # - When not tracking: update much less frequently (every 2 minutes)
+                if tracking_active:
+                    time.sleep(15)  # 15 seconds when actively tracking
+                else:
+                    time.sleep(120)  # 2 minutes when idle
         except Exception as e:
             print(f"Error in status broadcast thread: {e}")
-        
-        # Wait before next broadcast
-        time.sleep(10)  # Broadcast every 10 seconds
+            time.sleep(60)  # On error, wait a minute before trying again
 
 def start_status_broadcast_thread():
     """Start a background thread that broadcasts status updates"""
