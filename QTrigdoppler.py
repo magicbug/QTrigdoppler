@@ -55,7 +55,7 @@ DOPPLER_THRES_LINEAR = configur.get('satellite', 'doppler_threshold_linear',fall
 SQFILE = configur.get('satellite','sqffile')
 RADIO = configur.get('icom','radio')
 CVIADDR = configur.get('icom','cviaddress')
-SERIALPORT = configur.get('icom', 'serialport')
+RIG_SERIAL_PORT = configur.get('icom', 'serialport')
 RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
@@ -290,9 +290,9 @@ INTERACTIVE = False # read user vfo/dial input - disable for inband packet
 RX_TPX_ONLY = False
 RIG_CONNECTED = False
 if configur['icom']['radio'] == '9700':
-    icomTrx = icom.icom(SERIALPORT, '19200', 96)
+    icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
 elif configur['icom']['radio'] == '910':
-    icomTrx = icom.icom(SERIALPORT, '19200', 96)
+    icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
 RIG_CONNECTED = icomTrx.is_connected()    
 
 class Satellite:
@@ -932,9 +932,9 @@ class MainWindow(QMainWindow):
         available_ports = [port.device for port in list_ports.comports()]
         self.rig_serialport_val.addItems(available_ports)
         # Add the saved port if not in the list
-        if str(SERIALPORT) not in available_ports:
-            self.rig_serialport_val.addItem(str(SERIALPORT))
-        self.rig_serialport_val.setCurrentText(str(SERIALPORT))
+        if str(RIG_SERIAL_PORT) not in available_ports:
+            self.rig_serialport_val.addItem(str(RIG_SERIAL_PORT))
+        self.rig_serialport_val.setCurrentText(str(RIG_SERIAL_PORT))
         radio_settings_layout.addWidget(self.rig_serialport_val, 3, 1)
         
         # 1x Label step RX
@@ -1313,8 +1313,8 @@ class MainWindow(QMainWindow):
 
         CVIADDR = str(self.radicvi.displayText())
         configur['icom']['cviaddress'] = CVIADDR
-        SERIALPORT = self.rig_serialport_val.currentText()
-        configur['icom']['serialport'] = SERIALPORT
+        RIG_SERIAL_PORT = self.rig_serialport_val.currentText()
+        configur['icom']['serialport'] = RIG_SERIAL_PORT
         
         # Saving offsets
         offset_stored = False        
