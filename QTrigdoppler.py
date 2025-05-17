@@ -282,7 +282,30 @@ class MainWindow(QMainWindow):
         
             # Start web API server in a separate thread if enabled
             self.web_api_thread = threading.Thread(target=web_api.run_socketio, daemon=True)
+            
+            # Set thread name for easier identification in diagnostics
+            self.web_api_thread.name = "WebSocketThread"
+            
+            # Start with lower priority if possible
             self.web_api_thread.start()
+            
+            # Attempt to set thread priority lower (platform-specific)
+            try:
+                import platform
+                if platform.system() == 'Windows':
+                    import ctypes
+                    # Get thread ID for the current thread
+                    thread_id = self.web_api_thread.ident
+                    if thread_id:
+                        # THREAD_PRIORITY_BELOW_NORMAL = -1
+                        handle = ctypes.windll.kernel32.OpenThread(0x0200, False, thread_id)
+                        if handle:
+                            ctypes.windll.kernel32.SetThreadPriority(handle, -1)
+                            ctypes.windll.kernel32.CloseHandle(handle)
+                            logging.debug("Set web_api_thread to below normal priority")
+            except Exception as e:
+                logging.warning(f"Failed to adjust web_api_thread priority: {e}")
+            
             logging.info(f"Web API server started on port {configur.get('web_api', 'port', fallback='5000')}")
         
             # Set up the web API proxy for thread-safe GUI/timer operations
@@ -1694,7 +1717,12 @@ class MainWindow(QMainWindow):
         self.combo1.setEnabled(False)
         self.combo2.setEnabled(False)
         self.doppler_worker = Worker(self.calc_doppler)
-        self.threadpool.start(self.doppler_worker)
+        
+        # Set high priority for doppler calculations
+        # This ensures doppler calculations run at higher priority than WebSocket communications
+        # For PySide6, we need to use the integer priority value directly
+        self.threadpool.start(self.doppler_worker, QThread.HighestPriority.value)
+        
         # Set pass recorder to active tracking state
         self.pass_recorder.set_tracking_active(True)
         # Start rotator thread

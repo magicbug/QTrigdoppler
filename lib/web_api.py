@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import time
+import logging
 
 flask_app = Flask(__name__)
 socketio = SocketIO(flask_app, cors_allowed_origins="*")
@@ -87,12 +88,26 @@ def status_broadcast_worker():
     while should_run_status_broadcast:
         try:
             if main_window:
+                # Determine broadcast interval based on tracking status
+                tracking_active = False
+                try:
+                    tracking_active = main_window.Stopbutton.isEnabled()
+                except AttributeError:
+                    pass
+                
+                # Send the status broadcast
                 broadcast_full_status()
+                
+                # Adjust sleep interval based on tracking status:
+                # - When tracking: update every 15 seconds
+                # - When not tracking: update much less frequently (every 2 minutes)
+                if tracking_active:
+                    time.sleep(15)  # 15 seconds when actively tracking
+                else:
+                    time.sleep(120)  # 2 minutes when idle
         except Exception as e:
             print(f"Error in status broadcast thread: {e}")
-        
-        # Wait before next broadcast
-        time.sleep(10)  # Broadcast every 10 seconds
+            time.sleep(60)  # On error, wait a minute before trying again
 
 def start_status_broadcast_thread():
     """Start a background thread that broadcasts status updates"""
@@ -104,7 +119,37 @@ def start_status_broadcast_thread():
     # Start new thread
     should_run_status_broadcast = True
     status_broadcast_thread = threading.Thread(target=status_broadcast_worker, daemon=True)
-    status_broadcast_thread.start()
+    
+    # Set lower priority for this thread (if the platform supports it)
+    try:
+        # Set thread priority to lowest level using OS-specific approach
+        import platform
+        if platform.system() == 'Windows':
+            # Import Windows-specific threading library
+            import ctypes
+            # Set the thread to lowest priority when it starts
+            status_broadcast_thread.start()
+            # THREAD_PRIORITY_BELOW_NORMAL = -1
+            # THREAD_PRIORITY_LOWEST = -2 
+            # THREAD_PRIORITY_IDLE = -15
+            ctypes.windll.kernel32.SetThreadPriority(
+                ctypes.windll.kernel32.GetCurrentThread(), -2)
+            logging.debug("Set WebSocket broadcast thread to low priority")
+        elif platform.system() == 'Linux' or platform.system() == 'Darwin':
+            # For Unix-based systems use nice
+            import os
+            status_broadcast_thread.start()
+            os.nice(10)  # Lower priority by increasing nice value
+            logging.debug("Set WebSocket broadcast thread to low priority (nice 10)")
+        else:
+            # Default case - just start the thread normally
+            status_broadcast_thread.start()
+    except Exception as e:
+        # If priority setting fails, still start the thread normally
+        logging.warning(f"Failed to set thread priority, using default: {e}")
+        if not status_broadcast_thread.is_alive():
+            status_broadcast_thread.start()
+    
     print("Started status broadcast thread")
 
 def stop_status_broadcast_thread():
