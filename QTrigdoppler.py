@@ -2413,29 +2413,12 @@ tooltip_stylesheet = """
         QSpinBox {
             color: white;
         }
-        QLineEdit {
+        QDoubleSpinBox {
             color: white;
-        }
-    """
-tooltip_stylesheet_rpi = """
-        QToolTip {
-            color: white;
-            background-color: black;
-        }
-        QComboBox {
-            color: white;
-            font-size: 20pt;
-        }
-        QSpinBox {
-            color: white;
-            font-size: 20pt;
         }
         QLineEdit {
             color: white;
         }
-        QLabel{font-size: 18pt;}
-        QButton{font-size: 18pt;}
-        QPushButton{font-size: 20pt;}
     """
 app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
 window.show()
