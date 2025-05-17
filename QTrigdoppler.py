@@ -34,6 +34,7 @@ from lib import rotator
 from lib.sat_utils import *
 from lib.logbook_connector import *
 
+# Set logging level back to WARNING
 logging.basicConfig(level = logging.WARNING)
 
 ### Read config and import additional libraries if needed
@@ -1973,33 +1974,38 @@ class MainWindow(QMainWindow):
 
             # Cloudlog: only log if F or I changed and satellite is above horizon
             try:
-                # Update pass recorder with current elevation
+                # Get elevation value directly
+                elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+                
+                # Update pass recorder with current elevation - no need to log every update
                 if self.my_satellite.name:
                     self.on_satellite_update(elevation, self.my_satellite.name)
-                elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
-            except Exception:
+                
+                # Handle Cloudlog updates
+                F_now = self.my_satellite.F
+                I_now = self.my_satellite.I
+                if elevation > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
+                    if not CLOUDLOG_ENABLED:
+                        logging.debug("Cloudlog: Disabled in config.ini")
+                    elif not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
+                        logging.warning("Cloudlog API key or URL not set in config.ini")
+                    else:
+                        worker = CloudlogWorker(
+                            sat=self.my_satellite,
+                            tx_freq=self.my_satellite.I,
+                            rx_freq=self.my_satellite.F,
+                            tx_mode=self.my_satellite.upmode,
+                            rx_mode=self.my_satellite.downmode,
+                            sat_name=self.my_satellite.name,
+                            log_url=CLOUDLOG_URL,
+                            log_api_key=CLOUDLOG_API_KEY
+                        )
+                        QThreadPool.globalInstance().start(worker)
+                        self._last_cloudlog_F = self.my_satellite.F
+                        self._last_cloudlog_I = self.my_satellite.I
+            except Exception as e:
+                logging.error(f"Error getting satellite elevation: {e}")
                 elevation = -1
-            F_now = self.my_satellite.F
-            I_now = self.my_satellite.I
-            if elevation > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
-                if not CLOUDLOG_ENABLED:
-                    logging.debug("Cloudlog: Disabled in config.ini")
-                elif not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
-                    logging.warning("Cloudlog API key or URL not set in config.ini")
-                else:
-                    worker = CloudlogWorker(
-                        sat=self.my_satellite,
-                        tx_freq=self.my_satellite.I,
-                        rx_freq=self.my_satellite.F,
-                        tx_mode=self.my_satellite.upmode,
-                        rx_mode=self.my_satellite.downmode,
-                        sat_name=self.my_satellite.name,
-                        log_url=CLOUDLOG_URL,
-                        log_api_key=CLOUDLOG_API_KEY
-                    )
-                    QThreadPool.globalInstance().start(worker)
-                    self._last_cloudlog_F = self.my_satellite.F
-                    self._last_cloudlog_I = self.my_satellite.I
         except:
             logging.warning("Error in label timer")
             traceback.print_exc()
@@ -2309,8 +2315,24 @@ class MainWindow(QMainWindow):
             self.recording_status_label.setText("✘")
             self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: red}")
     def on_satellite_update(self, elevation, satname):
-        self.pass_recorder.update_elevation(elevation, satname)
-        self.update_passrecorder_status()
+        try:
+            # Ensure elevation is a float
+            elev_float = float(elevation)
+            
+            # Call the pass recorder without logging every elevation update
+            self.pass_recorder.update_elevation(elev_float, satname)
+            self.update_passrecorder_status()
+        except (ValueError, TypeError) as e:
+            logging.error(f"Error converting elevation '{elevation}' to float: {e}")
+            # Try to get a valid elevation directly from satellite calculations
+            try:
+                # Get current elevation directly
+                current_elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+                logging.info(f"Using fallback elevation={current_elevation}")
+                self.pass_recorder.update_elevation(current_elevation, satname)
+                self.update_passrecorder_status()
+            except Exception as e2:
+                logging.error(f"Fallback elevation calculation also failed: {e2}")
 
 class WorkerSignals(QObject):
     finished = Signal()
