@@ -20,6 +20,23 @@ class PassRecorder:
         self.audio_buffer = None  # Buffer to hold audio data
         self.buffer_lock = threading.Lock()
         self.device_info = None  # Store info about the selected device
+        
+        # Check at startup if any audio devices are available
+        try:
+            devices = sd.query_devices()
+            input_devices = [dev for dev in devices if dev.get('max_input_channels', 0) > 0]
+            logging.info(f"Pass recorder initialized: Found {len(input_devices)} audio input devices")
+            if len(input_devices) == 0:
+                logging.warning("No audio input devices detected. Recording will not work.")
+                
+            # Print available devices for troubleshooting
+            for i, dev in enumerate(devices):
+                input_channels = dev.get('max_input_channels', 0)
+                if input_channels > 0:
+                    logging.info(f"Audio input device {i}: {dev['name']} | {input_channels} channels")
+                    
+        except Exception as e:
+            logging.error(f"Error checking audio devices at startup: {e}")
 
     def load_config(self, config):
         self.enabled = config.getboolean('passrecording', 'enabled', fallback=False)
@@ -41,6 +58,7 @@ class PassRecorder:
             self.stop_recording()
 
     def update_elevation(self, elevation, satname):
+        # Remove excessive logging, only log when recording state changes
         if not self.enabled or not self.tracking_active:
             # Don't record if not enabled or tracking is not active
             if self.recording:
@@ -49,9 +67,11 @@ class PassRecorder:
             
         if elevation >= self.min_elevation:
             if not self.recording:
+                logging.info(f"Starting recording for {satname} at elevation {elevation}")
                 self.start_recording(satname)
         else:
             if self.recording:
+                logging.info(f"Stopping recording for {satname} at elevation {elevation}")
                 self.stop_recording()
 
     def find_audio_device(self):
