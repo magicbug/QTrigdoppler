@@ -2247,27 +2247,35 @@ class MainWindow(QMainWindow):
             
             # Create callback for audio processing with debug logging
             def audio_callback(indata, frames, time, status):
-                if status:
+                # Only log errors other than overflow 
+                if status and status.input_overflow:
+                    # Skip logging for input overflow as it's too verbose
+                    pass
+                elif status:
                     logging.warning(f"Audio monitoring status: {status}")
                 
-                # Calculate RMS amplitude (volume level)
-                level = np.linalg.norm(indata)
-                
-                # Log levels occasionally to help debug
-                if frames % 100 == 0:
-                    logging.debug(f"Monitor audio level: {level:.4f}")
-                
-                # Scale to percentage (0-100)
-                # Apply a logarithmic scaling to make low levels more visible
-                if level > 0:
-                    log_level = 20 * np.log10(level) + 90  # Convert to dB scale (normalized)
-                    percentage = min(100, max(0, int(log_level)))
-                else:
-                    percentage = 0
-                
-                # Update UI in thread-safe way
-                QMetaObject.invokeMethod(self.passrec_level_meter, "setValue", 
-                                        Qt.QueuedConnection, Q_ARG(int, percentage))
+                try:
+                    # Calculate RMS amplitude (volume level)
+                    level = np.linalg.norm(indata)
+                    
+                    # Log levels occasionally to help debug
+                    if frames % 100 == 0 and logging.getLogger().isEnabledFor(logging.DEBUG):
+                        logging.debug(f"Monitor audio level: {level:.4f}")
+                    
+                    # Scale to percentage (0-100)
+                    # Apply a logarithmic scaling to make low levels more visible
+                    if level > 0:
+                        log_level = 20 * np.log10(level) + 90  # Convert to dB scale (normalized)
+                        percentage = min(100, max(0, int(log_level)))
+                    else:
+                        percentage = 0
+                    
+                    # Update UI in thread-safe way
+                    QMetaObject.invokeMethod(self.passrec_level_meter, "setValue", 
+                                            Qt.QueuedConnection, Q_ARG(int, percentage))
+                except Exception as e:
+                    # Catch any errors to prevent audio stream from crashing
+                    logging.error(f"Error in audio monitoring callback: {e}")
             
             # Start the audio stream
             try:
@@ -2276,7 +2284,7 @@ class MainWindow(QMainWindow):
                     device=device,
                     channels=1,
                     callback=audio_callback,
-                    blocksize=1024,
+                    blocksize=8192,  # Increased from 1024 to 8192 for better stability
                     samplerate=44100
                 )
                 self.audio_monitor_stream.start()

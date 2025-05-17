@@ -104,7 +104,7 @@ class PassRecorder:
                         # Before selecting, test if device is available
                         try:
                             # Quick test with a small stream
-                            with sd.InputStream(device=i, channels=1, samplerate=44100, blocksize=1024, callback=lambda *args: None):
+                            with sd.InputStream(device=i, channels=1, samplerate=44100, blocksize=8192, callback=lambda *args: None):
                                 pass  # Just test if it works
                             device = i
                             device_name = dev['name']
@@ -120,7 +120,7 @@ class PassRecorder:
                         if (self.soundcard in dev['name'] or dev['name'] in self.soundcard) and dev.get('max_input_channels', 0) > 0:
                             try:
                                 # Quick test
-                                with sd.InputStream(device=i, channels=1, samplerate=44100, blocksize=1024, callback=lambda *args: None):
+                                with sd.InputStream(device=i, channels=1, samplerate=44100, blocksize=8192, callback=lambda *args: None):
                                     pass
                                 device = i
                                 device_name = dev['name']
@@ -137,7 +137,7 @@ class PassRecorder:
                         if 0 <= index < len(devices) and devices[index].get('max_input_channels', 0) > 0:
                             try:
                                 # Quick test
-                                with sd.InputStream(device=index, channels=1, samplerate=44100, blocksize=1024, callback=lambda *args: None):
+                                with sd.InputStream(device=index, channels=1, samplerate=44100, blocksize=8192, callback=lambda *args: None):
                                     pass
                                 device = index
                                 device_name = devices[index]['name']
@@ -155,7 +155,7 @@ class PassRecorder:
                     if default_device is not None and 0 <= default_device < len(devices):
                         try:
                             # Quick test
-                            with sd.InputStream(device=default_device, channels=1, samplerate=44100, blocksize=1024, callback=lambda *args: None):
+                            with sd.InputStream(device=default_device, channels=1, samplerate=44100, blocksize=8192, callback=lambda *args: None):
                                 pass
                             device = default_device
                             device_name = devices[default_device]['name']
@@ -173,7 +173,7 @@ class PassRecorder:
                     if dev.get('max_input_channels', 0) > 0:
                         try:
                             # Quick test
-                            with sd.InputStream(device=i, channels=1, samplerate=44100, blocksize=1024, callback=lambda *args: None):
+                            with sd.InputStream(device=i, channels=1, samplerate=44100, blocksize=8192, callback=lambda *args: None):
                                 pass
                             device = i
                             device_name = dev['name']
@@ -186,7 +186,7 @@ class PassRecorder:
             # If STILL no device, try with 'default' keyword explicitly (works on some systems)
             if device is None:
                 try:
-                    with sd.InputStream(device='default', channels=1, samplerate=44100, blocksize=1024, callback=lambda *args: None):
+                    with sd.InputStream(device='default', channels=1, samplerate=44100, blocksize=8192, callback=lambda *args: None):
                         pass
                     device = 'default'
                     device_name = 'system default'
@@ -299,30 +299,41 @@ class PassRecorder:
             def audio_callback(indata, frames, time, status):
                 nonlocal total_frames
                 
-                if status:
+                # Only log errors other than overflow
+                if status and status.input_overflow:
+                    # Skip logging for input overflow as it's too verbose
+                    pass
+                elif status:
                     logging.warning(f"Audio status in callback: {status}")
                 
-                # Get the RMS level to check if we're recording anything
-                level = np.linalg.norm(indata)
-                total_frames += frames
-                
-                # Log audio level every second to verify we're getting input
-                if total_frames % 10000 < frames:
-                    logging.info(f"Audio level: {level:.4f}, total frames: {total_frames}")
-                
-                # Apply gain to make sure the audio is audible
-                gain = 2.0  # Reduced from 5.0 to 2.0 to prevent over-amplification
-                amplified_data = indata * gain
-                
-                # Clip to valid range for float (-1.0 to 1.0)
-                amplified_data = np.clip(amplified_data, -1.0, 1.0)
-                
-                # Convert to integer format
-                audio_data = (amplified_data * scale_factor).astype(dtype)
-                
-                # Store in buffer
-                with self.buffer_lock:
-                    self.audio_buffer.append(audio_data.copy())
+                try:
+                    # Get the RMS level to check if we're recording anything
+                    level = np.linalg.norm(indata)
+                    total_frames += frames
+                    
+                    # Log audio level every second to verify we're getting input
+                    if total_frames % 10000 < frames:
+                        logging.info(f"Audio level: {level:.4f}, total frames: {total_frames}")
+                    
+                    # Apply gain to make sure the audio is audible
+                    gain = 2.0  # Reduced from 5.0 to 2.0 to prevent over-amplification
+                    amplified_data = indata * gain
+                    
+                    # Clip to valid range for float (-1.0 to 1.0)
+                    amplified_data = np.clip(amplified_data, -1.0, 1.0)
+                    
+                    # Convert to integer format
+                    audio_data = (amplified_data * scale_factor).astype(dtype)
+                    
+                    # Store in buffer
+                    with self.buffer_lock:
+                        self.audio_buffer.append(audio_data.copy())
+                        
+                except Exception as e:
+                    # Catch any errors in the callback to prevent audio stream from crashing
+                    logging.error(f"Error in audio processing callback: {e}")
+                    # Still increment frames to avoid hitting the logging condition too often
+                    total_frames += frames
             
             # Create audio stream with careful error handling
             try:
@@ -333,7 +344,7 @@ class PassRecorder:
                     samplerate=self.sample_rate,
                     dtype='float32',
                     callback=audio_callback,
-                    blocksize=4096  # Larger block size for stability
+                    blocksize=8192  # Increased block size from 4096 to 8192 for better stability
                 )
             except Exception as e:
                 logging.error(f"Error creating audio stream: {e}", exc_info=True)
@@ -346,7 +357,7 @@ class PassRecorder:
                         samplerate=self.sample_rate,
                         dtype='float32',
                         callback=audio_callback,
-                        blocksize=4096
+                        blocksize=8192  # Increased block size for better stability
                     )
                 except Exception as e2:
                     logging.error(f"Fallback also failed: {e2}")
