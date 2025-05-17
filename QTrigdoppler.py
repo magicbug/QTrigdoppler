@@ -25,7 +25,6 @@ from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from qt_material import apply_stylesheet
-import requests
 import logging
 from serial.tools import list_ports
 from lib import rotator
@@ -60,6 +59,7 @@ RIG_SERIAL_PORT = configur.get('icom', 'serialport')
 RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
+
 # Rotator config
 ROTATOR_ENABLED = configur.getboolean('rotator', 'enabled', fallback=False)
 ROTATOR_SERIAL_PORT = configur.get('rotator', 'serial_port', fallback='COM4')
@@ -71,7 +71,6 @@ ROTATOR_AZ_MAX = configur.getint('rotator', 'az_max', fallback=450)
 ROTATOR_EL_MIN = configur.getint('rotator', 'el_min', fallback=0)
 ROTATOR_EL_MAX = configur.getint('rotator', 'el_max', fallback=180)
 ROTATOR_MIN_ELEVATION = configur.getint('rotator', 'min_elevation', fallback=5)
-
 
 # Cloudlog config
 CLOUDLOG_API_KEY = configur.get('Cloudlog', 'api_key', fallback=None)
@@ -114,30 +113,11 @@ if configur.has_section('remote_server') and configur.getboolean('remote_server'
     REMOTE_ENABLED = True
 
 ### Global constants
-
 subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
 if DISPLAY_MAP:
     GEOD = Geod(ellps="WGS84")
 
 
-# CloudlogWorker for background posting
-class CloudlogWorker(QRunnable):
-    def __init__(self, sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name):
-        super().__init__()
-        self.sat = sat
-        self.tx_freq = tx_freq
-        self.rx_freq = rx_freq
-        self.tx_mode = tx_mode
-        self.rx_mode = rx_mode
-        self.sat_name = sat_name
-    def run(self):
-        if not CLOUDLOG_ENABLED:
-            logging.debug("Cloudlog: Disabled in config.ini")
-            return
-        if not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
-            logging.warning("Cloudlog API key or URL not set in config.ini")
-            return
-        send_to_cloudlog(self.sat, self.tx_freq, self.rx_freq, self.tx_mode, self.rx_mode, self.sat_name,CLOUDLOG_URL,CLOUDLOG_API_KEY)
 
 #i = 0
 useroffsets = []
@@ -1433,33 +1413,40 @@ class MainWindow(QMainWindow):
             self.log_tle_state_val.setText("{0} day(s)".format(self.my_satellite.tle_age))
 
         # Send to Cloudlog in background after updating satellite/transponder info
-        worker = CloudlogWorker(
-            sat=self.my_satellite,
-            tx_freq=self.my_satellite.I,
-            rx_freq=self.my_satellite.F,
-            tx_mode=self.my_satellite.upmode,
-            rx_mode=self.my_satellite.downmode,
-            sat_name=self.my_satellite.name
-        )
-        QThreadPool.globalInstance().start(worker)
-        self._last_cloudlog_F = self.my_satellite.F
-        self._last_cloudlog_I = self.my_satellite.I
-        
-        # Safely start the timer from any thread    
-        try:
-            QMetaObject.invokeMethod(self.timer, "start", Qt.QueuedConnection)
-            logging.debug("Timer started safely")
-        except Exception as e:
-            logging.error(f"Error starting timer: {e}")
-            # Fallback: try direct start if invokeMethod failed
+        if not CLOUDLOG_ENABLED:
+            logging.debug("Cloudlog: Disabled in config.ini")
+        elif not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
+            logging.warning("Cloudlog API key or URL not set in config.ini")
+        else:
+            worker = CloudlogWorker(
+                sat=self.my_satellite,
+                tx_freq=self.my_satellite.I,
+                rx_freq=self.my_satellite.F,
+                tx_mode=self.my_satellite.upmode,
+                rx_mode=self.my_satellite.downmode,
+                sat_name=self.my_satellite.name,
+                log_url=CLOUDLOG_URL,
+                log_api_key=CLOUDLOG_API_KEY
+            )
+            QThreadPool.globalInstance().start(worker)
+            self._last_cloudlog_F = self.my_satellite.F
+            self._last_cloudlog_I = self.my_satellite.I
+            
+            # Safely start the timer from any thread    
             try:
-                if QThread.currentThread() == self.thread():
-                    self.timer.start()
-                    logging.debug("Timer started directly")
-                else:
-                    logging.error("Cannot start timer - not in main thread")
-            except Exception as e2:
-                logging.error(f"Error in fallback timer start: {e2}")
+                QMetaObject.invokeMethod(self.timer, "start", Qt.QueuedConnection)
+                logging.debug("Timer started safely")
+            except Exception as e:
+                logging.error(f"Error starting timer: {e}")
+                # Fallback: try direct start if invokeMethod failed
+                try:
+                    if QThread.currentThread() == self.thread():
+                        self.timer.start()
+                        logging.debug("Timer started directly")
+                    else:
+                        logging.error("Cannot start timer - not in main thread")
+                except Exception as e2:
+                    logging.error(f"Error in fallback timer start: {e2}")
         
         # Notify web clients of the transponder change
         if WEBAPI_ENABLED:

@@ -1,5 +1,6 @@
 import requests
 import logging
+from PySide6.QtCore import *
 
 def send_to_cloudlog(sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name,CLOUDLOG_URL,CLOUDLOG_API_KEY):
     # Convert FMN to FM for Cloudlog
@@ -24,3 +25,18 @@ def send_to_cloudlog(sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name,CLOUDLOG_
             logging.error(f"Cloudlog API: Failed with status {response.status_code}: {response.text}")
     except Exception as e:
         logging.error(f"Cloudlog API: Exception occurred: {e}")
+
+# CloudlogWorker for background posting
+class CloudlogWorker(QRunnable):
+    def __init__(self, sat, tx_freq, rx_freq, tx_mode, rx_mode, sat_name, log_url, log_api_key):
+        super().__init__()
+        self.sat = sat
+        self.tx_freq = tx_freq
+        self.rx_freq = rx_freq
+        self.tx_mode = tx_mode
+        self.rx_mode = rx_mode
+        self.sat_name = sat_name
+        self.url = log_url
+        self.api_key = log_api_key
+    def run(self):
+        send_to_cloudlog(self.sat, self.tx_freq, self.rx_freq, self.tx_mode, self.rx_mode, self.sat_name, self.url, self.api_key)
