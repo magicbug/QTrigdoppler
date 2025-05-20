@@ -1284,7 +1284,6 @@ class MainWindow(QMainWindow):
         self.gps_reader = None
         self.gps_last_port = None
         self.gps_lock_button.clicked.connect(self.lock_gps_position)
-        self.gps_enable_checkbox.setChecked(configur.getboolean('qth', 'use_gps', fallback=False))
         # Set last used port if available
         last_gps_port = configur.get('qth', 'gps_port', fallback=None)
         if last_gps_port and last_gps_port in gps_ports:
