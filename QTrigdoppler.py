@@ -368,12 +368,11 @@ class MainWindow(QMainWindow):
         control_layout = QHBoxLayout()
         map_layout = QHBoxLayout()
         log_layout = QHBoxLayout()
-        #log_layout.setAlignment(Qt.AlignVCenter)
 
-        overview_pagelayout.addLayout(control_layout)
+        overview_pagelayout.addLayout(control_layout, stretch=1)
         if DISPLAY_MAP:
-            overview_pagelayout.addLayout(map_layout)
-        overview_pagelayout.addLayout(log_layout)
+            overview_pagelayout.addLayout(map_layout, stretch=1)
+        overview_pagelayout.addLayout(log_layout, stretch=1)
         
         labels_layout = QVBoxLayout()
         combo_layout = QVBoxLayout()
@@ -425,11 +424,7 @@ class MainWindow(QMainWindow):
         self.tpx_list_view = self.combo1.view()
         self.tpx_list_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)        
         QScroller.grabGesture(self.tpx_list_view.viewport(), QScroller.LeftMouseButtonGesture)
-        # Ensure the currentTextChanged signal is connected to tpx_changed
-        #try:
-        #    self.combo2.currentTextChanged.disconnect()  # Disconnect any existing connections first
-        #except:
-        #    pass  # Ignore if there were no connections
+
         self.combo2.currentTextChanged.connect(self.tpx_changed) 
         combo_layout.addWidget(self.combo2)
         
@@ -941,13 +936,14 @@ class MainWindow(QMainWindow):
         settings_layout.addLayout(settings_store_layout)
         
         ### Advanced Settings Tab
-        adv_settings_value_layout = QHBoxLayout()
+        adv_settings_value_layout = QGridLayout()
+        adv_settings_value_layout_first_column = QVBoxLayout()
         
         
-        # Webapi
+        # --- Webapi ---
         self.adv_settings_webapi_box = QGroupBox("WebAPI")
         self.adv_settings_webapi_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
-        adv_settings_value_layout.addWidget(self.adv_settings_webapi_box, stretch=1)
+        adv_settings_value_layout_first_column.addWidget(self.adv_settings_webapi_box)
         
         ## Enable
         webapi_settings_layout = QGridLayout()
@@ -979,12 +975,63 @@ class MainWindow(QMainWindow):
         webapi_settings_layout.addWidget(self.webapi_port_val, 2, 1)
         
         self.adv_settings_webapi_box.setLayout(webapi_settings_layout)
+        # --- End Webapi ---
+        
+        # --- Cloudlog/Wavelog ---
+        self.adv_settings_log_box = QGroupBox("Logbook")
+        self.adv_settings_log_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
+        adv_settings_value_layout_first_column.addWidget(self.adv_settings_log_box)
+        
+        ## Enable
+        log_settings_layout = QGridLayout()
+        self.log_en_lbl = QLabel("Active:")
+        log_settings_layout.addWidget(self.log_en_lbl, 0, 0)
+        
+        self.log_enable_button = QCheckBox()
+        log_settings_layout.addWidget(self.log_enable_button, 0, 1)
+            
+        self.log_url_lbl = QLabel("URL:")
+        log_settings_layout.addWidget(self.log_url_lbl, 1, 0)
+
+        self.log_url_val = QLineEdit()
+        self.log_url_val.setMaxLength(100)
+        self.log_url_val.setText(str("localhost"))
+        log_settings_layout.addWidget(self.log_url_val, 1, 1)
+        
+        self.adv_settings_log_box.setLayout(log_settings_layout)
+        # --- End Cloudlog/Wavelog ---
+        
+        # --- GPS QTH Settings UI ---
+        self.gps_settings_box = QGroupBox("GPS QTH")
+        self.gps_settings_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
+        gps_settings_layout = QGridLayout()
+        # Enable checkbox
+        self.gps_enable_checkbox = QCheckBox("Use GPS for QTH")
+        gps_settings_layout.addWidget(self.gps_enable_checkbox, 0, 0, 1, 2)
+        # Serial port dropdown
+        self.gps_serialport_label = QLabel("GPS Serial Port:")
+        gps_settings_layout.addWidget(self.gps_serialport_label, 1, 0)
+        self.gps_serialport_val = QComboBox()
+        gps_ports = [port.device for port in list_ports.comports()]
+        self.gps_serialport_val.addItems(gps_ports)
+        gps_settings_layout.addWidget(self.gps_serialport_val, 1, 1)
+        # Status label
+        self.gps_status_label = QLabel("GPS Status: Not connected")
+        gps_settings_layout.addWidget(self.gps_status_label, 2, 0, 1, 2)
+        # Lock button
+        self.gps_lock_button = QPushButton("Lock Current Position")
+        self.gps_lock_button.setEnabled(False)
+        gps_settings_layout.addWidget(self.gps_lock_button, 3, 0, 1, 2)
+        self.gps_settings_box.setLayout(gps_settings_layout)
+        adv_settings_value_layout_first_column.addWidget(self.gps_settings_box)
+        # --- End GPS QTH Settings UI ---
+        adv_settings_value_layout.addLayout(adv_settings_value_layout_first_column,0,0)
 
         
         # Rotator
         self.adv_settings_rotator_box = QGroupBox("rotator")
         self.adv_settings_rotator_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
-        adv_settings_value_layout.addWidget(self.adv_settings_rotator_box, stretch=1)
+        adv_settings_value_layout.addWidget(self.adv_settings_rotator_box, 0,1)
         
         self.rotator_settings_layout_scroller = QScrollArea()
         self.rotator_settings_layout_scroller_widget = QWidget()
@@ -1080,35 +1127,6 @@ class MainWindow(QMainWindow):
         self.rotator_settings_layout_scroller_layout.addWidget(self.rotator_settings_layout_scroller)
             
         self.adv_settings_rotator_box.setLayout(self.rotator_settings_layout_scroller_layout)
-        
-        
-        # Cloudlog/Wavelog
-        self.adv_settings_log_box = QGroupBox("Logbook")
-        self.adv_settings_log_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
-        adv_settings_value_layout.addWidget(self.adv_settings_log_box, stretch=1)
-        
-        ## Enable
-        log_settings_layout = QGridLayout()
-        self.log_en_lbl = QLabel("Active:")
-        log_settings_layout.addWidget(self.log_en_lbl, 0, 0)
-        
-        self.log_enable_button = QCheckBox()
-        log_settings_layout.addWidget(self.log_enable_button, 0, 1)
-        #if ROTATOR_ENABLED == True:
-        #    self.rotator_enable_button.setChecked(1)
-        #elif ROTATOR_ENABLED == False:
-        #    self.rotator_enable_button.setChecked(0)
-            
-        self.log_url_lbl = QLabel("URL:")
-        log_settings_layout.addWidget(self.log_url_lbl, 1, 0)
-
-        self.log_url_val = QLineEdit()
-        self.log_url_val.setMaxLength(100)
-        self.log_url_val.setText(str("localhost"))
-        log_settings_layout.addWidget(self.log_url_val, 1, 1)
-        
-        self.adv_settings_log_box.setLayout(log_settings_layout)
-        
         
         #Store button
         adv_settings_store_layout = QVBoxLayout()
@@ -1221,33 +1239,8 @@ class MainWindow(QMainWindow):
         self.passrec_bitdepth_spin.setValue(configur.getint('passrecording', 'bit_depth', fallback=16))
         passrec_settings_layout.addWidget(self.passrec_bitdepth_spin, 6, 1)
         self.passrec_settings_box.setLayout(passrec_settings_layout)
-        adv_settings_value_layout.addWidget(self.passrec_settings_box, stretch=1)
+        adv_settings_value_layout.addWidget(self.passrec_settings_box, 0,3)
         # --- End Pass Recording Settings UI ---
-        
-        # --- GPS QTH Settings UI ---
-        self.gps_settings_box = QGroupBox("GPS QTH")
-        self.gps_settings_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
-        gps_settings_layout = QGridLayout()
-        # Enable checkbox
-        self.gps_enable_checkbox = QCheckBox("Use GPS for QTH")
-        gps_settings_layout.addWidget(self.gps_enable_checkbox, 0, 0, 1, 2)
-        # Serial port dropdown
-        self.gps_serialport_label = QLabel("GPS Serial Port:")
-        gps_settings_layout.addWidget(self.gps_serialport_label, 1, 0)
-        self.gps_serialport_val = QComboBox()
-        gps_ports = [port.device for port in list_ports.comports()]
-        self.gps_serialport_val.addItems(gps_ports)
-        gps_settings_layout.addWidget(self.gps_serialport_val, 1, 1)
-        # Status label
-        self.gps_status_label = QLabel("GPS Status: Not connected")
-        gps_settings_layout.addWidget(self.gps_status_label, 2, 0, 1, 2)
-        # Lock button
-        self.gps_lock_button = QPushButton("Lock Current Position")
-        self.gps_lock_button.setEnabled(False)
-        gps_settings_layout.addWidget(self.gps_lock_button, 3, 0, 1, 2)
-        self.gps_settings_box.setLayout(gps_settings_layout)
-        adv_settings_value_layout.addWidget(self.gps_settings_box, stretch=1)
-        # --- End GPS QTH Settings UI ---
         
         ###  UI Layout / Tab Widget
         self.tab_widget = QTabWidget()
