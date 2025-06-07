@@ -128,7 +128,7 @@ if WEBAPI_ENABLED or REMOTE_ENABLED:
     from lib import web_api_proxy
 
 ### Global constants
-subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz"]
+subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
 if DISPLAY_MAP:
     GEOD = Geod(ellps="WGS84")
 
