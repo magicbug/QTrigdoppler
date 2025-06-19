@@ -182,7 +182,7 @@ class Satellite:
     up_doppler_old = 0
     up_doppler_rate = 0
     tledata = ""
-    tle_age = "n/a"
+    tle_age = "-1"
     rig_satmode = 0
     F_RIG = 0.0
     I_RIG = 0.0
@@ -364,15 +364,19 @@ class MainWindow(QMainWindow):
         ### Overview Page
 
         overview_pagelayout = QVBoxLayout()
+        
+        control_container = QWidget()
+        map_container = QWidget()
+        log_container = QWidget()
 
-        control_layout = QHBoxLayout()
-        map_layout = QHBoxLayout()
-        log_layout = QHBoxLayout()
+        control_layout = QHBoxLayout(control_container)
+        map_layout = QHBoxLayout(map_container)
+        log_layout = QHBoxLayout(log_container)
 
-        overview_pagelayout.addLayout(control_layout, stretch=1)
+        overview_pagelayout.addWidget(control_container,stretch=2)
         if DISPLAY_MAP:
-            overview_pagelayout.addLayout(map_layout, stretch=1)
-        overview_pagelayout.addLayout(log_layout, stretch=1)
+            overview_pagelayout.addWidget(map_container, stretch=1)
+        overview_pagelayout.addWidget(log_container, stretch=1)
         
         labels_layout = QVBoxLayout()
         combo_layout = QVBoxLayout()
@@ -621,28 +625,35 @@ class MainWindow(QMainWindow):
         log_sat_status_layout = QGridLayout()
         
         self.log_sat_status_ele_lbl = QLabel("🛰 Elevation:")
-        log_sat_status_layout.addWidget(self.log_sat_status_ele_lbl, 0, 0)
+        log_sat_status_layout.addWidget(self.log_sat_status_ele_lbl, 0, 0,alignment=Qt.AlignCenter)
 
         self.log_sat_status_ele_val = QLabel("0.0 °")
-        log_sat_status_layout.addWidget(self.log_sat_status_ele_val, 0, 1)
+        log_sat_status_layout.addWidget(self.log_sat_status_ele_val, 0, 1,alignment=Qt.AlignCenter)
         
         self.log_sat_status_azi_lbl = QLabel("🛰 Azimuth:")
-        log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 1, 0)
+        log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 1, 0,alignment=Qt.AlignCenter)
 
         self.log_sat_status_azi_val = QLabel("0.0 °")
-        log_sat_status_layout.addWidget(self.log_sat_status_azi_val, 1, 1)
+        log_sat_status_layout.addWidget(self.log_sat_status_azi_val, 1, 1,alignment=Qt.AlignCenter)
         
-        self.log_sat_status_height_lbl = QLabel("Height:")
-        log_sat_status_layout.addWidget(self.log_sat_status_height_lbl, 0, 2)
+        self.log_sat_status_height_lbl = QLabel("🛰 Height:")
+        log_sat_status_layout.addWidget(self.log_sat_status_height_lbl, 0, 3,alignment=Qt.AlignCenter)
 
         self.log_sat_status_height_val = QLabel("0.0 m")
-        log_sat_status_layout.addWidget(self.log_sat_status_height_val, 0, 3)
+        log_sat_status_layout.addWidget(self.log_sat_status_height_val, 0, 4,alignment=Qt.AlignCenter)
         
-        self.log_sat_status_illuminated_lbl = QLabel("Visibility:")
-        log_sat_status_layout.addWidget(self.log_sat_status_illuminated_lbl, 1, 2)
+        self.log_sat_status_illuminated_lbl = QLabel("🛰 Visibility:")
+        log_sat_status_layout.addWidget(self.log_sat_status_illuminated_lbl, 1, 3,alignment=Qt.AlignCenter)
 
         self.log_sat_status_illumintated_val = QLabel("n/a")
-        log_sat_status_layout.addWidget(self.log_sat_status_illumintated_val, 1, 3)
+        log_sat_status_layout.addWidget(self.log_sat_status_illumintated_val, 1, 4,alignment=Qt.AlignCenter)
+        
+        self.status_layout_vline_right = QFrame()
+        self.status_layout_vline_right.setFrameShape(QFrame.VLine)
+        self.status_layout_vline_right.setFrameShadow(QFrame.Plain)
+        self.status_layout_vline_right.setStyleSheet("background-color: #4f5b62;border: none;")
+        self.status_layout_vline_right.setFixedWidth(2)
+        log_sat_status_layout.addWidget(self.status_layout_vline_right, 0, 2, 2, 1)
         
         self.log_sat_status.setLayout(log_sat_status_layout)
         log_layout.addWidget(self.log_sat_status, stretch=2)
@@ -652,26 +663,26 @@ class MainWindow(QMainWindow):
         log_rig_status_layout = QGridLayout()
         
         self.log_rig_state_lbl = QLabel("Radio:")
-        log_rig_status_layout.addWidget(self.log_rig_state_lbl, 0, 0)
+        log_rig_status_layout.addWidget(self.log_rig_state_lbl, 0, 0,alignment=Qt.AlignCenter)
 
         self.log_rig_state_val = QLabel("✘")
         self.log_rig_state_val.setStyleSheet('color: red')
-        log_rig_status_layout.addWidget(self.log_rig_state_val, 0, 1)
+        log_rig_status_layout.addWidget(self.log_rig_state_val, 0, 1,alignment=Qt.AlignCenter)
         
         self.log_tle_state_lbl = QLabel("TLE age:")
-        log_rig_status_layout.addWidget(self.log_tle_state_lbl, 0, 3)
+        log_rig_status_layout.addWidget(self.log_tle_state_lbl, 0, 3,alignment=Qt.AlignCenter)
 
         self.log_tle_state_val = QLabel("{0} day(s)".format(self.my_satellite.tle_age))
-        log_rig_status_layout.addWidget(self.log_tle_state_val, 0, 4)
+        log_rig_status_layout.addWidget(self.log_tle_state_val, 0, 4,alignment=Qt.AlignCenter)
         
         self.log_sat_event_val = QLabel("events n/a")
-        log_rig_status_layout.addWidget(self.log_sat_event_val, 1, 3, 1,2)
+        log_rig_status_layout.addWidget(self.log_sat_event_val, 1, 3, 1,2,alignment=Qt.AlignCenter)
         
         self.log_time_lbl = QLabel("UTC:")
-        log_rig_status_layout.addWidget(self.log_time_lbl, 1, 0)
+        log_rig_status_layout.addWidget(self.log_time_lbl, 1, 0,alignment=Qt.AlignCenter)
 
         self.log_time_val = QLabel(datetime.now(timezone.utc).strftime('%H:%M:%S')+"z")
-        log_rig_status_layout.addWidget(self.log_time_val, 1, 1)
+        log_rig_status_layout.addWidget(self.log_time_val, 1, 1,alignment=Qt.AlignCenter)
         
         if PASS_RECORDER_ENABLED:
             # --- Pass Recording Status Label ---
