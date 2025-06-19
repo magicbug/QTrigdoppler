@@ -11,10 +11,11 @@
 
 Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
 Adapted by EA4HCF Pedro Cabrera (@PCabreraCamara)  
-Extended and modified by DL3JOP Joshua Petry (@dl3jop)
-Contributions in this repo by:
-Joshua, DL3JOP
-Peter, 2M0SQL
+Extended and modified by DL3JOP Joshua Petry (@dl3jop)<br/>
+
+Contributions in this repo by:<br/>
+Joshua, DL3JOP<br/>
+Peter, 2M0SQL<br/>
  
 ## 🧠 What QTRigdoppler does
 
