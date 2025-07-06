@@ -31,6 +31,7 @@ from serial.tools import list_ports
 from lib.pass_recorder import PassRecorder
 import sounddevice as sd
 from lib import rotator
+from lib.rotator_optimizer import RotatorOptimizer
 from lib.sat_utils import *
 from lib.logbook_connector import *
 import pynmea2
@@ -341,6 +342,8 @@ class MainWindow(QMainWindow):
         self.rotator = None
         self.rotator_thread = None
         self.rotator_error = None
+        self.rotator_optimizer = None
+        self.pass_optimization = None  # Store current pass optimization
         if ROTATOR_ENABLED:
             try:
                 self.rotator = rotator.YaesuRotator(
@@ -351,6 +354,13 @@ class MainWindow(QMainWindow):
                     el_min=ROTATOR_EL_MIN,
                     el_max=ROTATOR_EL_MAX
                 )
+                # Initialize rotator optimizer
+                self.rotator_optimizer = RotatorOptimizer(
+                    az_min=ROTATOR_AZ_MIN,
+                    az_max=ROTATOR_AZ_MAX,
+                    min_elevation=ROTATOR_MIN_ELEVATION
+                )
+                logging.info(f"Rotator and optimizer initialized")
             except Exception as e:
                 self.rotator_error = f"Rotator init failed: {e}"
                 logging.error(self.rotator_error)
@@ -714,10 +724,14 @@ class MainWindow(QMainWindow):
             self.rotator_el_label = QLabel("📡 Elevation:")
             self.rotator_az_val = QLabel("0.0°")
             self.rotator_el_val = QLabel("0.0°")
+            self.rotator_optimization_label = QLabel("🛰 Route:")
+            self.rotator_optimization_val = QLabel("Ready")
             rotator_status_layout.addWidget(self.rotator_el_label, 0, 0)
             rotator_status_layout.addWidget(self.rotator_az_label, 1, 0)
+            rotator_status_layout.addWidget(self.rotator_optimization_label, 2, 0)
             rotator_status_layout.addWidget(self.rotator_el_val, 0, 1)
             rotator_status_layout.addWidget(self.rotator_az_val, 1, 1)
+            rotator_status_layout.addWidget(self.rotator_optimization_val, 2, 1)
             self.rotator_status_box.setLayout(rotator_status_layout)
             log_layout.addWidget(self.rotator_status_box, stretch=1)
             
@@ -1774,6 +1788,9 @@ class MainWindow(QMainWindow):
         
         # Set pass recorder to active tracking state
         self.pass_recorder.set_tracking_active(True)
+        # Optimize rotator route before starting tracking
+        if ROTATOR_ENABLED and self.rotator_optimizer:
+            self.optimize_rotator_route()
         # Start rotator thread
         if ROTATOR_ENABLED:
             self.start_rotator_thread()
@@ -2135,23 +2152,28 @@ class MainWindow(QMainWindow):
             return ROTATOR_AZ_PARK, ROTATOR_EL_PARK
     def best_rotator_azimuth(self, current_az, target_az, az_max):
         """
-        Returns the best azimuth to command the rotator to, considering overlap.
+        Returns the best azimuth to command the rotator to, using the optimizer.
         """
-        current_az = current_az % az_max
-        target_az = target_az % az_max
-        direct_diff = abs(target_az - current_az)
-        overlap_target = target_az
-        if az_max > 360:
-            # Try using overlap (e.g., 370 instead of 10)
-            if target_az < 90 and current_az > 270:
-                overlap_target = target_az + 360
-            elif target_az > 270 and current_az < 90:
-                overlap_target = target_az - 360
-        overlap_diff = abs(overlap_target - current_az)
-        if overlap_diff < direct_diff:
-            return overlap_target
+        if self.rotator_optimizer:
+            distance, optimal_az = self.rotator_optimizer.calculate_rotation_distance(current_az, target_az)
+            return optimal_az
         else:
-            return target_az
+            # Fallback to original simple logic
+            current_az = current_az % az_max
+            target_az = target_az % az_max
+            direct_diff = abs(target_az - current_az)
+            overlap_target = target_az
+            if az_max > 360:
+                # Try using overlap (e.g., 370 instead of 10)
+                if target_az < 90 and current_az > 270:
+                    overlap_target = target_az + 360
+                elif target_az > 270 and current_az < 90:
+                    overlap_target = target_az - 360
+            overlap_diff = abs(overlap_target - current_az)
+            if overlap_diff < direct_diff:
+                return overlap_target
+            else:
+                return target_az
 
     def rotator_set_position(self, az, el):
         # Defensive: ensure az, el are always float to avoid TypeError
@@ -2187,6 +2209,111 @@ class MainWindow(QMainWindow):
     def stop_rotators(self):
         self.rotator_stop()
         logging.info("Rotator stopped.")
+        
+    def optimize_rotator_route(self):
+        """
+        Predict satellite pass and optimize rotator route with 450-degree support
+        """
+        if not (self.rotator_optimizer and self.my_satellite.tledata):
+            logging.warning("Cannot optimize rotator route: missing optimizer or satellite data")
+            return
+            
+        try:
+            # Predict the satellite pass
+            predictions = self.rotator_optimizer.predict_satellite_pass(
+                self.my_satellite.tledata, 
+                myloc, 
+                duration_minutes=20,  # Look ahead 20 minutes
+                interval_seconds=10   # Every 10 seconds
+            )
+            
+            # Filter for visible portion of pass
+            visible_predictions = self.rotator_optimizer.filter_visible_pass(predictions)
+            
+            if not visible_predictions:
+                logging.info("No visible satellite pass predicted in next 20 minutes")
+                self.pass_optimization = None
+                return
+            
+            # Get current rotator position
+            current_az = None
+            if self.rotator:
+                try:
+                    current_az, _ = self.rotator.get_position()
+                except Exception as e:
+                    logging.warning(f"Could not get current rotator position: {e}")
+            
+            # Get pre-positioning recommendation
+            recommendation = self.rotator_optimizer.get_pre_positioning_recommendation(
+                visible_predictions, 
+                current_az
+            )
+            
+            # Store optimization results
+            self.pass_optimization = recommendation
+            
+            # Log the optimization results
+            if recommendation['should_preposition']:
+                logging.info(f"🛰 Rotator Optimization: {recommendation['reason']}")
+                logging.info(f"📡 Recommended pre-position: {recommendation['recommended_az']:.1f}°")
+                
+                # Get details from optimization
+                opt_details = recommendation.get('optimization_details', {})
+                if opt_details:
+                    logging.info(f"📊 Route optimization: {opt_details.get('recommendation', 'N/A')}")
+                    savings = opt_details.get('savings', 0)
+                    if savings > 0:
+                        logging.info(f"💡 Rotation savings: {savings:.1f}°")
+                
+                                 # Pre-position the rotator if beneficial
+                 if recommendation['time_until_aos']:
+                     seconds_until_aos = recommendation['time_until_aos'].total_seconds()
+                     if seconds_until_aos > 30:  # Only pre-position if we have more than 30 seconds
+                         logging.info(f"⏱️ Pre-positioning rotator ({seconds_until_aos:.0f}s until AOS)")
+                         self.rotator_set_position(recommendation['recommended_az'], ROTATOR_EL_PARK)
+                     else:
+                         logging.info(f"⏱️ Too close to AOS ({seconds_until_aos:.0f}s) - skipping pre-positioning")
+             else:
+                 logging.info(f"📡 Rotator optimization: {recommendation['reason']}")
+                 
+                           # Update UI with optimization status
+              self.update_optimization_status(recommendation)
+                  
+          except Exception as e:
+              logging.error(f"Error optimizing rotator route: {e}")
+              self.pass_optimization = None
+              self.update_optimization_status(None)
+    
+    def update_optimization_status(self, recommendation):
+        """Update the UI with rotator optimization status"""
+        if not ROTATOR_ENABLED:
+            return
+            
+        if recommendation is None:
+            self.rotator_optimization_val.setText("Error")
+            self.rotator_optimization_val.setStyleSheet("color: red")
+            return
+            
+        try:
+            if recommendation['should_preposition']:
+                opt_details = recommendation.get('optimization_details', {})
+                savings = opt_details.get('savings', 0)
+                if savings > 0:
+                    status_text = f"Optimized (-{savings:.0f}°)"
+                    self.rotator_optimization_val.setStyleSheet("color: green")
+                else:
+                    status_text = "Pre-positioned"
+                    self.rotator_optimization_val.setStyleSheet("color: #FFA500")  # Orange
+            else:
+                status_text = "Optimal"
+                self.rotator_optimization_val.setStyleSheet("color: green")
+                
+            self.rotator_optimization_val.setText(status_text)
+            
+        except Exception as e:
+            logging.error(f"Error updating optimization status: {e}")
+            self.rotator_optimization_val.setText("Error")
+            self.rotator_optimization_val.setStyleSheet("color: red")
 
     def start_rotator_thread(self):
         if ROTATOR_ENABLED and self.rotator and not self.rotator_thread:
