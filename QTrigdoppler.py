@@ -68,6 +68,7 @@ RIG_SERIAL_PORT = configur.get('icom', 'serialport')
 RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
+TLE_AUTO_UPDATE = configur.getboolean('misc', 'tle_auto_update', fallback=True)
 
 # Rotator config
 ROTATOR_ENABLED = configur.getboolean('rotator', 'enabled', fallback=False)
@@ -278,6 +279,9 @@ class MainWindow(QMainWindow):
 
         self.counter = 0
         self.my_satellite = Satellite()
+        
+        # Initialize automatic TLE update system
+        self.init_automatic_tle_updates()
         
         if WEBAPI_ENABLED:
             # Register this window with the web API
@@ -1478,6 +1482,102 @@ class MainWindow(QMainWindow):
             logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             logging.error(e)
             self.tleupdate_stat_lbl.setText("❌")
+    
+    def init_automatic_tle_updates(self):
+        """Initialize the automatic TLE update system"""
+        if not TLE_AUTO_UPDATE:
+            logging.info("Automatic TLE updates are disabled in config.ini")
+            return
+        
+        # Check if we need to update TLE data on startup
+        if self.should_update_tle():
+            logging.info("TLE data is outdated, updating on startup...")
+            self.update_tle_file_automatic()
+        else:
+            logging.info("TLE data is up to date, no startup update needed")
+        
+        # Set up periodic timer for automatic updates
+        self.tle_update_timer = QTimer()
+        self.tle_update_timer.timeout.connect(self.check_and_update_tle)
+        
+        # Check every hour (3600000 ms) if we need to update
+        self.tle_update_timer.start(3600000)  # 1 hour in milliseconds
+        
+        # Calculate next update time for user information
+        try:
+            last_update = datetime.strptime(LAST_TLE_UPDATE, "%Y-%m-%d %H:%M:%S")
+            update_interval = int(TLE_UPDATE_INTERVAL)
+            next_update = last_update + timedelta(seconds=update_interval)
+            logging.info(f"Automatic TLE update system initialized. Next update due: {next_update.strftime('%Y-%m-%d %H:%M:%S')}")
+        except:
+            logging.info("Automatic TLE update system initialized")
+    
+    def should_update_tle(self):
+        """Check if TLE data needs to be updated based on last update time and interval"""
+        try:
+            last_update = datetime.strptime(LAST_TLE_UPDATE, "%Y-%m-%d %H:%M:%S")
+            update_interval = int(TLE_UPDATE_INTERVAL)  # seconds
+            
+            # Check if enough time has passed since last update
+            time_since_update = (datetime.now() - last_update).total_seconds()
+            
+            logging.debug(f"TLE update check: Last update was {time_since_update:.0f} seconds ago, interval is {update_interval} seconds")
+            
+            return time_since_update >= update_interval
+        except (ValueError, TypeError) as e:
+            logging.warning(f"Error parsing TLE update time, will update: {e}")
+            return True  # If we can't parse the time, better to update
+    
+    def check_and_update_tle(self):
+        """Check if TLE update is needed and perform it if necessary"""
+        if self.should_update_tle():
+            logging.info("Automatic TLE update triggered")
+            self.update_tle_file_automatic()
+    
+    def update_tle_file_automatic(self):
+        """Perform automatic TLE file update in background thread"""
+        # Create a worker thread for the TLE update to avoid blocking the UI
+        worker = Worker(self.perform_tle_update)
+        worker.signals.finished.connect(self.on_tle_update_finished)
+        worker.signals.error.connect(self.on_tle_update_error)
+        QThreadPool.globalInstance().start(worker)
+    
+    def perform_tle_update(self, progress_callback=None):
+        """Perform the actual TLE file download (runs in worker thread)"""
+        try:
+            logging.info(f"Downloading TLE file from {TLEURL}")
+            urllib.request.urlretrieve(TLEURL, TLEFILE)
+            
+            # Update the timestamp
+            global LAST_TLE_UPDATE
+            LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            return True
+        except Exception as e:
+            logging.error(f"Failed to download TLE file: {e}")
+            raise e
+    
+    def on_tle_update_finished(self):
+        """Handle successful TLE update completion"""
+        logging.info("Automatic TLE update completed successfully")
+        
+        # Update the UI label in the main thread
+        self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE + " (auto)")
+        
+        # Save the settings
+        self.save_settings()
+        
+        # Reload satellite data if we have a selected satellite
+        if self.my_satellite.name != '':
+            self.sat_changed(self.my_satellite.name)
+    
+    def on_tle_update_error(self, error_info):
+        """Handle TLE update error"""
+        exc_type, exc_value, exc_traceback = error_info
+        logging.error(f"Automatic TLE update failed: {exc_value}")
+        
+        # Update the UI to show error
+        self.tleupdate_stat_lbl.setText("❌ (auto update failed)")
             
     def sat_changed(self, satname):
         self.my_satellite.name = satname
@@ -2208,6 +2308,10 @@ class MainWindow(QMainWindow):
             self.rotator_thread = None
             logging.debug("Rotator thread stopped.")
     def closeEvent(self, event):
+        # Stop automatic TLE update timer
+        if hasattr(self, 'tle_update_timer'):
+            self.tle_update_timer.stop()
+            
         # Ensure rotator is stopped and parked on exit
         if ROTATOR_ENABLED:
             self.stop_rotator_thread()
