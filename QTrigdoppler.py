@@ -31,6 +31,7 @@ from serial.tools import list_ports
 from lib.pass_recorder import PassRecorder
 import sounddevice as sd
 from lib import rotator
+from lib.rotator_optimizer import RotatorOptimizer
 from lib.sat_utils import *
 from lib.logbook_connector import *
 import pynmea2
@@ -38,7 +39,13 @@ import serial
 from lib.gps_reader import GPSReader
 
 # Set logging level back to WARNING
-logging.basicConfig(level = logging.WARNING)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)s: %(message)s',
+    handlers=[
+        logging.FileHandler("qtrigdoppler.log", mode='w')
+    ]
+)
 
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -80,6 +87,7 @@ ROTATOR_AZ_MAX = configur.getint('rotator', 'az_max', fallback=450)
 ROTATOR_EL_MIN = configur.getint('rotator', 'el_min', fallback=0)
 ROTATOR_EL_MAX = configur.getint('rotator', 'el_max', fallback=180)
 ROTATOR_MIN_ELEVATION = configur.getint('rotator', 'min_elevation', fallback=5)
+ROTATOR_POSITION_POLL_INTERVAL = configur.getfloat('rotator', 'position_poll_interval', fallback=5.0)
 
 # Cloudlog config
 CLOUDLOG_API_KEY = configur.get('Cloudlog', 'api_key', fallback=None)
@@ -266,7 +274,7 @@ class MainWindow(QMainWindow):
         global DOPPLER_THRES_FM
         global DOPPLER_THRES_LINEAR
 
-        # satellite
+        # satellite
         global TLEFILE
         global TLEURL
         global SQFILE
@@ -341,6 +349,8 @@ class MainWindow(QMainWindow):
         self.rotator = None
         self.rotator_thread = None
         self.rotator_error = None
+        self.rotator_optimizer = None
+        self.pass_optimization = None  # Store current pass optimization
         if ROTATOR_ENABLED:
             try:
                 self.rotator = rotator.YaesuRotator(
@@ -351,6 +361,13 @@ class MainWindow(QMainWindow):
                     el_min=ROTATOR_EL_MIN,
                     el_max=ROTATOR_EL_MAX
                 )
+                # Initialize rotator optimizer
+                self.rotator_optimizer = RotatorOptimizer(
+                    az_min=ROTATOR_AZ_MIN,
+                    az_max=ROTATOR_AZ_MAX,
+                    min_elevation=ROTATOR_MIN_ELEVATION
+                )
+                logging.info(f"Rotator and optimizer initialized")
             except Exception as e:
                 self.rotator_error = f"Rotator init failed: {e}"
                 logging.error(self.rotator_error)
@@ -714,10 +731,14 @@ class MainWindow(QMainWindow):
             self.rotator_el_label = QLabel("📡 Elevation:")
             self.rotator_az_val = QLabel("0.0°")
             self.rotator_el_val = QLabel("0.0°")
+            self.rotator_optimization_label = QLabel("🛰 Route:")
+            self.rotator_optimization_val = QLabel("Parked")
             rotator_status_layout.addWidget(self.rotator_el_label, 0, 0)
             rotator_status_layout.addWidget(self.rotator_az_label, 1, 0)
+            rotator_status_layout.addWidget(self.rotator_optimization_label, 2, 0)
             rotator_status_layout.addWidget(self.rotator_el_val, 0, 1)
             rotator_status_layout.addWidget(self.rotator_az_val, 1, 1)
+            rotator_status_layout.addWidget(self.rotator_optimization_val, 2, 1)
             self.rotator_status_box.setLayout(rotator_status_layout)
             log_layout.addWidget(self.rotator_status_box, stretch=1)
             
@@ -1129,6 +1150,13 @@ class MainWindow(QMainWindow):
         self.rotator_minelev_val.setText(str(ROTATOR_MIN_ELEVATION))
         rotator_settings_layout.addWidget(self.rotator_minelev_val, 9, 1)
         
+        self.rotator_pollinterval_lbl = QLabel("Position Poll Interval (sec):")
+        rotator_settings_layout.addWidget(self.rotator_pollinterval_lbl, 10, 0)
+        self.rotator_pollinterval_val = QLineEdit()
+        self.rotator_pollinterval_val.setMaxLength(6)
+        self.rotator_pollinterval_val.setText(str(ROTATOR_POSITION_POLL_INTERVAL))
+        rotator_settings_layout.addWidget(self.rotator_pollinterval_val, 10, 1)
+        
         self.rotator_settings_layout_scroller.setLayout(rotator_settings_layout)
         self.rotator_settings_layout_scroller.setWidget(self.rotator_settings_layout_scroller_widget)
         self.rotator_settings_layout_scroller.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
@@ -1397,6 +1425,8 @@ class MainWindow(QMainWindow):
         configur['rotator']['el_max'] = str(ROTATOR_EL_MAX)
         ROTATOR_MIN_ELEVATION = int(self.rotator_minelev_val.displayText())
         configur['rotator']['min_elevation'] = str(ROTATOR_MIN_ELEVATION)
+        ROTATOR_POSITION_POLL_INTERVAL = float(self.rotator_pollinterval_val.displayText())
+        configur['rotator']['position_poll_interval'] = str(ROTATOR_POSITION_POLL_INTERVAL)
         
         WEBAPI_ENABLED = self.webapi_enable_button.isChecked()
         WEBAPI_DEBUG_ENABLED = self.webapi_debug_enable_button.isChecked()
@@ -1744,6 +1774,9 @@ class MainWindow(QMainWindow):
         if ROTATOR_ENABLED:
             self.stop_rotator_thread()
             self.park_rotators()
+        # Restart position worker with slower polling when tracking stops
+        if ROTATOR_ENABLED:
+            self.restart_rotator_position_worker()
         # Notify web clients of tracking state change
         if WEBAPI_ENABLED:
             try:
@@ -1774,9 +1807,22 @@ class MainWindow(QMainWindow):
         
         # Set pass recorder to active tracking state
         self.pass_recorder.set_tracking_active(True)
+        # Optimize rotator route before starting tracking (only if satellite is visible or approaching)
+        if ROTATOR_ENABLED and self.rotator_optimizer:
+            self.last_prediction_time = time.time()  # Initialize prediction timer
+            # Only optimize if satellite is visible or approaching horizon
+            current_elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+            if current_elevation >= -3:
+                logging.info(f"🛰 Starting tracking - optimizing route (el={current_elevation:.1f}°)")
+                self.optimize_rotator_route()
+            else:
+                logging.info(f"🛰 Starting tracking - satellite below horizon (el={current_elevation:.1f}°), skipping optimization")
         # Start rotator thread
         if ROTATOR_ENABLED:
             self.start_rotator_thread()
+        # Restart position worker with faster polling when tracking starts
+        if ROTATOR_ENABLED:
+            self.restart_rotator_position_worker()
         # Notify web clients of tracking state change
         if WEBAPI_ENABLED:
             try:
@@ -2058,6 +2104,19 @@ class MainWindow(QMainWindow):
                 if self.my_satellite.name:
                     self.on_satellite_update(elevation, self.my_satellite.name)
                 
+                # Check if we need to update optimization status based on elevation change
+                if ROTATOR_ENABLED and hasattr(self, 'pass_optimization'):
+                    self.check_and_update_optimization_status()
+                
+                # Only re-predict if no optimization exists and satellite is approaching horizon
+                if ROTATOR_ENABLED and hasattr(self, 'last_prediction_time'):
+                    # Only re-predict if no optimization data exists AND satellite is approaching horizon (-3° to 0°)
+                    if ((not hasattr(self, 'pass_optimization') or self.pass_optimization is None) and
+                        elevation >= -3 and elevation < 0):
+                        logging.info(f"🔄 Re-running satellite pass prediction (el={elevation:.1f}°)...")
+                        self.optimize_rotator_route()
+                        self.last_prediction_time = time.time()
+                
                 # Handle Cloudlog updates
                 F_now = self.my_satellite.F
                 I_now = self.my_satellite.I
@@ -2129,42 +2188,90 @@ class MainWindow(QMainWindow):
         try:
             az = float(sat_azi_calc(self.my_satellite.tledata, myloc))
             el = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+            
+            # If we have optimization data and satellite is approaching horizon, use the optimized azimuth
+            if (hasattr(self, 'pass_optimization') and self.pass_optimization and 
+                el >= -10):  # Only check optimization when satellite is approaching horizon
+                opt_details = self.pass_optimization.get('optimization_details', {})
+                route_segments = opt_details.get('route_segments', [])
+                
+                # Find the closest route segment to current time
+                current_time = datetime.now(timezone.utc)
+                closest_segment = None
+                min_time_diff = float('inf')
+                
+                for segment in route_segments:
+                    time_diff = abs((segment['time'] - current_time).total_seconds())
+                    if time_diff < min_time_diff:
+                        min_time_diff = time_diff
+                        closest_segment = segment
+                
+                # If we found a close segment (within 30 seconds), use its optimized azimuth
+                if closest_segment and min_time_diff < 30:
+                    az = closest_segment['target_az']
+                    logging.debug(f"Using optimized azimuth: {az:.1f}° (segment time diff: {min_time_diff:.1f}s)")
+                else:
+                    # If no close segment but we have optimization data, only use optimal start azimuth
+                    # when satellite is approaching the horizon (-3° to 0°) for pre-positioning
+                    optimal_start_az = opt_details.get('optimal_start_az')
+                    if (optimal_start_az is not None and optimal_start_az > 360 and 
+                        el >= -3 and el < ROTATOR_MIN_ELEVATION):
+                        az = optimal_start_az
+                        logging.debug(f"Using optimal start azimuth: {az:.1f}° for pre-positioning (el={el:.1f}°)")
+                    else:
+                        # Only log when elevation changes significantly or when approaching horizon
+                        if (not hasattr(self, '_last_logged_el') or 
+                            abs(el - self._last_logged_el) > 5 or 
+                            (el >= -5 and el < ROTATOR_MIN_ELEVATION)):
+                            logging.debug(f"Using raw satellite azimuth: {az:.1f}° (no close segment, el={el:.1f}°)")
+                            self._last_logged_el = el
+                
+                # Only log route segments when they're actually being used or when elevation changes significantly
+                if route_segments and (closest_segment and min_time_diff < 30 or 
+                                     (not hasattr(self, '_last_logged_el') or abs(el - self._last_logged_el) > 5)):
+                    logging.debug(f"Available route segments: {len(route_segments)}")
+                    for i, seg in enumerate(route_segments[:3]):  # Show first 3
+                        logging.debug(f"  Segment {i}: {seg['time'].strftime('%H:%M:%S')} -> {seg['target_az']:.1f}°")
+                    if len(route_segments) > 3:
+                        logging.debug(f"  ... and {len(route_segments)-3} more segments")
+            
             return az, el
         except Exception as e:
             logging.error(f"Error getting current az/el: {e}")
             return ROTATOR_AZ_PARK, ROTATOR_EL_PARK
     def best_rotator_azimuth(self, current_az, target_az, az_max):
         """
-        Returns the best azimuth to command the rotator to, considering overlap.
+        Returns the best azimuth to command the rotator to, using the optimizer.
         """
-        current_az = current_az % az_max
-        target_az = target_az % az_max
-        direct_diff = abs(target_az - current_az)
-        overlap_target = target_az
-        if az_max > 360:
-            # Try using overlap (e.g., 370 instead of 10)
-            if target_az < 90 and current_az > 270:
-                overlap_target = target_az + 360
-            elif target_az > 270 and current_az < 90:
-                overlap_target = target_az - 360
-        overlap_diff = abs(overlap_target - current_az)
-        if overlap_diff < direct_diff:
-            return overlap_target
+        if self.rotator_optimizer:
+            distance, optimal_az = self.rotator_optimizer.calculate_rotation_distance(current_az, target_az)
+            return optimal_az
         else:
-            return target_az
+            # Fallback to original simple logic
+            current_az = current_az % az_max
+            target_az = target_az % az_max
+            direct_diff = abs(target_az - current_az)
+            overlap_target = target_az
+            if az_max > 360:
+                # Try using overlap (e.g., 370 instead of 10)
+                if target_az < 90 and current_az > 270:
+                    overlap_target = target_az + 360
+                elif target_az > 270 and current_az < 90:
+                    overlap_target = target_az - 360
+            overlap_diff = abs(overlap_target - current_az)
+            if overlap_diff < direct_diff:
+                return overlap_target
+            else:
+                return target_az
 
     def rotator_set_position(self, az, el):
         # Defensive: ensure az, el are always float to avoid TypeError
         az = float(az)
         el = float(el)
         if self.rotator:
-            # Get current rotator azimuth for shortest-path logic
-            current_az, _ = self.rotator.get_position()
-            if current_az is not None:
-                az_to_send = self.best_rotator_azimuth(current_az, az, ROTATOR_AZ_MAX)
-            else:
-                az_to_send = az
-            self.rotator.set_position(az_to_send, el)
+            # The azimuth should already be optimized from the route optimization
+            # Just send it directly to the rotator
+            self.rotator.set_position(az, el)
             self.update_rotator_position()
 
     def rotator_park(self, az_park, el_park):
@@ -2183,10 +2290,195 @@ class MainWindow(QMainWindow):
     def park_rotators(self):
         self.rotator_park(ROTATOR_AZ_PARK, ROTATOR_EL_PARK)
         logging.info("Rotator parked.")
+        # Update UI status after manual parking
+        self.on_rotator_parked(manual_park=True)
 
     def stop_rotators(self):
         self.rotator_stop()
         logging.info("Rotator stopped.")
+        
+    def optimize_rotator_route(self):
+        """
+        Predict satellite pass and optimize rotator route with 450-degree support
+        """
+        if not (self.rotator_optimizer and self.my_satellite.tledata):
+            logging.warning("Cannot optimize rotator route: missing optimizer or satellite data")
+            return
+        try:
+            # Predict the satellite pass
+            predictions = self.rotator_optimizer.predict_satellite_pass(
+                self.my_satellite.tledata, 
+                myloc, 
+                duration_minutes=20,  # Look ahead 20 minutes
+                interval_seconds=10   # Every 10 seconds
+            )
+            # Filter for visible portion of pass
+            visible_predictions = self.rotator_optimizer.filter_visible_pass(predictions)
+            if not visible_predictions:
+                logging.info("No visible satellite pass predicted in next 20 minutes")
+                self.pass_optimization = None
+                self.update_optimization_status(None)
+                return
+            # --- Log AOS, TCA, LOS ---
+            aos_time, aos_az = visible_predictions[0][0], visible_predictions[0][1]
+            tca_idx = max(range(len(visible_predictions)), key=lambda i: visible_predictions[i][2])
+            tca_time, tca_az, tca_el = visible_predictions[tca_idx]
+            los_time, los_az = visible_predictions[-1][0], visible_predictions[-1][1]
+            logging.info(f"AOS: {aos_time.strftime('%Y-%m-%d %H:%M:%S')} az={aos_az:.1f}° | TCA: {tca_time.strftime('%Y-%m-%d %H:%M:%S')} az={tca_az:.1f}° el={tca_el:.1f}° | LOS: {los_time.strftime('%Y-%m-%d %H:%M:%S')} az={los_az:.1f}°")
+            # Get current rotator position
+            current_az = None
+            if self.rotator:
+                try:
+                    current_az, _ = self.rotator.get_position()
+                except Exception as e:
+                    logging.warning(f"Could not get current rotator position: {e}")
+            # Get pre-positioning recommendation
+            recommendation = self.rotator_optimizer.get_pre_positioning_recommendation(
+                visible_predictions, 
+                current_az
+            )
+            # Store optimization results
+            self.pass_optimization = recommendation
+            # Log the optimization results
+            if recommendation['should_preposition']:
+                logging.info(f"🛰 Rotator Optimization: {recommendation['reason']}")
+                logging.info(f"📡 Recommended pre-position: {recommendation['recommended_az']:.1f}°")
+                # Get details from optimization
+                opt_details = recommendation.get('optimization_details', {})
+                if opt_details:
+                    logging.info(f"📊 Route optimization: {opt_details.get('recommendation', 'N/A')}")
+                    savings = opt_details.get('savings', 0)
+                    if savings > 0:
+                        logging.info(f"💡 Rotation savings: {savings:.1f}°")
+                    
+                    # Log the first few route segments to show the optimized azimuths
+                    route_segments = opt_details.get('route_segments', [])
+                    if route_segments:
+                        logging.info(f"🛤️ Route segments (first 5):")
+                        for i, segment in enumerate(route_segments[:5]):
+                            logging.info(f"   {i+1}: {segment['time'].strftime('%H:%M:%S')} az={segment['target_az']:.1f}° el={segment['elevation']:.1f}°")
+                        if len(route_segments) > 5:
+                            logging.info(f"   ... and {len(route_segments)-5} more segments")
+                # Always pre-position if beneficial, even if satellite is already visible
+                logging.info(f"⏱️ Pre-positioning rotator (even if pass is in progress)")
+                logging.info(f"📡 Sending optimized azimuth to rotator: {recommendation['recommended_az']:.1f}°")
+                self.rotator_set_position(recommendation['recommended_az'], ROTATOR_EL_PARK)
+                # Immediately update UI to show pre-positioned
+                self.update_optimization_status(recommendation)
+                return
+            else:
+                logging.info(f"📡 Rotator optimization: {recommendation['reason']}")
+            # Update UI with optimization status (Standard, Error, etc.)
+            self.update_optimization_status(recommendation)
+        except Exception as e:
+            logging.error(f"Error optimizing rotator route: {e}")
+            self.pass_optimization = None
+            self.update_optimization_status(None)
+    
+    def check_and_update_optimization_status(self):
+        """Check current elevation and update optimization status accordingly"""
+        if not ROTATOR_ENABLED or not self.my_satellite.tledata:
+            return
+            
+        try:
+            current_elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+            
+            # Check if we should trigger route prediction at -3° elevation
+            if (current_elevation >= -3 and current_elevation < ROTATOR_MIN_ELEVATION and
+                (not hasattr(self, 'pass_optimization') or self.pass_optimization is None) and
+                hasattr(self, 'last_prediction_time')):
+                
+                current_time = time.time()
+                # Only predict once when crossing -3° threshold (avoid repeated predictions)
+                if not hasattr(self, 'prediction_triggered_at_neg3'):
+                    logging.info(f"🛰 Satellite at {current_elevation:.1f}° - triggering route prediction before AOS")
+                    self.optimize_rotator_route()
+                    self.last_prediction_time = current_time
+                    self.prediction_triggered_at_neg3 = True
+            
+            # Clear optimization data when satellite goes well below horizon (for next pass)
+            if current_elevation < -10:
+                if hasattr(self, 'prediction_triggered_at_neg3'):
+                    delattr(self, 'prediction_triggered_at_neg3')
+                # Clear old optimization data when satellite is well below horizon
+                if hasattr(self, 'pass_optimization') and self.pass_optimization is not None:
+                    logging.debug(f"🛰 Satellite at {current_elevation:.1f}° - clearing old optimization data")
+                    self.pass_optimization = None
+            
+            # If elevation is below minimum, show "Parked"
+            if current_elevation < ROTATOR_MIN_ELEVATION:
+                self.rotator_optimization_val.setText("Parked")
+                self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+                return
+            
+            # If elevation is above minimum and we have optimization data, show the optimization status
+            if hasattr(self, 'pass_optimization') and self.pass_optimization:
+                self.update_optimization_status(self.pass_optimization)
+            else:
+                # No optimization data but satellite is visible - show "Tracking"
+                self.rotator_optimization_val.setText("Tracking")
+                self.rotator_optimization_val.setStyleSheet("color: green")
+                
+        except Exception as e:
+            logging.error(f"Error checking optimization status: {e}")
+
+    def force_reoptimize_route(self):
+        """Manually trigger route re-optimization"""
+        if ROTATOR_ENABLED and self.rotator_optimizer:
+            logging.info("🔄 Manual route re-optimization triggered")
+            self.last_prediction_time = time.time()
+            self.optimize_rotator_route()
+
+    def update_optimization_status(self, recommendation):
+        """Update the UI with rotator optimization status"""
+        if not ROTATOR_ENABLED:
+            return
+        if recommendation is None:
+            self.rotator_optimization_val.setText("Error")
+            self.rotator_optimization_val.setStyleSheet("color: red")
+            return
+        try:
+            # Check current elevation first - if below minimum, show "Parked" regardless of future predictions
+            if self.my_satellite.tledata:
+                current_elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+                if current_elevation < ROTATOR_MIN_ELEVATION:
+                    self.rotator_optimization_val.setText("Parked")
+                    self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+                    return
+            
+            # If current elevation is above minimum, show optimization status
+            if recommendation['should_preposition']:
+                opt_details = recommendation.get('optimization_details', {})
+                savings = opt_details.get('savings', 0)
+                if savings > 0:
+                    status_text = f"Optimized (-{savings:.0f}°)"
+                    self.rotator_optimization_val.setStyleSheet("color: green")
+                else:
+                    status_text = "Pre-positioned"
+                    self.rotator_optimization_val.setStyleSheet("color: #FFA500")  # Orange
+            else:
+                status_text = "Optimal"
+                self.rotator_optimization_val.setStyleSheet("color: green")
+            self.rotator_optimization_val.setText(status_text)
+        except Exception as e:
+            logging.error(f"Error updating optimization status: {e}")
+            self.rotator_optimization_val.setText("Error")
+            self.rotator_optimization_val.setStyleSheet("color: red")
+
+    def on_rotator_parked(self, manual_park=False):
+        """Callback when rotator parks - update UI status"""
+        if ROTATOR_ENABLED:
+            # If manually parked (stop button), always show "Parked"
+            if manual_park:
+                self.rotator_optimization_val.setText("Parked")
+                self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+                return
+            
+            # Use the new method to check and update status based on current conditions
+            self.check_and_update_optimization_status()
+        else:
+            self.rotator_optimization_val.setText("Parked")
+            self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
 
     def start_rotator_thread(self):
         if ROTATOR_ENABLED and self.rotator and not self.rotator_thread:
@@ -2195,7 +2487,10 @@ class MainWindow(QMainWindow):
                 self.get_current_az_el,
                 ROTATOR_MIN_ELEVATION,
                 ROTATOR_AZ_PARK,
-                ROTATOR_EL_PARK
+                ROTATOR_EL_PARK,
+                on_park_callback=self.on_rotator_parked,
+                best_az_func=self.best_rotator_azimuth,
+                az_max=ROTATOR_AZ_MAX
             )
             self.rotator_thread.daemon = True
             self.rotator_thread.start()
@@ -2237,7 +2532,8 @@ class MainWindow(QMainWindow):
     def update_rotator_position(self):
         if self.rotator:
             try:
-                az, el = self.rotator.get_position()
+                # Use cached position to avoid blocking the main thread
+                az, el = self.rotator.get_position(use_cache=True)
                 if az is not None and el is not None:
                     self.rotator_az_val.setText(f"{az}°")
                     self.rotator_el_val.setText(f"{el}°")
@@ -2254,7 +2550,16 @@ class MainWindow(QMainWindow):
 
     def start_rotator_position_worker(self):
         if self.rotator:
-            self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=2.0)
+            # Use configurable poll interval, with intelligent adjustment based on tracking state
+            base_interval = ROTATOR_POSITION_POLL_INTERVAL
+            if TRACKING_ACTIVE:
+                # Poll more frequently when actively tracking
+                poll_interval = min(base_interval, 2.0)
+            else:
+                # Poll less frequently when not tracking
+                poll_interval = max(base_interval, 10.0)
+            
+            self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=poll_interval)
             self.rotator_position_worker.signals.position.connect(self.handle_rotator_position_update)
             QThreadPool.globalInstance().start(self.rotator_position_worker)
 
@@ -2266,6 +2571,28 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 logging.error(f"Error stopping rotator position worker: {e}")
             self.rotator_position_worker = None
+            
+    def restart_rotator_position_worker(self):
+        """Restart the rotator position worker with appropriate polling interval"""
+        if ROTATOR_ENABLED and self.rotator:
+            # Stop existing worker
+            self.stop_rotator_position_worker()
+            
+            # Calculate appropriate poll interval based on tracking state
+            base_interval = ROTATOR_POSITION_POLL_INTERVAL
+            if TRACKING_ACTIVE:
+                # Poll more frequently when actively tracking
+                poll_interval = min(base_interval, 2.0)
+                logging.debug(f"Starting rotator position worker with fast polling: {poll_interval}s (tracking active)")
+            else:
+                # Poll less frequently when not tracking
+                poll_interval = max(base_interval, 10.0)
+                logging.debug(f"Starting rotator position worker with slow polling: {poll_interval}s (not tracking)")
+            
+            # Start new worker
+            self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=poll_interval)
+            self.rotator_position_worker.signals.position.connect(self.handle_rotator_position_update)
+            QThreadPool.globalInstance().start(self.rotator_position_worker)
             
     def toggle_audio_monitoring(self):
         """Start or stop audio level monitoring"""
@@ -2527,7 +2854,7 @@ class Worker(QRunnable):
             self.signals.finished.emit()  # Done
 
 class RotatorPositionWorker(QRunnable):
-    def __init__(self, rotator, poll_interval=2.0):
+    def __init__(self, rotator, poll_interval=5.0):  # Increased from 2.0 to 5.0 seconds
         super().__init__()
         self.rotator = rotator
         self.poll_interval = poll_interval
@@ -2541,7 +2868,7 @@ class RotatorPositionWorker(QRunnable):
     def run(self):
         while self._running:
             try:
-                az, el = self.rotator.get_position()
+                az, el = self.rotator.get_position(use_cache=True)  # Use cache to reduce serial calls
                 self.signals.position.emit(az, el)
             except Exception as e:
                 self.signals.position.emit(None, None)
