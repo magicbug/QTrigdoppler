@@ -2271,20 +2271,15 @@ class MainWindow(QMainWindow):
                     savings = opt_details.get('savings', 0)
                     if savings > 0:
                         logging.info(f"💡 Rotation savings: {savings:.1f}°")
-                # Pre-position the rotator if beneficial
-                if recommendation['time_until_aos']:
-                    seconds_until_aos = recommendation['time_until_aos'].total_seconds()
-                    if seconds_until_aos > 30:  # Only pre-position if we have more than 30 seconds
-                        logging.info(f"⏱️ Pre-positioning rotator ({seconds_until_aos:.0f}s until AOS)")
-                        self.rotator_set_position(recommendation['recommended_az'], ROTATOR_EL_PARK)
-                        # Immediately update UI to show pre-positioned
-                        self.update_optimization_status(recommendation)
-                        return
-                    else:
-                        logging.info(f"⏱️ Too close to AOS ({seconds_until_aos:.0f}s) - skipping pre-positioning")
+                # Always pre-position if beneficial, even if satellite is already visible
+                logging.info(f"⏱️ Pre-positioning rotator (even if pass is in progress)")
+                self.rotator_set_position(recommendation['recommended_az'], ROTATOR_EL_PARK)
+                # Immediately update UI to show pre-positioned
+                self.update_optimization_status(recommendation)
+                return
             else:
                 logging.info(f"📡 Rotator optimization: {recommendation['reason']}")
-            # Update UI with optimization status (Optimal, Error, etc.)
+            # Update UI with optimization status (Standard, Error, etc.)
             self.update_optimization_status(recommendation)
         except Exception as e:
             logging.error(f"Error optimizing rotator route: {e}")
@@ -2300,6 +2295,15 @@ class MainWindow(QMainWindow):
             self.rotator_optimization_val.setStyleSheet("color: red")
             return
         try:
+            # Check current elevation first - if below minimum, show "Parked" regardless of future predictions
+            if self.my_satellite.tledata:
+                current_elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+                if current_elevation < ROTATOR_MIN_ELEVATION:
+                    self.rotator_optimization_val.setText("Parked")
+                    self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+                    return
+            
+            # If current elevation is above minimum, show optimization status
             if recommendation['should_preposition']:
                 opt_details = recommendation.get('optimization_details', {})
                 savings = opt_details.get('savings', 0)
@@ -2326,6 +2330,17 @@ class MainWindow(QMainWindow):
                 self.rotator_optimization_val.setText("Parked")
                 self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
                 return
+            
+            # Check current elevation first - if below minimum, show "Parked" regardless of future predictions
+            if self.my_satellite.tledata:
+                try:
+                    current_elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+                    if current_elevation < ROTATOR_MIN_ELEVATION:
+                        self.rotator_optimization_val.setText("Parked")
+                        self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+                        return
+                except Exception as e:
+                    logging.error(f"Error getting current elevation in on_rotator_parked: {e}")
             
             # Check if there's a visible pass predicted
             if hasattr(self, 'pass_optimization') and self.pass_optimization:
@@ -2418,7 +2433,8 @@ class MainWindow(QMainWindow):
     def update_rotator_position(self):
         if self.rotator:
             try:
-                az, el = self.rotator.get_position()
+                # Use cached position to avoid blocking the main thread
+                az, el = self.rotator.get_position(use_cache=True)
                 if az is not None and el is not None:
                     self.rotator_az_val.setText(f"{az}°")
                     self.rotator_el_val.setText(f"{el}°")
@@ -2435,7 +2451,7 @@ class MainWindow(QMainWindow):
 
     def start_rotator_position_worker(self):
         if self.rotator:
-            self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=2.0)
+            self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=5.0)  # Increased from 2.0 to 5.0 seconds
             self.rotator_position_worker.signals.position.connect(self.handle_rotator_position_update)
             QThreadPool.globalInstance().start(self.rotator_position_worker)
 
@@ -2708,7 +2724,7 @@ class Worker(QRunnable):
             self.signals.finished.emit()  # Done
 
 class RotatorPositionWorker(QRunnable):
-    def __init__(self, rotator, poll_interval=2.0):
+    def __init__(self, rotator, poll_interval=5.0):  # Increased from 2.0 to 5.0 seconds
         super().__init__()
         self.rotator = rotator
         self.poll_interval = poll_interval
@@ -2722,7 +2738,7 @@ class RotatorPositionWorker(QRunnable):
     def run(self):
         while self._running:
             try:
-                az, el = self.rotator.get_position()
+                az, el = self.rotator.get_position(use_cache=True)  # Use cache to reduce serial calls
                 self.signals.position.emit(az, el)
             except Exception as e:
                 self.signals.position.emit(None, None)

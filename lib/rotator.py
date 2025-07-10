@@ -16,6 +16,11 @@ class YaesuRotator:
         self.el_min = el_min
         self.el_max = el_max
         self.lock = threading.Lock()
+        
+        # Add position caching to reduce serial communication
+        self._cached_position = (None, None)
+        self._last_position_time = 0
+        self._position_cache_timeout = 0.5  # Cache position for 500ms
 
     def set_position(self, az, el):
         try:
@@ -28,7 +33,11 @@ class YaesuRotator:
         cmd = f"W{az:03d} {el:03d}\r"
         with self.lock:
             self.ser.write(cmd.encode())
-            time.sleep(0.1)
+            time.sleep(0.05)  # Reduced from 0.1 to 0.05
+        
+        # Update cache with commanded position
+        self._cached_position = (az, el)
+        self._last_position_time = time.time()
 
     def park(self, az_park, el_park):
         self.set_position(az_park, el_park)
@@ -37,14 +46,31 @@ class YaesuRotator:
         with self.lock:
             self.ser.write(b'S\r')
 
-    def get_position(self):
+    def get_position(self, use_cache=True):
+        """
+        Get rotator position with optional caching to reduce serial communication
+        
+        Args:
+            use_cache: If True, return cached position if recent enough
+            
+        Returns:
+            Tuple of (azimuth, elevation) or (None, None) if error
+        """
+        current_time = time.time()
+        
+        # Use cache if available and recent
+        if use_cache and self._cached_position[0] is not None:
+            if current_time - self._last_position_time < self._position_cache_timeout:
+                return self._cached_position
+        
+        # Get fresh position from rotator
         with self.lock:
-            self.ser.reset_input_buffer()
-            self.ser.write(b'C2\r')
-            time.sleep(0.1)
-            response = self.ser.readline().decode(errors='ignore').strip()
             try:
-                # Expected: 'AZ=aaa EL=eee' or just 'AZ=aaa' or 'EL=eee'
+                self.ser.reset_input_buffer()
+                self.ser.write(b'C2\r')
+                time.sleep(0.05)  # Reduced from 0.1 to 0.05
+                response = self.ser.readline().decode(errors='ignore').strip()
+                
                 az = None
                 el = None
                 parts = response.split()
@@ -53,25 +79,37 @@ class YaesuRotator:
                         az = int(part[3:])
                     elif part.startswith('EL='):
                         el = int(part[3:])
+                
                 if az is not None and el is not None:
+                    # Update cache
+                    self._cached_position = (az, el)
+                    self._last_position_time = current_time
                     return az, el
-                # fallback: try single queries if C2 didn't work
+                
+                # Fallback: try single queries if C2 didn't work
                 if az is None:
                     self.ser.write(b'C\r')
-                    time.sleep(0.1)
+                    time.sleep(0.05)  # Reduced from 0.1 to 0.05
                     az_response = self.ser.readline().decode(errors='ignore').strip()
                     if az_response.startswith('AZ='):
                         az = int(az_response[3:])
+                
                 if el is None:
                     self.ser.write(b'B\r')
-                    time.sleep(0.1)
+                    time.sleep(0.05)  # Reduced from 0.1 to 0.05
                     el_response = self.ser.readline().decode(errors='ignore').strip()
                     if el_response.startswith('EL='):
                         el = int(el_response[3:])
+                
                 if az is not None and el is not None:
+                    # Update cache
+                    self._cached_position = (az, el)
+                    self._last_position_time = current_time
                     return az, el
+                    
             except Exception as e:
                 print(f"Error parsing rotator position: {e}, response: {response}")
+            
             return None, None
 
     def close(self):
@@ -95,12 +133,23 @@ class RotatorThread(threading.Thread):
         self.parked = False
         self.last_az = None
         self.last_el = None
+        
+        # Add position caching to reduce serial calls
+        self._last_position_check = 0
+        self._position_check_interval = 2.0  # Only check position every 2 seconds
 
     def run(self):
         while self.running.is_set():
             try:
                 az, el = self.get_az_el()
-                current_az, _ = self.rotator.get_position()
+                current_time = time.time()
+                
+                # Only check rotator position periodically to reduce serial communication
+                current_az = None
+                if current_time - self._last_position_check >= self._position_check_interval:
+                    current_az, _ = self.rotator.get_position(use_cache=True)  # Use cache
+                    self._last_position_check = current_time
+                
                 if el >= self.min_elevation:
                     # Always use best azimuth logic if available
                     if self.best_az_func and current_az is not None:

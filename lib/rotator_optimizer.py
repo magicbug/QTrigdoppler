@@ -80,26 +80,27 @@ class RotatorOptimizer:
         Returns:
             Tuple of (distance, target_azimuth_to_use)
         """
-        # Normalize inputs
-        from_az = self.normalize_azimuth(from_az)
-        to_az = self.normalize_azimuth(to_az)
+        # Don't normalize inputs - preserve actual azimuth values
+        # Only normalize for distance calculations
         
-        # Calculate direct distance
-        direct_dist = abs(to_az - from_az)
-        target_direct = to_az
+        # Calculate direct distance (normalized for comparison)
+        from_az_norm = self.normalize_azimuth(from_az)
+        to_az_norm = self.normalize_azimuth(to_az)
+        direct_dist = abs(to_az_norm - from_az_norm)
+        target_direct = to_az  # Use original target azimuth
         
         # Calculate distances using 450-degree capability
         distances = [(direct_dist, target_direct)]
         
         if self.az_max > 360:
             # Try going the long way (crossing 0/360)
-            if to_az > from_az:
+            if to_az_norm > from_az_norm:
                 # Going backwards through 0
-                long_dist = from_az + (360 - to_az)
+                long_dist = from_az_norm + (360 - to_az_norm)
                 target_long = to_az - 360
             else:
                 # Going forwards through 360
-                long_dist = (360 - from_az) + to_az
+                long_dist = (360 - from_az_norm) + to_az_norm
                 target_long = to_az + 360
                 
             # Only add if the target is within our 450° range
@@ -111,14 +112,7 @@ class RotatorOptimizer:
     
     def optimize_pass_route(self, visible_predictions, current_rotator_az=None):
         """
-        Optimize the rotator route for the entire satellite pass
-        
-        Args:
-            visible_predictions: List of (time, azimuth, elevation) tuples
-            current_rotator_az: Current rotator azimuth (if known)
-            
-        Returns:
-            Dictionary with optimization results
+        Optimize the rotator route for the entire satellite pass, considering both directions (forward and reverse) and 450-degree support.
         """
         if not visible_predictions:
             return {
@@ -127,10 +121,7 @@ class RotatorOptimizer:
                 'route_segments': [],
                 'recommendation': 'No visible pass predicted'
             }
-        
-        # Extract azimuth values
         azimuths = [pred[1] for pred in visible_predictions]
-        
         if len(azimuths) < 2:
             return {
                 'optimal_start_az': azimuths[0],
@@ -138,46 +129,31 @@ class RotatorOptimizer:
                 'route_segments': visible_predictions,
                 'recommendation': 'Single point pass'
             }
-        
-        # Test different starting strategies
         strategies = []
-        
-        # Strategy 1: Start at first azimuth (direct)
-        start_az = self.normalize_azimuth(azimuths[0])
-        total_rotation = self._calculate_total_rotation(azimuths, start_az)
+        # Forward (natural) direction
+        start_az = azimuths[0]  # Use original azimuth, don't normalize
+        total_rotation_fwd = self._calculate_total_rotation(azimuths, start_az)
         strategies.append({
-            'strategy': 'Direct start',
+            'strategy': 'Forward (natural)',
             'start_az': start_az,
-            'total_rotation': total_rotation
+            'total_rotation': total_rotation_fwd
         })
-        
-        # Strategy 2: Start at first azimuth + 360 (if within range)
+        # Reverse direction (using 450°)
         if self.az_max > 360:
-            start_az_plus = azimuths[0] + 360
-            if start_az_plus <= self.az_max:
-                total_rotation = self._calculate_total_rotation(azimuths, start_az_plus)
+            rev_azimuths = list(reversed(azimuths))
+            start_az_rev = azimuths[0] + 360
+            if start_az_rev <= self.az_max:
+                total_rotation_rev = self._calculate_total_rotation(rev_azimuths, start_az_rev)
                 strategies.append({
-                    'strategy': 'Start +360',
-                    'start_az': start_az_plus,
-                    'total_rotation': total_rotation
+                    'strategy': 'Reverse (450°)',
+                    'start_az': start_az_rev,
+                    'total_rotation': total_rotation_rev
                 })
-            
-            # Strategy 3: Start at first azimuth - 360 (if within range)
-            start_az_minus = azimuths[0] - 360
-            if start_az_minus >= self.az_min:
-                total_rotation = self._calculate_total_rotation(azimuths, start_az_minus)
-                strategies.append({
-                    'strategy': 'Start -360',
-                    'start_az': start_az_minus,
-                    'total_rotation': total_rotation
-                })
-        
         # If we know current rotator position, factor that in
         if current_rotator_az is not None:
             for strategy in strategies:
                 pre_rotation = abs(strategy['start_az'] - current_rotator_az)
                 strategy['total_with_pre_rotation'] = strategy['total_rotation'] + pre_rotation
-        
         # Log the strategies being tested
         logging.debug(f"Testing rotator strategies for pass starting at {azimuths[0]:.1f}°:")
         for strategy in strategies:
@@ -185,15 +161,14 @@ class RotatorOptimizer:
                 logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°, total={strategy['total_with_pre_rotation']:.1f}°")
             else:
                 logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°")
-        
         # Choose the best strategy
         best_strategy = min(strategies, key=lambda x: x.get('total_with_pre_rotation', x['total_rotation']))
-        
         logging.debug(f"Selected strategy: {best_strategy['strategy']} with start azimuth {best_strategy['start_az']:.1f}°")
-        
         # Generate route segments
-        route_segments = self._generate_route_segments(visible_predictions, best_strategy['start_az'])
-        
+        if best_strategy['strategy'] == 'Reverse (450°)':
+            route_segments = self._generate_route_segments(list(reversed(visible_predictions)), best_strategy['start_az'])
+        else:
+            route_segments = self._generate_route_segments(visible_predictions, best_strategy['start_az'])
         return {
             'optimal_start_az': best_strategy['start_az'],
             'total_rotation': best_strategy['total_rotation'],
@@ -210,9 +185,9 @@ class RotatorOptimizer:
         
         for target_az in azimuths:
             # Find best way to reach target
-            distance, _ = self.calculate_rotation_distance(current_az, target_az)
+            distance, optimal_az = self.calculate_rotation_distance(current_az, target_az)
             total += distance
-            current_az = target_az
+            current_az = optimal_az  # Use the actual optimal azimuth for next calculation
             
         return total
     
@@ -232,7 +207,7 @@ class RotatorOptimizer:
                 'cumulative_rotation': sum(s['rotation_distance'] for s in segments) + distance
             })
             
-            current_az = optimal_az
+            current_az = optimal_az  # Use the actual optimal azimuth for next calculation
             
         return segments
     
