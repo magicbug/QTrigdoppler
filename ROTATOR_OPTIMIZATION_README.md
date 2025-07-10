@@ -30,15 +30,18 @@ The enhanced rotator control system for QTrigDoppler adds intelligent look-ahead
 
 ### 1. Pass Prediction
 When tracking starts, the system:
-- Calculates satellite position every 10 seconds for the next 20 minutes
+- Calculates satellite position every 10 seconds for the next 20 minutes (configurable)
 - Filters for the visible portion of the pass (above minimum elevation)
 - Creates a timeline of azimuth/elevation coordinates
+- **Automatically re-predicts every 5 minutes** if no visible pass is found
+- **Triggers prediction at -3° elevation** when satellite approaches minimum elevation threshold
 
 ### 2. Route Optimization
 The optimizer tests different strategies:
-- **Direct**: Start at the first azimuth position (0-360°)
-- **Start +360**: Begin at first_azimuth + 360° (if within 450° range)
-- **Start -360**: Begin at first_azimuth - 360° (if within range)
+- **Forward (natural)**: Start at the first azimuth position (0-360°)
+- **Reverse (450°)**: Begin at first_azimuth + 360° (if within 450° range)
+- Considers current rotator position for pre-positioning calculations
+- Generates optimized route segments with azimuths that may exceed 360°
 
 ### 3. Strategy Selection
 The system selects the strategy that minimizes:
@@ -47,7 +50,15 @@ The system selects the strategy that minimizes:
 - Combined movement for the entire tracking session
 
 ### 4. Pre-positioning
-If beneficial (>30 seconds before AOS), the rotator moves to the optimal starting position.
+If beneficial (>10 degrees difference from current position), the rotator moves to the optimal starting position.
+
+### 5. Real-time Tracking
+During tracking, the system:
+- Uses optimized route segments when available
+- Falls back to raw satellite azimuth when no optimization data exists
+- Applies 450° logic only to unoptimized azimuths (0-360° range)
+- **Maintains 1° tracking accuracy** for both azimuth and elevation
+- **Optimizes route timing** by predicting at -3° elevation for maximum accuracy
 
 ## Example Scenarios
 
@@ -65,6 +76,7 @@ If beneficial (>30 seconds before AOS), the rotator moves to the optimal startin
 - Track smoothly: 390° → 560° (200° + 360°)
 - Total: ~170° rotation
 - **Savings**: 40° less rotation
+- **Key**: Rotator receives optimized azimuths >360° directly
 
 ### Scenario 2: North-South Pass
 **Satellite pass**: 350° → 10° (crossing north)
@@ -101,18 +113,22 @@ min_elevation = 5
 
 ### Status Indicators
 The UI displays optimization status:
-- **"Ready"**: System initialized, awaiting tracking
-- **"Optimized (-X°)"**: Route optimized, X degrees saved
-- **"Pre-positioned"**: Rotator moved to optimal start position
-- **"Optimal"**: Current position already optimal
-- **"Error"**: Optimization failed
+- **"Parked"**: Rotator in park position (gray)
+- **"Optimized (-X°)"**: Route optimized, X degrees saved (green)
+- **"Pre-positioned"**: Rotator moved to optimal start position (orange)
+- **"Optimal"**: Current position already optimal (green)
+- **"Tracking"**: Satellite above minimum elevation, tracking normally (green)
+- **"No Pass"**: No visible pass predicted (gray)
+- **"Error"**: Optimization failed (red)
 
 ### Visual Feedback
 - Real-time azimuth/elevation display
 - Optimization status with color coding:
-  - Green: Optimal/optimized
+  - Green: Optimal/optimized/Tracking
   - Orange: Pre-positioned
+  - Gray: Parked/No Pass
   - Red: Error
+- Status updates automatically based on satellite elevation changes
 
 ## Benefits
 
@@ -136,25 +152,28 @@ The UI displays optimization status:
 ### Core Components
 
 1. **RotatorOptimizer Class** (`lib/rotator_optimizer.py`)
-   - Pass prediction algorithms
-   - Route optimization logic
-   - Pre-positioning recommendations
+   - Pass prediction algorithms (15-minute default look-ahead)
+   - Route optimization logic with Forward/Reverse strategies
+   - Pre-positioning recommendations (>10° threshold)
+   - 450° azimuth range calculations
 
 2. **Enhanced MainWindow** (`QTrigdoppler.py`)
    - Integration with existing tracking system
    - UI updates and status display
-   - Automatic optimization triggers
+   - Automatic optimization triggers on tracking start
+   - Real-time optimization status updates
 
 3. **Improved Rotator Control** (`lib/rotator.py`)
-   - 450° range support
-   - Intelligent azimuth calculation
-   - Enhanced position management
+   - 450° range support with position caching
+   - Intelligent azimuth calculation using optimizer
+   - Enhanced position management with thread safety
+   - Real-time route segment lookup for optimized tracking
 
 ### Algorithm Details
 
 #### Pass Prediction
 ```python
-def predict_satellite_pass(ephemdata, myloc, duration_minutes=20):
+def predict_satellite_pass(ephemdata, myloc, duration_minutes=15, interval_seconds=5):
     # Calculate satellite positions over time
     # Filter for visible elevations
     # Return time-series of azimuth/elevation
@@ -162,9 +181,9 @@ def predict_satellite_pass(ephemdata, myloc, duration_minutes=20):
 
 #### Route Optimization
 ```python
-def optimize_pass_route(visible_predictions, current_az):
-    # Test multiple routing strategies
-    # Calculate total rotation for each
+def optimize_pass_route(visible_predictions, current_rotator_az=None):
+    # Test Forward (natural) and Reverse (450°) strategies
+    # Calculate total rotation for each including pre-positioning
     # Select minimum-rotation path
 ```
 
@@ -182,7 +201,9 @@ def get_pre_positioning_recommendation(predictions, current_az):
 1. Configure rotator for 450° range in `config.ini`
 2. Select satellite and transponder
 3. Click "Start Tracking"
-4. System automatically optimizes and tracks
+4. System automatically optimizes and tracks (20-minute look-ahead, 10-second intervals)
+5. **If no pass is predicted, system re-checks every 5 minutes**
+6. **When satellite reaches -3° elevation, system triggers fresh prediction before AOS**
 
 ### Monitoring
 - Watch optimization status in UI
@@ -194,33 +215,9 @@ def get_pre_positioning_recommendation(predictions, current_az):
 - Verify configuration settings
 - Check serial communication
 - Review log files for errors
-
-## Demonstration
-
-Run the demonstration script to see the optimization in action:
-```bash
-python rotator_optimization_demo.py
-```
-
-This shows:
-- Example satellite passes
-- Optimization scenarios
-- Comparison with traditional methods
-- Real-world examples
-
-## Future Enhancements
-
-### Planned Features
-- **Multi-satellite optimization**: Optimize for multiple satellites
-- **Weather integration**: Consider weather in optimization
-- **Learning algorithms**: Adapt to usage patterns
-- **Advanced prediction**: Longer-term pass forecasting
-
-### Potential Improvements
-- **Hysteresis**: Prevent oscillation between strategies
-- **Priority weighting**: Weight different optimization factors
-- **Custom strategies**: User-defined optimization preferences
-- **Performance metrics**: Track optimization effectiveness
+- **If no pass is detected, wait 5 minutes for automatic re-check**
+- **Check logs for "🔄 Re-running satellite pass prediction..." messages**
+- **Check logs for "🛰 Satellite at -3.0° - triggering route prediction before AOS" messages**
 
 ## Compatibility
 
@@ -228,12 +225,6 @@ This shows:
 - Yaesu rotators with 450° azimuth capability
 - Compatible rotators using Yaesu protocol
 - Custom rotators with appropriate interface
-
-### System Requirements
-- Python 3.7+
-- PyQt5/PySide6
-- ephem library for orbital calculations
-- numpy for mathematical operations
 
 ## Support
 

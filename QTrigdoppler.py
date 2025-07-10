@@ -1796,6 +1796,7 @@ class MainWindow(QMainWindow):
         self.pass_recorder.set_tracking_active(True)
         # Optimize rotator route before starting tracking
         if ROTATOR_ENABLED and self.rotator_optimizer:
+            self.last_prediction_time = time.time()  # Initialize prediction timer
             self.optimize_rotator_route()
         # Start rotator thread
         if ROTATOR_ENABLED:
@@ -2081,6 +2082,20 @@ class MainWindow(QMainWindow):
                 if self.my_satellite.name:
                     self.on_satellite_update(elevation, self.my_satellite.name)
                 
+                # Check if we need to update optimization status based on elevation change
+                if ROTATOR_ENABLED and hasattr(self, 'pass_optimization'):
+                    self.check_and_update_optimization_status()
+                
+                # Periodically re-run prediction to catch passes that come into range
+                if ROTATOR_ENABLED and hasattr(self, 'last_prediction_time'):
+                    current_time = time.time()
+                    # Re-predict every 5 minutes if no optimization data exists
+                    if (current_time - self.last_prediction_time > 300 and 
+                        (not hasattr(self, 'pass_optimization') or self.pass_optimization is None)):
+                        logging.info("🔄 Re-running satellite pass prediction...")
+                        self.optimize_rotator_route()
+                        self.last_prediction_time = current_time
+                
                 # Handle Cloudlog updates
                 F_now = self.my_satellite.F
                 I_now = self.my_satellite.I
@@ -2152,6 +2167,30 @@ class MainWindow(QMainWindow):
         try:
             az = float(sat_azi_calc(self.my_satellite.tledata, myloc))
             el = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+            
+            # If we have optimization data, use the optimized azimuth
+            if hasattr(self, 'pass_optimization') and self.pass_optimization:
+                opt_details = self.pass_optimization.get('optimization_details', {})
+                route_segments = opt_details.get('route_segments', [])
+                
+                # Find the closest route segment to current time
+                current_time = datetime.now(timezone.utc)
+                closest_segment = None
+                min_time_diff = float('inf')
+                
+                for segment in route_segments:
+                    time_diff = abs((segment['time'] - current_time).total_seconds())
+                    if time_diff < min_time_diff:
+                        min_time_diff = time_diff
+                        closest_segment = segment
+                
+                # If we found a close segment (within 30 seconds), use its optimized azimuth
+                if closest_segment and min_time_diff < 30:
+                    az = closest_segment['target_az']
+                    logging.debug(f"Using optimized azimuth: {az:.1f}° (segment time diff: {min_time_diff:.1f}s)")
+                else:
+                    logging.debug(f"Using raw satellite azimuth: {az:.1f}° (no close optimization segment)")
+            
             return az, el
         except Exception as e:
             logging.error(f"Error getting current az/el: {e}")
@@ -2186,13 +2225,9 @@ class MainWindow(QMainWindow):
         az = float(az)
         el = float(el)
         if self.rotator:
-            # Get current rotator azimuth for shortest-path logic
-            current_az, _ = self.rotator.get_position()
-            if current_az is not None:
-                az_to_send = self.best_rotator_azimuth(current_az, az, ROTATOR_AZ_MAX)
-            else:
-                az_to_send = az
-            self.rotator.set_position(az_to_send, el)
+            # The azimuth should already be optimized from the route optimization
+            # Just send it directly to the rotator
+            self.rotator.set_position(az, el)
             self.update_rotator_position()
 
     def rotator_park(self, az_park, el_park):
@@ -2271,8 +2306,18 @@ class MainWindow(QMainWindow):
                     savings = opt_details.get('savings', 0)
                     if savings > 0:
                         logging.info(f"💡 Rotation savings: {savings:.1f}°")
+                    
+                    # Log the first few route segments to show the optimized azimuths
+                    route_segments = opt_details.get('route_segments', [])
+                    if route_segments:
+                        logging.info(f"🛤️ Route segments (first 5):")
+                        for i, segment in enumerate(route_segments[:5]):
+                            logging.info(f"   {i+1}: {segment['time'].strftime('%H:%M:%S')} az={segment['target_az']:.1f}° el={segment['elevation']:.1f}°")
+                        if len(route_segments) > 5:
+                            logging.info(f"   ... and {len(route_segments)-5} more segments")
                 # Always pre-position if beneficial, even if satellite is already visible
                 logging.info(f"⏱️ Pre-positioning rotator (even if pass is in progress)")
+                logging.info(f"📡 Sending optimized azimuth to rotator: {recommendation['recommended_az']:.1f}°")
                 self.rotator_set_position(recommendation['recommended_az'], ROTATOR_EL_PARK)
                 # Immediately update UI to show pre-positioned
                 self.update_optimization_status(recommendation)
@@ -2286,6 +2331,56 @@ class MainWindow(QMainWindow):
             self.pass_optimization = None
             self.update_optimization_status(None)
     
+    def check_and_update_optimization_status(self):
+        """Check current elevation and update optimization status accordingly"""
+        if not ROTATOR_ENABLED or not self.my_satellite.tledata:
+            return
+            
+        try:
+            current_elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+            
+            # Check if we should trigger route prediction at -3° elevation
+            if (current_elevation >= -3 and current_elevation < ROTATOR_MIN_ELEVATION and
+                (not hasattr(self, 'pass_optimization') or self.pass_optimization is None) and
+                hasattr(self, 'last_prediction_time')):
+                
+                current_time = time.time()
+                # Only predict once when crossing -3° threshold (avoid repeated predictions)
+                if not hasattr(self, 'prediction_triggered_at_neg3'):
+                    logging.info(f"🛰 Satellite at {current_elevation:.1f}° - triggering route prediction before AOS")
+                    self.optimize_rotator_route()
+                    self.last_prediction_time = current_time
+                    self.prediction_triggered_at_neg3 = True
+            
+            # Reset the trigger flag when satellite goes below -5° (for next pass)
+            if current_elevation < -5:
+                if hasattr(self, 'prediction_triggered_at_neg3'):
+                    delattr(self, 'prediction_triggered_at_neg3')
+            
+            # If elevation is below minimum, show "Parked"
+            if current_elevation < ROTATOR_MIN_ELEVATION:
+                self.rotator_optimization_val.setText("Parked")
+                self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+                return
+            
+            # If elevation is above minimum and we have optimization data, show the optimization status
+            if hasattr(self, 'pass_optimization') and self.pass_optimization:
+                self.update_optimization_status(self.pass_optimization)
+            else:
+                # No optimization data but satellite is visible - show "Tracking"
+                self.rotator_optimization_val.setText("Tracking")
+                self.rotator_optimization_val.setStyleSheet("color: green")
+                
+        except Exception as e:
+            logging.error(f"Error checking optimization status: {e}")
+
+    def force_reoptimize_route(self):
+        """Manually trigger route re-optimization"""
+        if ROTATOR_ENABLED and self.rotator_optimizer:
+            logging.info("🔄 Manual route re-optimization triggered")
+            self.last_prediction_time = time.time()
+            self.optimize_rotator_route()
+
     def update_optimization_status(self, recommendation):
         """Update the UI with rotator optimization status"""
         if not ROTATOR_ENABLED:
@@ -2331,52 +2426,8 @@ class MainWindow(QMainWindow):
                 self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
                 return
             
-            # Check current elevation first - if below minimum, show "Parked" regardless of future predictions
-            if self.my_satellite.tledata:
-                try:
-                    current_elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
-                    if current_elevation < ROTATOR_MIN_ELEVATION:
-                        self.rotator_optimization_val.setText("Parked")
-                        self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
-                        return
-                except Exception as e:
-                    logging.error(f"Error getting current elevation in on_rotator_parked: {e}")
-            
-            # Check if there's a visible pass predicted
-            if hasattr(self, 'pass_optimization') and self.pass_optimization:
-                # If we have optimization data, check if there's still a visible pass
-                if self.rotator_optimizer and self.my_satellite.tledata:
-                    try:
-                        # Predict the satellite pass
-                        predictions = self.rotator_optimizer.predict_satellite_pass(
-                            self.my_satellite.tledata, 
-                            myloc, 
-                            duration_minutes=20,
-                            interval_seconds=10
-                        )
-                        
-                        # Filter for visible portion of pass
-                        visible_predictions = self.rotator_optimizer.filter_visible_pass(predictions)
-                        
-                        if visible_predictions:
-                            # There's still a visible pass coming - show optimization status
-                            self.update_optimization_status(self.pass_optimization)
-                        else:
-                            # No visible pass predicted - show "No Pass"
-                            self.rotator_optimization_val.setText("No Pass")
-                            self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
-                    except Exception as e:
-                        logging.error(f"Error checking for visible pass after parking: {e}")
-                        self.rotator_optimization_val.setText("Parked")
-                        self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
-                else:
-                    # No optimizer or satellite data - show "Parked"
-                    self.rotator_optimization_val.setText("Parked")
-                    self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
-            else:
-                # No optimization data - show "Parked"
-                self.rotator_optimization_val.setText("Parked")
-                self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+            # Use the new method to check and update status based on current conditions
+            self.check_and_update_optimization_status()
         else:
             self.rotator_optimization_val.setText("Parked")
             self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray

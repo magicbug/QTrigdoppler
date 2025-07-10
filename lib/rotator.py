@@ -151,8 +151,9 @@ class RotatorThread(threading.Thread):
                     self._last_position_check = current_time
                 
                 if el >= self.min_elevation:
-                    # Always use best azimuth logic if available
-                    if self.best_az_func and current_az is not None:
+                    # The azimuth from get_az_el should already be optimized if route optimization is active
+                    # Only apply best_az_func if the azimuth is in the 0-360 range (indicating no optimization)
+                    if self.best_az_func and current_az is not None and az <= 360:
                         az_to_send = self.best_az_func(current_az, az, self.az_max)
                     else:
                         az_to_send = az
@@ -162,6 +163,7 @@ class RotatorThread(threading.Thread):
                     elif abs(az_to_send - self.last_az) >= 1 or abs(el - self.last_el) >= 1:
                         send = True
                     if send:
+                        print(f"RotatorThread: Moving to az={az_to_send:.1f}° el={el:.1f}° (original az={az:.1f}°)")
                         self.rotator.set_position(az_to_send, el)
                         self.last_az = az_to_send
                         self.last_el = el

@@ -113,6 +113,7 @@ class RotatorOptimizer:
     def optimize_pass_route(self, visible_predictions, current_rotator_az=None):
         """
         Optimize the rotator route for the entire satellite pass, considering both directions (forward and reverse) and 450-degree support.
+        Always prefer wraparound (Reverse 450°) if the pass crosses north (azimuths cross 0°/360°).
         """
         if not visible_predictions:
             return {
@@ -139,16 +140,18 @@ class RotatorOptimizer:
             'total_rotation': total_rotation_fwd
         })
         # Reverse direction (using 450°)
+        reverse_strategy = None
         if self.az_max > 360:
             rev_azimuths = list(reversed(azimuths))
             start_az_rev = azimuths[0] + 360
             if start_az_rev <= self.az_max:
                 total_rotation_rev = self._calculate_total_rotation(rev_azimuths, start_az_rev)
-                strategies.append({
+                reverse_strategy = {
                     'strategy': 'Reverse (450°)',
                     'start_az': start_az_rev,
                     'total_rotation': total_rotation_rev
-                })
+                }
+                strategies.append(reverse_strategy)
         # If we know current rotator position, factor that in
         if current_rotator_az is not None:
             for strategy in strategies:
@@ -161,8 +164,20 @@ class RotatorOptimizer:
                 logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°, total={strategy['total_with_pre_rotation']:.1f}°")
             else:
                 logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°")
-        # Choose the best strategy
-        best_strategy = min(strategies, key=lambda x: x.get('total_with_pre_rotation', x['total_rotation']))
+        # --- North-crossing detection ---
+        # If azimuths cross 0/360, always prefer Reverse (450°) for smoothness
+        crosses_north = False
+        for i in range(1, len(azimuths)):
+            diff = abs(self.normalize_azimuth(azimuths[i]) - self.normalize_azimuth(azimuths[i-1]))
+            if diff > 180:
+                crosses_north = True
+                break
+        if crosses_north and reverse_strategy is not None:
+            best_strategy = reverse_strategy
+            logging.info("[Optimizer] Pass crosses north: forcing Reverse (450°) wraparound for smooth tracking.")
+        else:
+            # Choose the best strategy (default: minimum total rotation)
+            best_strategy = min(strategies, key=lambda x: x.get('total_with_pre_rotation', x['total_rotation']))
         logging.debug(f"Selected strategy: {best_strategy['strategy']} with start azimuth {best_strategy['start_az']:.1f}°")
         # Generate route segments
         if best_strategy['strategy'] == 'Reverse (450°)':
