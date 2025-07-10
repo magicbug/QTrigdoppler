@@ -102,9 +102,7 @@ class RotatorOptimizer:
                 long_dist = (360 - from_az) + to_az
                 target_long = to_az + 360
                 
-            distances.append((long_dist, target_long))
-            
-            # Additional possibilities with 450-degree range
+            # Only add if the target is within our 450° range
             if target_long <= self.az_max and target_long >= self.az_min:
                 distances.append((long_dist, target_long))
         
@@ -180,8 +178,18 @@ class RotatorOptimizer:
                 pre_rotation = abs(strategy['start_az'] - current_rotator_az)
                 strategy['total_with_pre_rotation'] = strategy['total_rotation'] + pre_rotation
         
+        # Log the strategies being tested
+        logging.debug(f"Testing rotator strategies for pass starting at {azimuths[0]:.1f}°:")
+        for strategy in strategies:
+            if 'total_with_pre_rotation' in strategy:
+                logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°, total={strategy['total_with_pre_rotation']:.1f}°")
+            else:
+                logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°")
+        
         # Choose the best strategy
         best_strategy = min(strategies, key=lambda x: x.get('total_with_pre_rotation', x['total_rotation']))
+        
+        logging.debug(f"Selected strategy: {best_strategy['strategy']} with start azimuth {best_strategy['start_az']:.1f}°")
         
         # Generate route segments
         route_segments = self._generate_route_segments(visible_predictions, best_strategy['start_az'])

@@ -39,7 +39,13 @@ import serial
 from lib.gps_reader import GPSReader
 
 # Set logging level back to WARNING
-logging.basicConfig(level = logging.WARNING)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)s: %(message)s',
+    handlers=[
+        logging.FileHandler("qtrigdoppler.log", mode='w')
+    ]
+)
 
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -267,7 +273,7 @@ class MainWindow(QMainWindow):
         global DOPPLER_THRES_FM
         global DOPPLER_THRES_LINEAR
 
-        # satellite
+        # satellite
         global TLEFILE
         global TLEURL
         global SQFILE
@@ -725,7 +731,7 @@ class MainWindow(QMainWindow):
             self.rotator_az_val = QLabel("0.0°")
             self.rotator_el_val = QLabel("0.0°")
             self.rotator_optimization_label = QLabel("🛰 Route:")
-            self.rotator_optimization_val = QLabel("Ready")
+            self.rotator_optimization_val = QLabel("Parked")
             rotator_status_layout.addWidget(self.rotator_el_label, 0, 0)
             rotator_status_layout.addWidget(self.rotator_az_label, 1, 0)
             rotator_status_layout.addWidget(self.rotator_optimization_label, 2, 0)
@@ -2205,6 +2211,8 @@ class MainWindow(QMainWindow):
     def park_rotators(self):
         self.rotator_park(ROTATOR_AZ_PARK, ROTATOR_EL_PARK)
         logging.info("Rotator parked.")
+        # Update UI status after manual parking
+        self.on_rotator_parked(manual_park=True)
 
     def stop_rotators(self):
         self.rotator_stop()
@@ -2217,7 +2225,6 @@ class MainWindow(QMainWindow):
         if not (self.rotator_optimizer and self.my_satellite.tledata):
             logging.warning("Cannot optimize rotator route: missing optimizer or satellite data")
             return
-            
         try:
             # Predict the satellite pass
             predictions = self.rotator_optimizer.predict_satellite_pass(
@@ -2226,15 +2233,19 @@ class MainWindow(QMainWindow):
                 duration_minutes=20,  # Look ahead 20 minutes
                 interval_seconds=10   # Every 10 seconds
             )
-            
             # Filter for visible portion of pass
             visible_predictions = self.rotator_optimizer.filter_visible_pass(predictions)
-            
             if not visible_predictions:
                 logging.info("No visible satellite pass predicted in next 20 minutes")
                 self.pass_optimization = None
+                self.update_optimization_status(None)
                 return
-            
+            # --- Log AOS, TCA, LOS ---
+            aos_time, aos_az = visible_predictions[0][0], visible_predictions[0][1]
+            tca_idx = max(range(len(visible_predictions)), key=lambda i: visible_predictions[i][2])
+            tca_time, tca_az, tca_el = visible_predictions[tca_idx]
+            los_time, los_az = visible_predictions[-1][0], visible_predictions[-1][1]
+            logging.info(f"AOS: {aos_time.strftime('%Y-%m-%d %H:%M:%S')} az={aos_az:.1f}° | TCA: {tca_time.strftime('%Y-%m-%d %H:%M:%S')} az={tca_az:.1f}° el={tca_el:.1f}° | LOS: {los_time.strftime('%Y-%m-%d %H:%M:%S')} az={los_az:.1f}°")
             # Get current rotator position
             current_az = None
             if self.rotator:
@@ -2242,21 +2253,17 @@ class MainWindow(QMainWindow):
                     current_az, _ = self.rotator.get_position()
                 except Exception as e:
                     logging.warning(f"Could not get current rotator position: {e}")
-            
             # Get pre-positioning recommendation
             recommendation = self.rotator_optimizer.get_pre_positioning_recommendation(
                 visible_predictions, 
                 current_az
             )
-            
             # Store optimization results
             self.pass_optimization = recommendation
-            
             # Log the optimization results
             if recommendation['should_preposition']:
                 logging.info(f"🛰 Rotator Optimization: {recommendation['reason']}")
                 logging.info(f"📡 Recommended pre-position: {recommendation['recommended_az']:.1f}°")
-                
                 # Get details from optimization
                 opt_details = recommendation.get('optimization_details', {})
                 if opt_details:
@@ -2264,36 +2271,34 @@ class MainWindow(QMainWindow):
                     savings = opt_details.get('savings', 0)
                     if savings > 0:
                         logging.info(f"💡 Rotation savings: {savings:.1f}°")
-                
-                                 # Pre-position the rotator if beneficial
-                 if recommendation['time_until_aos']:
-                     seconds_until_aos = recommendation['time_until_aos'].total_seconds()
-                     if seconds_until_aos > 30:  # Only pre-position if we have more than 30 seconds
-                         logging.info(f"⏱️ Pre-positioning rotator ({seconds_until_aos:.0f}s until AOS)")
-                         self.rotator_set_position(recommendation['recommended_az'], ROTATOR_EL_PARK)
-                     else:
-                         logging.info(f"⏱️ Too close to AOS ({seconds_until_aos:.0f}s) - skipping pre-positioning")
-             else:
-                 logging.info(f"📡 Rotator optimization: {recommendation['reason']}")
-                 
-                           # Update UI with optimization status
-              self.update_optimization_status(recommendation)
-                  
-          except Exception as e:
-              logging.error(f"Error optimizing rotator route: {e}")
-              self.pass_optimization = None
-              self.update_optimization_status(None)
+                # Pre-position the rotator if beneficial
+                if recommendation['time_until_aos']:
+                    seconds_until_aos = recommendation['time_until_aos'].total_seconds()
+                    if seconds_until_aos > 30:  # Only pre-position if we have more than 30 seconds
+                        logging.info(f"⏱️ Pre-positioning rotator ({seconds_until_aos:.0f}s until AOS)")
+                        self.rotator_set_position(recommendation['recommended_az'], ROTATOR_EL_PARK)
+                        # Immediately update UI to show pre-positioned
+                        self.update_optimization_status(recommendation)
+                        return
+                    else:
+                        logging.info(f"⏱️ Too close to AOS ({seconds_until_aos:.0f}s) - skipping pre-positioning")
+            else:
+                logging.info(f"📡 Rotator optimization: {recommendation['reason']}")
+            # Update UI with optimization status (Optimal, Error, etc.)
+            self.update_optimization_status(recommendation)
+        except Exception as e:
+            logging.error(f"Error optimizing rotator route: {e}")
+            self.pass_optimization = None
+            self.update_optimization_status(None)
     
     def update_optimization_status(self, recommendation):
         """Update the UI with rotator optimization status"""
         if not ROTATOR_ENABLED:
             return
-            
         if recommendation is None:
             self.rotator_optimization_val.setText("Error")
             self.rotator_optimization_val.setStyleSheet("color: red")
             return
-            
         try:
             if recommendation['should_preposition']:
                 opt_details = recommendation.get('optimization_details', {})
@@ -2307,13 +2312,59 @@ class MainWindow(QMainWindow):
             else:
                 status_text = "Optimal"
                 self.rotator_optimization_val.setStyleSheet("color: green")
-                
             self.rotator_optimization_val.setText(status_text)
-            
         except Exception as e:
             logging.error(f"Error updating optimization status: {e}")
             self.rotator_optimization_val.setText("Error")
             self.rotator_optimization_val.setStyleSheet("color: red")
+
+    def on_rotator_parked(self, manual_park=False):
+        """Callback when rotator parks - update UI status"""
+        if ROTATOR_ENABLED:
+            # If manually parked (stop button), always show "Parked"
+            if manual_park:
+                self.rotator_optimization_val.setText("Parked")
+                self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+                return
+            
+            # Check if there's a visible pass predicted
+            if hasattr(self, 'pass_optimization') and self.pass_optimization:
+                # If we have optimization data, check if there's still a visible pass
+                if self.rotator_optimizer and self.my_satellite.tledata:
+                    try:
+                        # Predict the satellite pass
+                        predictions = self.rotator_optimizer.predict_satellite_pass(
+                            self.my_satellite.tledata, 
+                            myloc, 
+                            duration_minutes=20,
+                            interval_seconds=10
+                        )
+                        
+                        # Filter for visible portion of pass
+                        visible_predictions = self.rotator_optimizer.filter_visible_pass(predictions)
+                        
+                        if visible_predictions:
+                            # There's still a visible pass coming - show optimization status
+                            self.update_optimization_status(self.pass_optimization)
+                        else:
+                            # No visible pass predicted - show "No Pass"
+                            self.rotator_optimization_val.setText("No Pass")
+                            self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+                    except Exception as e:
+                        logging.error(f"Error checking for visible pass after parking: {e}")
+                        self.rotator_optimization_val.setText("Parked")
+                        self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+                else:
+                    # No optimizer or satellite data - show "Parked"
+                    self.rotator_optimization_val.setText("Parked")
+                    self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+            else:
+                # No optimization data - show "Parked"
+                self.rotator_optimization_val.setText("Parked")
+                self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
+        else:
+            self.rotator_optimization_val.setText("Parked")
+            self.rotator_optimization_val.setStyleSheet("color: #888888")  # Gray
 
     def start_rotator_thread(self):
         if ROTATOR_ENABLED and self.rotator and not self.rotator_thread:
@@ -2322,7 +2373,10 @@ class MainWindow(QMainWindow):
                 self.get_current_az_el,
                 ROTATOR_MIN_ELEVATION,
                 ROTATOR_AZ_PARK,
-                ROTATOR_EL_PARK
+                ROTATOR_EL_PARK,
+                on_park_callback=self.on_rotator_parked,
+                best_az_func=self.best_rotator_azimuth,
+                az_max=ROTATOR_AZ_MAX
             )
             self.rotator_thread.daemon = True
             self.rotator_thread.start()

@@ -79,7 +79,7 @@ class YaesuRotator:
             self.ser.close()
 
 class RotatorThread(threading.Thread):
-    def __init__(self, rotator, get_az_el_func, min_elevation, az_park, el_park, poll_interval=1.0):
+    def __init__(self, rotator, get_az_el_func, min_elevation, az_park, el_park, poll_interval=1.0, on_park_callback=None, best_az_func=None, az_max=450):
         super().__init__()
         self.rotator = rotator
         self.get_az_el = get_az_el_func  # function returning (az, el)
@@ -87,6 +87,9 @@ class RotatorThread(threading.Thread):
         self.az_park = az_park
         self.el_park = el_park
         self.poll_interval = poll_interval
+        self.on_park_callback = on_park_callback  # callback when rotator parks
+        self.best_az_func = best_az_func  # function(current_az, target_az, az_max)
+        self.az_max = az_max
         self.running = threading.Event()
         self.running.set()
         self.parked = False
@@ -97,24 +100,40 @@ class RotatorThread(threading.Thread):
         while self.running.is_set():
             try:
                 az, el = self.get_az_el()
+                current_az, _ = self.rotator.get_position()
                 if el >= self.min_elevation:
-                    # Only send if az or el changed by at least 1 degree
+                    # Always use best azimuth logic if available
+                    if self.best_az_func and current_az is not None:
+                        az_to_send = self.best_az_func(current_az, az, self.az_max)
+                    else:
+                        az_to_send = az
                     send = False
                     if self.last_az is None or self.last_el is None:
                         send = True
-                    elif abs(az - self.last_az) >= 1 or abs(el - self.last_el) >= 1:
+                    elif abs(az_to_send - self.last_az) >= 1 or abs(el - self.last_el) >= 1:
                         send = True
                     if send:
-                        self.rotator.set_position(az, el)
-                        self.last_az = round(az)
-                        self.last_el = round(el)
+                        self.rotator.set_position(az_to_send, el)
+                        self.last_az = az_to_send
+                        self.last_el = el
                     self.parked = False
                 else:
                     if not self.parked:
-                        self.rotator.park(self.az_park, self.el_park)
+                        # Use best azimuth logic for parking too
+                        if self.best_az_func and current_az is not None:
+                            park_az = self.best_az_func(current_az, self.az_park, self.az_max)
+                        else:
+                            park_az = self.az_park
+                        self.rotator.park(park_az, self.el_park)
                         self.parked = True
-                        self.last_az = self.az_park
+                        self.last_az = park_az
                         self.last_el = self.el_park
+                        # Notify main application that rotator has parked
+                        if self.on_park_callback:
+                            try:
+                                self.on_park_callback()
+                            except Exception as e:
+                                print(f"Error in park callback: {e}")
             except Exception as e:
                 # Log or handle error as needed
                 print(f"RotatorThread error: {e}")
