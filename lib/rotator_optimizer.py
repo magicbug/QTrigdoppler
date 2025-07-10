@@ -71,43 +71,31 @@ class RotatorOptimizer:
     def calculate_rotation_distance(self, from_az, to_az):
         """
         Calculate the shortest rotation distance between two azimuths
-        considering 450-degree capability
-        
+        considering 450-degree capability.
+
         Args:
-            from_az: Starting azimuth
-            to_az: Target azimuth
-            
+            from_az: Starting azimuth (current rotator position, can be > 360)
+            to_az: Target azimuth (from satellite prediction, 0-360)
+
         Returns:
-            Tuple of (distance, target_azimuth_to_use)
+            Tuple of (actual_distance, optimal_target_azimuth)
         """
-        # Don't normalize inputs - preserve actual azimuth values
-        # Only normalize for distance calculations
+        # The target azimuth from ephem is always 0-360. We need to find the
+        # equivalent angle in our rotator's full range that is closest to from_az.
+        possible_targets = [to_az]
         
-        # Calculate direct distance (normalized for comparison)
-        from_az_norm = self.normalize_azimuth(from_az)
-        to_az_norm = self.normalize_azimuth(to_az)
-        direct_dist = abs(to_az_norm - from_az_norm)
-        target_direct = to_az  # Use original target azimuth
+        # Check wraparound target forwards (e.g., 10 deg -> 370 deg)
+        if (to_az + 360) <= self.az_max:
+            possible_targets.append(to_az + 360)
+            
+        # Check wraparound target backwards (e.g., 350 deg -> -10 deg)
+        if (to_az - 360) >= self.az_min:
+            possible_targets.append(to_az - 360)
+
+        # Find the target that requires the minimum rotation from current position
+        distances = [(abs(target - from_az), target) for target in possible_targets]
         
-        # Calculate distances using 450-degree capability
-        distances = [(direct_dist, target_direct)]
-        
-        if self.az_max > 360:
-            # Try going the long way (crossing 0/360)
-            if to_az_norm > from_az_norm:
-                # Going backwards through 0
-                long_dist = from_az_norm + (360 - to_az_norm)
-                target_long = to_az - 360
-            else:
-                # Going forwards through 360
-                long_dist = (360 - from_az_norm) + to_az_norm
-                target_long = to_az + 360
-                
-            # Only add if the target is within our 450° range
-            if target_long <= self.az_max and target_long >= self.az_min:
-                distances.append((long_dist, target_long))
-        
-        # Return the shortest distance option
+        # Return the one with the shortest distance
         return min(distances, key=lambda x: x[0])
     
     def optimize_pass_route(self, visible_predictions, current_rotator_az=None):
@@ -142,10 +130,9 @@ class RotatorOptimizer:
         # Reverse direction (using 450°)
         reverse_strategy = None
         if self.az_max > 360:
-            rev_azimuths = list(reversed(azimuths))
             start_az_rev = azimuths[0] + 360
             if start_az_rev <= self.az_max:
-                total_rotation_rev = self._calculate_total_rotation(rev_azimuths, start_az_rev)
+                total_rotation_rev = self._calculate_total_rotation(azimuths, start_az_rev)
                 reverse_strategy = {
                     'strategy': 'Reverse (450°)',
                     'start_az': start_az_rev,
@@ -180,10 +167,7 @@ class RotatorOptimizer:
             best_strategy = min(strategies, key=lambda x: x.get('total_with_pre_rotation', x['total_rotation']))
         logging.debug(f"Selected strategy: {best_strategy['strategy']} with start azimuth {best_strategy['start_az']:.1f}°")
         # Generate route segments
-        if best_strategy['strategy'] == 'Reverse (450°)':
-            route_segments = self._generate_route_segments(list(reversed(visible_predictions)), best_strategy['start_az'])
-        else:
-            route_segments = self._generate_route_segments(visible_predictions, best_strategy['start_az'])
+        route_segments = self._generate_route_segments(visible_predictions, best_strategy['start_az'])
         
         # Debug: Log the first few route segments to verify 450° values
         if route_segments:
