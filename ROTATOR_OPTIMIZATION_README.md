@@ -30,11 +30,13 @@ The enhanced rotator control system for QTrigDoppler adds intelligent look-ahead
 
 ### 1. Pass Prediction
 When tracking starts, the system:
+- **Only optimizes when satellite is visible or approaching horizon** (≥-3° elevation)
 - Calculates satellite position every 10 seconds for the next 20 minutes (configurable)
 - Filters for the visible portion of the pass (above minimum elevation)
 - Creates a timeline of azimuth/elevation coordinates
-- **Automatically re-predicts every 5 minutes** if no visible pass is found
+- **Automatically re-predicts** if no optimization exists and satellite is approaching horizon (-3° to 0°)
 - **Triggers prediction at -3° elevation** when satellite approaches minimum elevation threshold
+- **Clears optimization data** when satellite goes below -10° elevation
 
 ### 2. Route Optimization
 The optimizer tests different strategies:
@@ -59,6 +61,10 @@ During tracking, the system:
 - Applies 450° logic only to unoptimized azimuths (0-360° range)
 - **Maintains 1° tracking accuracy** for both azimuth and elevation
 - **Optimizes route timing** by predicting at -3° elevation for maximum accuracy
+- **Pre-positioning window**: Only uses optimized start azimuth when satellite is between -3° and minimum elevation
+- **Below horizon**: Uses raw satellite azimuth when satellite is below -3° elevation
+- **Efficient optimization**: Only generates route segments when satellite is ≥-3° elevation
+- **Memory management**: Clears optimization data when satellite goes below -10° elevation
 
 ## Example Scenarios
 
@@ -102,6 +108,7 @@ az_min = 0
 el_max = 180
 el_min = 0
 min_elevation = 5
+position_poll_interval = 5.0
 ```
 
 ### Required Hardware
@@ -141,11 +148,13 @@ The UI displays optimization status:
 - **Better tracking**: Smoother satellite following
 - **Automatic optimization**: No manual intervention
 - **Improved efficiency**: Optimal use of rotator capabilities
+- **Reduced serial traffic**: Intelligent position polling reduces unnecessary communication
 
 ### User Experience
 - **Transparent operation**: Works automatically
 - **Clear feedback**: Status updates in UI
 - **Reliable tracking**: Predictable rotator behavior
+- **Configurable polling**: Adjustable position check frequency
 
 ## Technical Implementation
 
@@ -162,12 +171,14 @@ The UI displays optimization status:
    - UI updates and status display
    - Automatic optimization triggers on tracking start
    - Real-time optimization status updates
+   - **Intelligent position polling** based on tracking state
 
 3. **Improved Rotator Control** (`lib/rotator.py`)
    - 450° range support with position caching
    - Intelligent azimuth calculation using optimizer
    - Enhanced position management with thread safety
    - Real-time route segment lookup for optimized tracking
+   - **Adaptive position checking** frequency based on movement and satellite visibility
 
 ### Algorithm Details
 
@@ -218,6 +229,7 @@ def get_pre_positioning_recommendation(predictions, current_az):
 - **If no pass is detected, wait 5 minutes for automatic re-check**
 - **Check logs for "🔄 Re-running satellite pass prediction..." messages**
 - **Check logs for "🛰 Satellite at -3.0° - triggering route prediction before AOS" messages**
+- **Monitor position polling frequency in logs for performance optimization**
 
 ## Compatibility
 
@@ -239,6 +251,41 @@ def get_pre_positioning_recommendation(predictions, current_az):
 - **Optimization not working**: Verify 450° support
 - **Incorrect positioning**: Calibrate rotator range
 - **Status not updating**: Check UI refresh rate
+
+## Position Polling Optimization
+
+### Intelligent Polling Strategy
+
+The system uses **adaptive position polling** to minimize serial communication while maintaining responsive tracking:
+
+#### Polling Intervals
+- **UI Position Worker**: Configurable base interval (default: 5 seconds)
+  - **When tracking**: Polls every 2 seconds maximum
+  - **When not tracking**: Polls every 10 seconds minimum
+- **Rotator Thread**: Adaptive based on satellite visibility and movement
+  - **Satellite visible (≥5°)**: Polls every 1 second
+  - **Satellite approaching horizon (-10° to 5°)**: Polls every 3 seconds
+  - **Satellite well below horizon (<-10°)**: Polls every 10 seconds
+  - **Rotator moving**: Polls every 0.5 seconds
+  - **Rotator stationary**: Polls every 2 seconds
+
+#### Position Caching
+- **Cache timeout**: 500ms to reduce serial calls
+- **Cache invalidation**: After position commands or cache timeout
+- **Fallback queries**: Individual AZ/EL queries if combined query fails
+
+#### Configuration
+```ini
+[rotator]
+position_poll_interval = 5.0  # Base polling interval in seconds
+```
+
+### Performance Benefits
+- **Reduced serial traffic**: Up to 80% fewer position queries when not tracking
+- **Responsive tracking**: Fast polling when satellite is visible
+- **Battery friendly**: Slower polling when rotator is stationary
+- **Configurable**: Adjust polling frequency based on hardware capabilities
+- **Reduced log noise**: Intelligent logging that only reports significant changes
 
 ## Conclusion
 

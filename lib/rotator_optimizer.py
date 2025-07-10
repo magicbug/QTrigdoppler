@@ -184,6 +184,14 @@ class RotatorOptimizer:
             route_segments = self._generate_route_segments(list(reversed(visible_predictions)), best_strategy['start_az'])
         else:
             route_segments = self._generate_route_segments(visible_predictions, best_strategy['start_az'])
+        
+        # Debug: Log the first few route segments to verify 450° values
+        if route_segments:
+            logging.debug(f"Generated {len(route_segments)} route segments")
+            for i, seg in enumerate(route_segments[:5]):
+                logging.debug(f"  Route segment {i}: {seg['time'].strftime('%H:%M:%S')} -> {seg['target_az']:.1f}°")
+            if len(route_segments) > 5:
+                logging.debug(f"  ... and {len(route_segments)-5} more segments")
         return {
             'optimal_start_az': best_strategy['start_az'],
             'total_rotation': best_strategy['total_rotation'],

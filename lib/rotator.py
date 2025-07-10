@@ -31,6 +31,7 @@ class YaesuRotator:
         az = max(self.az_min, min(self.az_max, int(round(az))))
         el = max(self.el_min, min(self.el_max, int(round(el))))
         cmd = f"W{az:03d} {el:03d}\r"
+        print(f"YaesuRotator: Sending command '{cmd.strip()}' to hardware")
         with self.lock:
             self.ser.write(cmd.encode())
             time.sleep(0.05)  # Reduced from 0.1 to 0.05
@@ -134,9 +135,14 @@ class RotatorThread(threading.Thread):
         self.last_az = None
         self.last_el = None
         
-        # Add position caching to reduce serial calls
+        # Intelligent position checking based on state
         self._last_position_check = 0
-        self._position_check_interval = 2.0  # Only check position every 2 seconds
+        self._position_check_interval = 2.0  # Default: check every 2 seconds
+        self._last_movement_time = 0
+        self._movement_timeout = 5.0  # Consider rotator stopped after 5 seconds of no movement
+        self._is_moving = False
+        self._consecutive_no_movement = 0
+        self._max_no_movement_count = 3  # After 3 consecutive checks with no movement, reduce polling
 
     def run(self):
         while self.running.is_set():
@@ -144,11 +150,55 @@ class RotatorThread(threading.Thread):
                 az, el = self.get_az_el()
                 current_time = time.time()
                 
-                # Only check rotator position periodically to reduce serial communication
+                # Intelligent position checking frequency
+                should_check_position = False
+                
+                if el >= self.min_elevation:
+                    # Satellite is visible - check position more frequently
+                    if current_time - self._last_position_check >= self._position_check_interval:
+                        should_check_position = True
+                        # Reduce interval when actively tracking
+                        self._position_check_interval = 1.0
+                elif el >= -10:
+                    # Satellite approaching horizon - check position moderately
+                    if current_time - self._last_position_check >= self._position_check_interval:
+                        should_check_position = True
+                        # Moderate interval when approaching horizon
+                        self._position_check_interval = 3.0
+                else:
+                    # Satellite well below horizon - check position less frequently
+                    if current_time - self._last_position_check >= self._position_check_interval:
+                        should_check_position = True
+                        # Increase interval when well below horizon
+                        self._position_check_interval = 10.0
+                
                 current_az = None
-                if current_time - self._last_position_check >= self._position_check_interval:
+                if should_check_position:
                     current_az, _ = self.rotator.get_position(use_cache=True)  # Use cache
                     self._last_position_check = current_time
+                    # Only log position checks when elevation changes significantly or when moving
+                    if (not hasattr(self, '_last_logged_el') or 
+                        abs(el - self._last_logged_el) > 5 or 
+                        self._is_moving or 
+                        el >= -5):
+                        print(f"RotatorThread: Position check (interval={self._position_check_interval:.1f}s, moving={self._is_moving}, el={el:.1f}°)")
+                        self._last_logged_el = el
+                    
+                    # Check if rotator is moving
+                    if self.last_az is not None and current_az is not None:
+                        az_diff = abs(current_az - self.last_az)
+                        if az_diff > 0.5:  # Significant movement
+                            self._is_moving = True
+                            self._last_movement_time = current_time
+                            self._consecutive_no_movement = 0
+                            # When moving, check position more frequently
+                            self._position_check_interval = 0.5
+                        else:
+                            self._consecutive_no_movement += 1
+                            if self._consecutive_no_movement >= self._max_no_movement_count:
+                                self._is_moving = False
+                                # When not moving, check position less frequently
+                                self._position_check_interval = 2.0
                 
                 if el >= self.min_elevation:
                     # The azimuth from get_az_el should already be optimized if route optimization is active
@@ -164,9 +214,14 @@ class RotatorThread(threading.Thread):
                         send = True
                     if send:
                         print(f"RotatorThread: Moving to az={az_to_send:.1f}° el={el:.1f}° (original az={az:.1f}°)")
+                        print(f"RotatorThread: Sending command W{int(round(az_to_send)):03d} {int(round(el)):03d}")
                         self.rotator.set_position(az_to_send, el)
                         self.last_az = az_to_send
                         self.last_el = el
+                        # Reset movement tracking when we send a command
+                        self._is_moving = True
+                        self._last_movement_time = current_time
+                        self._consecutive_no_movement = 0
                     self.parked = False
                 else:
                     if not self.parked:
