@@ -15,15 +15,161 @@ class RotatorOptimizer:
         self.az_max = az_max
         self.min_elevation = min_elevation
         
-    def predict_satellite_pass(self, ephemdata, myloc, duration_minutes=15, interval_seconds=5):
+    def detect_pass_characteristics(self, ephemdata, myloc, scan_duration_minutes=90, scan_interval_seconds=60):
         """
-        Predict satellite position over time
+        Perform a quick scan to detect pass characteristics for adaptive optimization
         
         Args:
             ephemdata: Satellite ephemeris data
             myloc: Observer location
-            duration_minutes: How far ahead to predict (default 15 minutes)
-            interval_seconds: Prediction interval (default 5 seconds)
+            scan_duration_minutes: How far ahead to scan (default 90 minutes)
+            scan_interval_seconds: Scan interval for quick detection (default 60 seconds)
+            
+        Returns:
+            Dictionary with pass characteristics or None if no pass detected
+        """
+        try:
+            # Quick scan with coarse intervals to find the full pass
+            predictions = self._predict_satellite_positions(
+                ephemdata, myloc, 
+                duration_minutes=scan_duration_minutes,
+                interval_seconds=scan_interval_seconds
+            )
+            
+            visible_predictions = self.filter_visible_pass(predictions)
+            
+            if not visible_predictions:
+                return None
+            
+            # Calculate pass characteristics
+            aos_time = visible_predictions[0][0]
+            los_time = visible_predictions[-1][0]
+            pass_duration = (los_time - aos_time).total_seconds() / 60  # minutes
+            max_elevation = max(pred[2] for pred in visible_predictions)
+            
+            # Calculate azimuth range to detect north crossings
+            azimuths = [pred[1] for pred in visible_predictions]
+            az_range = max(azimuths) - min(azimuths)
+            crosses_north = any(abs(self.normalize_azimuth(azimuths[i]) - self.normalize_azimuth(azimuths[i-1])) > 180 
+                               for i in range(1, len(azimuths)))
+            
+            return {
+                'aos_time': aos_time,
+                'los_time': los_time,
+                'duration_minutes': pass_duration,
+                'max_elevation': max_elevation,
+                'azimuth_range': az_range,
+                'crosses_north': crosses_north,
+                'visible_predictions': visible_predictions
+            }
+            
+        except Exception as e:
+            logging.error(f"Error detecting pass characteristics: {e}")
+            return None
+
+    def get_adaptive_prediction_params(self, pass_characteristics=None):
+        """
+        Calculate adaptive prediction parameters based on pass characteristics
+        
+        Args:
+            pass_characteristics: Dictionary from detect_pass_characteristics()
+            
+        Returns:
+            Dictionary with duration_minutes and interval_seconds
+        """
+        # Default fallback parameters (current behavior)
+        default_params = {
+            'duration_minutes': 20,
+            'interval_seconds': 10,
+            'reason': 'Using default parameters (no pass characteristics available)'
+        }
+        
+        if not pass_characteristics:
+            return default_params
+        
+        duration = pass_characteristics['duration_minutes']
+        max_elevation = pass_characteristics['max_elevation']
+        crosses_north = pass_characteristics['crosses_north']
+        
+        # Adaptive duration: Add buffer based on pass length
+        if duration < 5:  # Very short pass
+            prediction_duration = max(8, duration + 4)  # Minimum 8 minutes, add 4 min buffer
+            interval = 5  # High precision for short passes
+            reason = f"Short pass ({duration:.1f}min): Using high precision tracking"
+        elif duration < 10:  # Short pass
+            prediction_duration = duration + 6  # Add 6 min buffer
+            interval = 6  # Good precision
+            reason = f"Short pass ({duration:.1f}min): Using enhanced precision"
+        elif duration < 18:  # Medium pass
+            prediction_duration = duration + 8  # Add 8 min buffer
+            interval = 8  # Standard precision
+            reason = f"Medium pass ({duration:.1f}min): Using standard precision"
+        else:  # Long pass
+            prediction_duration = duration + 10  # Add 10 min buffer
+            interval = 10  # Coarser intervals for efficiency
+            reason = f"Long pass ({duration:.1f}min): Using efficient tracking"
+        
+        # Adjust for elevation - high elevation passes need more precision
+        if max_elevation > 60:
+            interval = max(3, interval - 3)  # Finer intervals for high passes
+            reason += f" + high elevation ({max_elevation:.1f}°): increased precision"
+        elif max_elevation < 15:
+            interval = min(15, interval + 5)  # Coarser for very low passes
+            reason += f" + low elevation ({max_elevation:.1f}°): reduced precision"
+        
+        # Adjust for north crossings - need finer intervals for smooth tracking
+        if crosses_north:
+            interval = max(5, interval - 2)  # Finer intervals for north crossings
+            reason += " + north crossing: enhanced precision"
+        
+        # Ensure reasonable bounds
+        prediction_duration = max(8, min(45, prediction_duration))  # 8-45 minute range
+        interval = max(3, min(15, interval))  # 3-15 second range
+        
+        return {
+            'duration_minutes': prediction_duration,
+            'interval_seconds': interval,
+            'reason': reason
+        }
+
+    def predict_satellite_pass_adaptive(self, ephemdata, myloc):
+        """
+        Predict satellite pass using adaptive parameters based on pass characteristics
+        
+        Args:
+            ephemdata: Satellite ephemeris data
+            myloc: Observer location
+            
+        Returns:
+            List of (time, azimuth, elevation) tuples with adaptive precision
+        """
+        # Step 1: Detect pass characteristics
+        pass_characteristics = self.detect_pass_characteristics(ephemdata, myloc)
+        
+        # Step 2: Get adaptive parameters
+        adaptive_params = self.get_adaptive_prediction_params(pass_characteristics)
+        
+        # Step 3: Log the adaptive decision
+        logging.info(f"🎯 Adaptive prediction: {adaptive_params['reason']}")
+        logging.debug(f"   Parameters: {adaptive_params['duration_minutes']:.1f}min window, {adaptive_params['interval_seconds']}s intervals")
+        
+        # Step 4: Run high-precision prediction with adaptive parameters
+        return self._predict_satellite_positions(
+            ephemdata, myloc,
+            duration_minutes=adaptive_params['duration_minutes'],
+            interval_seconds=adaptive_params['interval_seconds']
+        )
+
+    def _predict_satellite_positions(self, ephemdata, myloc, duration_minutes=15, interval_seconds=5):
+        """
+        Internal method to predict satellite positions over time
+        (Renamed from predict_satellite_pass to avoid confusion with adaptive version)
+        
+        Args:
+            ephemdata: Satellite ephemeris data
+            myloc: Observer location
+            duration_minutes: How far ahead to predict
+            interval_seconds: Prediction interval
             
         Returns:
             List of (time, azimuth, elevation) tuples
@@ -47,6 +193,23 @@ class RotatorOptimizer:
             predictions.append((future_time, az, el))
             
         return predictions
+
+    def predict_satellite_pass(self, ephemdata, myloc, duration_minutes=15, interval_seconds=5):
+        """
+        Predict satellite position over time (legacy method for backward compatibility)
+        
+        For new code, consider using predict_satellite_pass_adaptive() for better performance
+        
+        Args:
+            ephemdata: Satellite ephemeris data
+            myloc: Observer location
+            duration_minutes: How far ahead to predict (default 15 minutes)
+            interval_seconds: Prediction interval (default 5 seconds)
+            
+        Returns:
+            List of (time, azimuth, elevation) tuples
+        """
+        return self._predict_satellite_positions(ephemdata, myloc, duration_minutes, interval_seconds)
     
     def filter_visible_pass(self, predictions):
         """

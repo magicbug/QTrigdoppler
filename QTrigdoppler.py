@@ -2392,18 +2392,16 @@ class MainWindow(QMainWindow):
         
     def optimize_rotator_route(self):
         """
-        Predict satellite pass and optimize rotator route with 450-degree support
+        Predict satellite pass and optimize rotator route with 450-degree support using adaptive parameters
         """
         if not (self.rotator_optimizer and self.my_satellite.tledata):
             logging.warning("Cannot optimize rotator route: missing optimizer or satellite data")
             return
         try:
-            # Predict the satellite pass
-            predictions = self.rotator_optimizer.predict_satellite_pass(
+            # Use adaptive prediction for optimized performance and accuracy
+            predictions = self.rotator_optimizer.predict_satellite_pass_adaptive(
                 self.my_satellite.tledata, 
-                myloc, 
-                duration_minutes=20,  # Look ahead 20 minutes
-                interval_seconds=10   # Every 10 seconds
+                myloc
             )
             # Filter for visible portion of pass
             visible_predictions = self.rotator_optimizer.filter_visible_pass(predictions)
