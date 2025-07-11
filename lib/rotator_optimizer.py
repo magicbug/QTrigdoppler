@@ -144,13 +144,14 @@ class RotatorOptimizer:
             for strategy in strategies:
                 pre_rotation = abs(strategy['start_az'] - current_rotator_az)
                 strategy['total_with_pre_rotation'] = strategy['total_rotation'] + pre_rotation
-        # Log the strategies being tested
-        logging.debug(f"Testing rotator strategies for pass starting at {azimuths[0]:.1f}°:")
-        for strategy in strategies:
-            if 'total_with_pre_rotation' in strategy:
-                logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°, total={strategy['total_with_pre_rotation']:.1f}°")
-            else:
-                logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°")
+        # Log strategies only at DEBUG level (was too verbose)
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f"Testing rotator strategies for pass starting at {azimuths[0]:.1f}°:")
+            for strategy in strategies:
+                if 'total_with_pre_rotation' in strategy:
+                    logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°, total={strategy['total_with_pre_rotation']:.1f}°")
+                else:
+                    logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°")
         # --- North-crossing detection ---
         # If azimuths cross 0/360, always prefer Reverse (450°) for smoothness
         crosses_north = False
@@ -165,17 +166,17 @@ class RotatorOptimizer:
         else:
             # Choose the best strategy (default: minimum total rotation)
             best_strategy = min(strategies, key=lambda x: x.get('total_with_pre_rotation', x['total_rotation']))
-        logging.debug(f"Selected strategy: {best_strategy['strategy']} with start azimuth {best_strategy['start_az']:.1f}°")
+        logging.info(f"Selected strategy: {best_strategy['strategy']} with start azimuth {best_strategy['start_az']:.1f}°")
         # Generate route segments
         route_segments = self._generate_route_segments(visible_predictions, best_strategy['start_az'])
         
-        # Debug: Log the first few route segments to verify 450° values
-        if route_segments:
-            logging.debug(f"Generated {len(route_segments)} route segments")
-            for i, seg in enumerate(route_segments[:5]):
+        # Debug: Log route segments only at DEBUG level to reduce verbosity
+        if route_segments and logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f"Generated {len(route_segments)} route segments (first 3):")
+            for i, seg in enumerate(route_segments[:3]):  # Only show first 3 instead of 5
                 logging.debug(f"  Route segment {i}: {seg['time'].strftime('%H:%M:%S')} -> {seg['target_az']:.1f}°")
-            if len(route_segments) > 5:
-                logging.debug(f"  ... and {len(route_segments)-5} more segments")
+            if len(route_segments) > 3:
+                logging.debug(f"  ... and {len(route_segments)-3} more segments")
         return {
             'optimal_start_az': best_strategy['start_az'],
             'total_rotation': best_strategy['total_rotation'],

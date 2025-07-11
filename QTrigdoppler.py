@@ -27,6 +27,7 @@ from PySide6.QtCore import *
 from PySide6.QtCore import Qt, Signal, Slot, QObject, QMetaObject, Q_ARG, QThreadPool
 from qt_material import apply_stylesheet
 import logging
+import logging.handlers
 from serial.tools import list_ports
 from lib.pass_recorder import PassRecorder
 import sounddevice as sd
@@ -38,15 +39,6 @@ import pynmea2
 import serial
 from lib.gps_reader import GPSReader
 
-# Set logging level back to WARNING
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s %(levelname)s: %(message)s',
-    handlers=[
-        logging.FileHandler("qtrigdoppler.log", mode='w')
-    ]
-)
-
 ### Read config and import additional libraries if needed
 # parsing config file
 try:
@@ -57,6 +49,102 @@ try:
 except IOError:
     logging.critical("Failed to find configuration file!")
     sys.exit()
+
+# Get logging configuration from config file
+LOG_LEVEL = configur.get('logging', 'level', fallback='INFO').upper()
+LOG_MAX_SIZE = configur.getint('logging', 'max_size_mb', fallback=10) * 1024 * 1024  # Convert to bytes
+LOG_BACKUP_COUNT = configur.getint('logging', 'backup_count', fallback=5)
+LOG_AUDIO_INTERVAL = configur.getint('logging', 'audio_log_interval_seconds', fallback=10)
+LOG_ROTATOR_SUMMARY_INTERVAL = configur.getint('logging', 'rotator_summary_interval_seconds', fallback=30)
+
+# Convert string log level to logging constant
+try:
+    log_level_numeric = getattr(logging, LOG_LEVEL)
+except AttributeError:
+    log_level_numeric = logging.INFO
+    print(f"Invalid log level '{LOG_LEVEL}' in config, defaulting to INFO")
+
+# Set up improved logging with rotation and configurable levels
+def setup_logging():
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+    
+    # Custom rotating handler with compression
+    class CompressedRotatingFileHandler(logging.handlers.RotatingFileHandler):
+        def doRollover(self):
+            """Override to compress old log files"""
+            super().doRollover()
+            # Compress the just-rotated log file
+            if self.backupCount > 0:
+                try:
+                    import gzip
+                    import shutil
+                    backup_name = f"{self.baseFilename}.1"
+                    if os.path.exists(backup_name):
+                        with open(backup_name, 'rb') as f_in:
+                            with gzip.open(f"{backup_name}.gz", 'wb') as f_out:
+                                shutil.copyfileobj(f_in, f_out)
+                        os.remove(backup_name)
+                        logging.info(f"Compressed old log file: {backup_name}.gz")
+                except Exception as e:
+                    logging.warning(f"Failed to compress log file: {e}")
+    
+    # Create rotating file handler with compression
+    rotating_handler = CompressedRotatingFileHandler(
+        "qtrigdoppler.log", 
+        maxBytes=LOG_MAX_SIZE, 
+        backupCount=LOG_BACKUP_COUNT
+    )
+    rotating_handler.setFormatter(formatter)
+    
+    # Create console handler for warnings and errors
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)
+    console_handler.setFormatter(formatter)
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=log_level_numeric,
+        handlers=[rotating_handler, console_handler],
+        format='%(asctime)s %(levelname)s: %(message)s'
+    )
+    
+    logging.info(f"Logging initialized - Level: {LOG_LEVEL}, Max size: {LOG_MAX_SIZE//1024//1024}MB, Backups: {LOG_BACKUP_COUNT}, Compression: enabled")
+
+# Helper function for lazy evaluation in logging
+def lazy_format(format_func):
+    """Lazy evaluation for expensive logging operations"""
+    class LazyString:
+        def __str__(self):
+            return format_func()
+    return LazyString()
+
+# Performance monitoring for logging
+_logging_performance_stats = {
+    'total_logs': 0,
+    'start_time': time.time()
+}
+
+def log_performance_warning():
+    """Monitor logging frequency and warn if excessive"""
+    global _logging_performance_stats
+    _logging_performance_stats['total_logs'] += 1
+    
+    # Check every 1000 log entries
+    if _logging_performance_stats['total_logs'] % 1000 == 0:
+        elapsed = time.time() - _logging_performance_stats['start_time']
+        logs_per_second = _logging_performance_stats['total_logs'] / elapsed
+        
+        if logs_per_second > 10:  # More than 10 logs per second is excessive
+            logging.warning(f"High logging frequency detected: {logs_per_second:.1f} logs/sec. Consider reducing verbosity.")
+
+# Initialize logging
+setup_logging()
+
+# Global variables for controlling log frequency
+_last_audio_log_time = 0
+_last_rotator_summary_time = 0
+_rotator_log_counter = 0
 
 # Set environment variables
 LATITUDE = configur.get('qth','latitude', fallback=0.0)
@@ -1662,7 +1750,7 @@ class MainWindow(QMainWindow):
 
         # Send to Cloudlog in background after updating satellite/transponder info
         if not CLOUDLOG_ENABLED:
-            logging.debug("Cloudlog: Disabled in config.ini")
+            logging.info("Cloudlog: Disabled in config.ini")
         elif not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
             logging.warning("Cloudlog API key or URL not set in config.ini")
         else:
@@ -1683,14 +1771,14 @@ class MainWindow(QMainWindow):
         # Safely start the timer from any thread    
         try:
             QMetaObject.invokeMethod(self.timer, "start", Qt.QueuedConnection)
-            logging.debug("Timer started safely")
+            logging.info("Timer started safely")
         except Exception as e:
             logging.error(f"Error starting timer: {e}")
             # Fallback: try direct start if invokeMethod failed
             try:
                 if QThread.currentThread() == self.thread():
                     self.timer.start()
-                    logging.debug("Timer started directly")
+                    logging.info("Timer started directly")
                 else:
                     logging.error("Cannot start timer - not in main thread")
             except Exception as e2:
@@ -2122,7 +2210,7 @@ class MainWindow(QMainWindow):
                 I_now = self.my_satellite.I
                 if elevation > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
                     if not CLOUDLOG_ENABLED:
-                        logging.debug("Cloudlog: Disabled in config.ini")
+                        pass  # Don't log every time cloudlog is disabled
                     elif not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
                         logging.warning("Cloudlog API key or URL not set in config.ini")
                     else:
@@ -2226,14 +2314,19 @@ class MainWindow(QMainWindow):
                             logging.debug(f"Using raw satellite azimuth: {az:.1f}° (no close segment, el={el:.1f}°)")
                             self._last_logged_el = el
                 
-                # Only log route segments when they're actually being used or when elevation changes significantly
-                if route_segments and (closest_segment and min_time_diff < 30 or 
-                                     (not hasattr(self, '_last_logged_el') or abs(el - self._last_logged_el) > 5)):
-                    logging.debug(f"Available route segments: {len(route_segments)}")
-                    for i, seg in enumerate(route_segments[:3]):  # Show first 3
-                        logging.debug(f"  Segment {i}: {seg['time'].strftime('%H:%M:%S')} -> {seg['target_az']:.1f}°")
-                    if len(route_segments) > 3:
-                        logging.debug(f"  ... and {len(route_segments)-3} more segments")
+                # Only log route segments at periodic intervals to reduce spam
+                global _last_rotator_summary_time, _rotator_log_counter
+                current_time = time.time()
+                
+                # Log summary every N seconds instead of every call
+                if (logging.getLogger().isEnabledFor(logging.DEBUG) and 
+                    route_segments and 
+                    current_time - _last_rotator_summary_time >= LOG_ROTATOR_SUMMARY_INTERVAL):
+                    _rotator_log_counter += 1
+                    if closest_segment:
+                        logging.debug(f"Rotator tracking summary #{_rotator_log_counter}: Using optimized azimuth {az:.1f}° (time diff: {min_time_diff:.1f}s)")
+                    logging.debug(f"Route has {len(route_segments)} segments, next: {route_segments[0]['time'].strftime('%H:%M:%S')} -> {route_segments[0]['target_az']:.1f}°")
+                    _last_rotator_summary_time = current_time
             
             return az, el
         except Exception as e:
@@ -2494,14 +2587,14 @@ class MainWindow(QMainWindow):
             )
             self.rotator_thread.daemon = True
             self.rotator_thread.start()
-            logging.debug("Rotator thread started.")
+            logging.info("Rotator thread started.")
             self.update_rotator_position()
     def stop_rotator_thread(self):
         if self.rotator_thread:
             self.rotator_thread.stop()
             self.rotator_thread.join(timeout=2)
             self.rotator_thread = None
-            logging.debug("Rotator thread stopped.")
+            logging.info("Rotator thread stopped.")
     def closeEvent(self, event):
         # Ensure rotator is stopped and parked on exit
         if ROTATOR_ENABLED:
@@ -2583,11 +2676,11 @@ class MainWindow(QMainWindow):
             if TRACKING_ACTIVE:
                 # Poll more frequently when actively tracking
                 poll_interval = min(base_interval, 2.0)
-                logging.debug(f"Starting rotator position worker with fast polling: {poll_interval}s (tracking active)")
+                logging.info(f"Starting rotator position worker with fast polling: {poll_interval}s (tracking active)")
             else:
                 # Poll less frequently when not tracking
                 poll_interval = max(base_interval, 10.0)
-                logging.debug(f"Starting rotator position worker with slow polling: {poll_interval}s (not tracking)")
+                logging.info(f"Starting rotator position worker with slow polling: {poll_interval}s (not tracking)")
             
             # Start new worker
             self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=poll_interval)
@@ -2649,8 +2742,10 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     logging.error(f"Error getting default device: {e}")
             
-            # Create callback for audio processing with debug logging
+            # Create callback for audio processing with optimized logging
             def audio_callback(indata, frames, time, status):
+                global _last_audio_log_time
+                
                 # Only log errors other than overflow 
                 if status and status.input_overflow:
                     # Skip logging for input overflow as it's too verbose
@@ -2662,9 +2757,12 @@ class MainWindow(QMainWindow):
                     # Calculate RMS amplitude (volume level)
                     level = np.linalg.norm(indata)
                     
-                    # Log levels occasionally to help debug
-                    if frames % 100 == 0 and logging.getLogger().isEnabledFor(logging.DEBUG):
+                    # Log levels only at configurable intervals to reduce spam
+                    current_time = time.time()
+                    if (logging.getLogger().isEnabledFor(logging.DEBUG) and 
+                        current_time - _last_audio_log_time >= LOG_AUDIO_INTERVAL):
                         logging.debug(f"Monitor audio level: {level:.4f}")
+                        _last_audio_log_time = current_time
                     
                     # Scale to percentage (0-100)
                     # Apply a logarithmic scaling to make low levels more visible

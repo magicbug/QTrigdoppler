@@ -1,6 +1,7 @@
 import serial
 import threading
 import time
+import logging
 
 class YaesuRotator:
     def __init__(self, port, baudrate=4800, az_min=0, az_max=450, el_min=0, el_max=180, timeout=1):
@@ -31,7 +32,7 @@ class YaesuRotator:
         az = max(self.az_min, min(self.az_max, int(round(az))))
         el = max(self.el_min, min(self.el_max, int(round(el))))
         cmd = f"W{az:03d} {el:03d}\r"
-        print(f"YaesuRotator: Sending command '{cmd.strip()}' to hardware")
+        logging.debug(f"YaesuRotator: Sending command '{cmd.strip()}' to hardware")
         with self.lock:
             self.ser.write(cmd.encode())
             time.sleep(0.05)  # Reduced from 0.1 to 0.05
@@ -109,7 +110,7 @@ class YaesuRotator:
                     return az, el
                     
             except Exception as e:
-                print(f"Error parsing rotator position: {e}, response: {response}")
+                logging.error(f"Error parsing rotator position: {e}, response: {response}")
             
             return None, None
 
@@ -181,7 +182,7 @@ class RotatorThread(threading.Thread):
                         abs(el - self._last_logged_el) > 5 or 
                         self._is_moving or 
                         el >= -5):
-                        print(f"RotatorThread: Position check (interval={self._position_check_interval:.1f}s, moving={self._is_moving}, el={el:.1f}°)")
+                        logging.debug(f"RotatorThread: Position check (interval={self._position_check_interval:.1f}s, moving={self._is_moving}, el={el:.1f}°)")
                         self._last_logged_el = el
                     
                     # Check if rotator is moving
@@ -213,8 +214,8 @@ class RotatorThread(threading.Thread):
                     elif abs(az_to_send - self.last_az) >= 1 or abs(el - self.last_el) >= 1:
                         send = True
                     if send:
-                        print(f"RotatorThread: Moving to az={az_to_send:.1f}° el={el:.1f}° (original az={az:.1f}°)")
-                        print(f"RotatorThread: Sending command W{int(round(az_to_send)):03d} {int(round(el)):03d}")
+                        logging.info(f"RotatorThread: Moving to az={az_to_send:.1f}° el={el:.1f}° (original az={az:.1f}°)")
+                        logging.debug(f"RotatorThread: Sending command W{int(round(az_to_send)):03d} {int(round(el)):03d}")
                         self.rotator.set_position(az_to_send, el)
                         self.last_az = az_to_send
                         self.last_el = el

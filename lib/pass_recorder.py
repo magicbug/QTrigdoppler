@@ -311,9 +311,10 @@ class PassRecorder:
                     level = np.linalg.norm(indata)
                     total_frames += frames
                     
-                    # Log audio level every second to verify we're getting input
-                    if total_frames % 10000 < frames:
-                        logging.info(f"Audio level: {level:.4f}, total frames: {total_frames}")
+                    # Log audio level every 10 seconds to reduce log spam (configurable)
+                    # 10000 frames = ~1 second at 44100 Hz, so 100000 frames = ~10 seconds
+                    if total_frames % 441000 < frames:  # Log every ~10 seconds
+                        logging.info(f"Recording audio level: {level:.4f}, total frames: {total_frames}")
                     
                     # Apply gain to make sure the audio is audible
                     gain = 2.0  # Reduced from 5.0 to 2.0 to prevent over-amplification

@@ -277,6 +277,89 @@ url = https://your.cloudlog.site
 - If the mode is `FMN`, it will be sent as `FM` to Cloudlog/Wavelog.
 - All Cloudlog/wavelog API activity and errors are logged to the console.
 
+## Logging Configuration
+
+QTrigdoppler includes a comprehensive logging system with automatic rotation, compression, and configurable verbosity levels to help with monitoring and troubleshooting.
+
+### Configuration
+
+Configure logging in your `config.ini` under the `[logging]` section:
+
+```ini
+[logging]
+level = INFO
+max_size_mb = 10
+backup_count = 5
+audio_log_interval_seconds = 10
+rotator_summary_interval_seconds = 30
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `level` | `INFO` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `max_size_mb` | `10` | Maximum log file size in MB before rotation |
+| `backup_count` | `5` | Number of compressed backup log files to keep |
+| `audio_log_interval_seconds` | `10` | How often to log audio level information (seconds) |
+| `rotator_summary_interval_seconds` | `30` | How often to log rotator tracking summaries (seconds) |
+
+### Log Levels
+
+- **`DEBUG`**: Detailed information for troubleshooting (very verbose)
+- **`INFO`**: General information about application operation (recommended)
+- **`WARNING`**: Important warnings and potential issues
+- **`ERROR`**: Error conditions and failures only
+
+### Recommended Settings
+
+**Normal Daily Use:**
+```ini
+level = INFO
+max_size_mb = 10
+backup_count = 5
+audio_log_interval_seconds = 10
+rotator_summary_interval_seconds = 30
+```
+
+**Troubleshooting Issues:**
+```ini
+level = DEBUG
+max_size_mb = 5
+backup_count = 10
+audio_log_interval_seconds = 5
+rotator_summary_interval_seconds = 15
+```
+
+**Minimal Logging (Quiet Mode):**
+```ini
+level = WARNING
+max_size_mb = 10
+backup_count = 3
+audio_log_interval_seconds = 60
+rotator_summary_interval_seconds = 120
+```
+
+### File Management
+
+- **Automatic Rotation**: When `qtrigdoppler.log` reaches the size limit, it's rotated to `qtrigdoppler.log.1.gz`
+- **Compression**: Old log files are automatically compressed with gzip to save disk space
+- **Cleanup**: Only the specified number of backup files are kept, older ones are deleted
+- **Console Output**: Warnings and errors are also displayed in the console
+
+### Log File Locations
+
+- Current log: `qtrigdoppler.log`
+- Backup logs: `qtrigdoppler.log.1.gz`, `qtrigdoppler.log.2.gz`, etc.
+- Location: Same directory as the QTrigdoppler application
+
+### Performance Impact
+
+The logging system is optimized to minimize performance impact:
+- Audio and rotator operations use interval-based logging to prevent spam
+- Log rotation happens in the background
+- High-frequency events are summarized rather than logged individually
+
 ## 🛠️ Compile using pyinstaller
 
 `pyinstaller --onefile QTrigdoppler.py --exclude PyQt6 --splash images/splash.jpg`
