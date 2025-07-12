@@ -177,7 +177,7 @@ class RotatorOptimizer:
         predictions = []
         current_time = datetime.now(timezone.utc)
         
-        for i in range(0, duration_minutes * 60, interval_seconds):
+        for i in range(0, int(duration_minutes * 60), int(interval_seconds)):
             future_time = current_time + timedelta(seconds=i)
             
             # Set location time
@@ -302,6 +302,25 @@ class RotatorOptimizer:
                     'total_rotation': total_rotation_rev
                 }
                 strategies.append(reverse_strategy)
+        
+        # --- North-crossing detection ---
+        # If azimuths cross 0/360, always prefer Reverse (450°) for smoothness
+        crosses_north = False
+        north_crossing_points = []
+        for i in range(1, len(azimuths)):
+            diff = abs(self.normalize_azimuth(azimuths[i]) - self.normalize_azimuth(azimuths[i-1]))
+            if diff > 180:
+                crosses_north = True
+                north_crossing_points.append(i)
+        
+        # Smart north-crossing strategy: If reverse strategy doesn't work, try to use 450° range more intelligently
+        smart_strategy = None
+        if crosses_north and reverse_strategy is None and self.az_max > 360:
+            # Create a strategy that uses 450° range for the end portion of the pass
+            smart_strategy = self._create_smart_north_crossing_strategy(azimuths, north_crossing_points)
+            if smart_strategy:
+                strategies.append(smart_strategy)
+                
         # If we know current rotator position, factor that in
         if current_rotator_az is not None:
             for strategy in strategies:
@@ -315,23 +334,30 @@ class RotatorOptimizer:
                     logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°, total={strategy['total_with_pre_rotation']:.1f}°")
                 else:
                     logging.debug(f"  {strategy['strategy']}: start={strategy['start_az']:.1f}°, rotation={strategy['total_rotation']:.1f}°")
-        # --- North-crossing detection ---
-        # If azimuths cross 0/360, always prefer Reverse (450°) for smoothness
-        crosses_north = False
-        for i in range(1, len(azimuths)):
-            diff = abs(self.normalize_azimuth(azimuths[i]) - self.normalize_azimuth(azimuths[i-1]))
-            if diff > 180:
-                crosses_north = True
-                break
-        if crosses_north and reverse_strategy is not None:
-            best_strategy = reverse_strategy
-            logging.info("[Optimizer] Pass crosses north: forcing Reverse (450°) wraparound for smooth tracking.")
+        
+        # Strategy selection with priority for north-crossing avoidance
+        best_strategy = None
+        if crosses_north:
+            # Priority 1: Reverse strategy (if available)
+            if reverse_strategy is not None:
+                best_strategy = reverse_strategy
+                logging.info("[Optimizer] Pass crosses north: using Reverse (450°) wraparound for smooth tracking.")
+            # Priority 2: Smart north-crossing strategy (if available)
+            elif smart_strategy is not None:
+                best_strategy = smart_strategy
+                logging.info("[Optimizer] Pass crosses north: using Smart (450°) strategy to avoid boundary crossing.")
+            # Priority 3: Fall back to best total rotation strategy
+            else:
+                best_strategy = min(strategies, key=lambda x: x.get('total_with_pre_rotation', x['total_rotation']))
+                logging.info("[Optimizer] Pass crosses north but no 450° strategy available: using best rotation strategy.")
         else:
             # Choose the best strategy (default: minimum total rotation)
             best_strategy = min(strategies, key=lambda x: x.get('total_with_pre_rotation', x['total_rotation']))
+            
         logging.info(f"Selected strategy: {best_strategy['strategy']} with start azimuth {best_strategy['start_az']:.1f}°")
-        # Generate route segments
-        route_segments = self._generate_route_segments(visible_predictions, best_strategy['start_az'])
+        
+        # Generate route segments using the selected strategy
+        route_segments = self._generate_route_segments_with_strategy(visible_predictions, best_strategy)
         
         # Debug: Log route segments only at DEBUG level to reduce verbosity
         if route_segments and logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -440,3 +466,79 @@ class RotatorOptimizer:
             'time_until_aos': visible_predictions[0][0] - datetime.now(timezone.utc) if visible_predictions else None,
             'optimization_details': optimization
         }
+    
+    def _create_smart_north_crossing_strategy(self, azimuths, north_crossing_points):
+        """
+        Create a smart strategy for north-crossing passes that uses 450° range intelligently
+        """
+        try:
+            # Find the first major north crossing point
+            first_crossing = north_crossing_points[0] if north_crossing_points else None
+            if first_crossing is None:
+                return None
+                
+            # Create modified azimuth list that uses 450° range after the crossing
+            modified_azimuths = azimuths.copy()
+            
+            # For azimuths after the crossing, try to use the 450° range to avoid boundary crossing
+            for i in range(first_crossing, len(modified_azimuths)):
+                original_az = modified_azimuths[i]
+                # If this azimuth is small (e.g., < 180°), try adding 360° to avoid crossing
+                if original_az < 180 and (original_az + 360) <= self.az_max:
+                    modified_azimuths[i] = original_az + 360
+            
+            # Check if this strategy is valid (doesn't exceed rotator limits)
+            if max(modified_azimuths) > self.az_max:
+                return None
+                
+            # Calculate total rotation for this strategy
+            total_rotation = self._calculate_total_rotation(modified_azimuths, azimuths[0])
+            
+            return {
+                'strategy': 'Smart (450°)',
+                'start_az': azimuths[0],
+                'total_rotation': total_rotation,
+                'modified_azimuths': modified_azimuths
+            }
+            
+        except Exception as e:
+            logging.debug(f"Error creating smart north-crossing strategy: {e}")
+            return None
+    
+    def _generate_route_segments_with_strategy(self, visible_predictions, strategy):
+        """Generate route segments using the selected strategy"""
+        segments = []
+        current_az = strategy['start_az']
+        
+        # Use modified azimuths if this is a smart strategy
+        if 'modified_azimuths' in strategy:
+            modified_azimuths = strategy['modified_azimuths']
+            for i, (time, original_az, el) in enumerate(visible_predictions):
+                target_az = modified_azimuths[i]
+                distance = abs(target_az - current_az)
+                
+                segments.append({
+                    'time': time,
+                    'target_az': target_az,
+                    'elevation': el,
+                    'rotation_distance': distance,
+                    'cumulative_rotation': sum(s['rotation_distance'] for s in segments) + distance
+                })
+                
+                current_az = target_az
+        else:
+            # Use the original route segment generation
+            for time, target_az, el in visible_predictions:
+                distance, optimal_az = self.calculate_rotation_distance(current_az, target_az)
+                
+                segments.append({
+                    'time': time,
+                    'target_az': optimal_az,
+                    'elevation': el,
+                    'rotation_distance': distance,
+                    'cumulative_rotation': sum(s['rotation_distance'] for s in segments) + distance
+                })
+                
+                current_az = optimal_az
+                
+        return segments

@@ -214,7 +214,7 @@ class RotatorThread(threading.Thread):
                     elif abs(az_to_send - self.last_az) >= 1 or abs(el - self.last_el) >= 1:
                         send = True
                     if send:
-                        logging.info(f"RotatorThread: Moving to az={az_to_send:.1f}° el={el:.1f}° (original az={az:.1f}°)")
+                        logging.debug(f"RotatorThread: Moving to az={az_to_send:.1f}° el={el:.1f}° (original az={az:.1f}°)")
                         logging.debug(f"RotatorThread: Sending command W{int(round(az_to_send)):03d} {int(round(el)):03d}")
                         self.rotator.set_position(az_to_send, el)
                         self.last_az = az_to_send

@@ -2674,11 +2674,11 @@ class MainWindow(QMainWindow):
             if TRACKING_ACTIVE:
                 # Poll more frequently when actively tracking
                 poll_interval = min(base_interval, 2.0)
-                logging.info(f"Starting rotator position worker with fast polling: {poll_interval}s (tracking active)")
+                logging.debug(f"Starting rotator position worker with fast polling: {poll_interval}s (tracking active)")
             else:
                 # Poll less frequently when not tracking
                 poll_interval = max(base_interval, 10.0)
-                logging.info(f"Starting rotator position worker with slow polling: {poll_interval}s (not tracking)")
+                logging.debug(f"Starting rotator position worker with slow polling: {poll_interval}s (not tracking)")
             
             # Start new worker
             self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=poll_interval)
