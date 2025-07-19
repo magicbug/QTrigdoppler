@@ -2541,6 +2541,137 @@ class MainWindow(QMainWindow):
         self.gps_status_label.setText("GPS Status: Fix received")
         self.gps_lock_button.setEnabled(True)
 
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts for improved accessibility and efficiency"""
+        global TRACKING_ACTIVE
+        
+        key = event.key()
+        modifiers = event.modifiers()
+        
+        try:
+            # Ctrl+S - Save Settings
+            if modifiers == Qt.ControlModifier and key == Qt.Key_S:
+                logging.info("Keyboard shortcut: Ctrl+S - Saving settings")
+                self.save_settings()
+                return
+            
+            # T - Start Tracking
+            elif key == Qt.Key_T:
+                if TRACKING_ACTIVE:
+                    logging.warning("Keyboard shortcut: T - Cannot start tracking, already in progress")
+                elif not self.my_satellite.name:
+                    logging.warning("Keyboard shortcut: T - Cannot start tracking, no satellite selected")
+                elif not hasattr(self, 'my_transponder_name') or not self.my_transponder_name:
+                    logging.warning("Keyboard shortcut: T - Cannot start tracking, no transponder selected")
+                elif not self.my_satellite.tledata:
+                    logging.warning("Keyboard shortcut: T - Cannot start tracking, no TLE data available")
+                else:
+                    logging.info("Keyboard shortcut: T - Starting tracking")
+                    self.init_worker()
+                return
+            
+            # S or Esc - Stop Tracking
+            elif key == Qt.Key_S or key == Qt.Key_Escape:
+                if not TRACKING_ACTIVE:
+                    logging.warning("Keyboard shortcut: S/Esc - Cannot stop tracking, not currently tracking")
+                else:
+                    action = "S" if key == Qt.Key_S else "Esc"
+                    logging.info(f"Keyboard shortcut: {action} - Stopping tracking")
+                    self.the_stop_button_was_clicked()
+                return
+            
+            # Space - Toggle Tracking
+            elif key == Qt.Key_Space:
+                if TRACKING_ACTIVE:
+                    logging.info("Keyboard shortcut: Space - Stopping tracking (toggle)")
+                    self.the_stop_button_was_clicked()
+                elif not self.my_satellite.name:
+                    logging.warning("Keyboard shortcut: Space - Cannot start tracking, no satellite selected")
+                elif not hasattr(self, 'my_transponder_name') or not self.my_transponder_name:
+                    logging.warning("Keyboard shortcut: Space - Cannot start tracking, no transponder selected")
+                elif not self.my_satellite.tledata:
+                    logging.warning("Keyboard shortcut: Space - Cannot start tracking, no TLE data available")
+                else:
+                    logging.info("Keyboard shortcut: Space - Starting tracking (toggle)")
+                    self.init_worker()
+                return
+            
+            # R - Refresh TLE Data
+            elif key == Qt.Key_R:
+                logging.info("Keyboard shortcut: R - Refreshing TLE data")
+                self.update_tle_file()
+                return
+            
+            # M - Memory to VFO (Sync frequencies)
+            elif key == Qt.Key_M:
+                if TRACKING_ACTIVE:
+                    logging.warning("Keyboard shortcut: M - Cannot sync frequencies while tracking")
+                elif not self.my_satellite.name:
+                    logging.warning("Keyboard shortcut: M - Cannot sync frequencies, no satellite selected")
+                else:
+                    logging.info("Keyboard shortcut: M - Syncing memory frequencies to VFO")
+                    self.the_sync_button_was_clicked()
+                return
+            
+            # F5 - Refresh Status
+            elif key == Qt.Key_F5:
+                logging.info("Keyboard shortcut: F5 - Refreshing status displays")
+                self.refresh_all_status()
+                return
+            
+            # P - Park Rotators
+            elif key == Qt.Key_P:
+                if not ROTATOR_ENABLED:
+                    logging.warning("Keyboard shortcut: P - Cannot park rotators, rotator system not enabled")
+                else:
+                    logging.info("Keyboard shortcut: P - Parking rotators")
+                    self.park_rotators()
+                return
+                
+        except Exception as e:
+            logging.error(f"Error handling keyboard shortcut: {e}")
+        
+        # If no shortcut matched, call the parent implementation
+        super().keyPressEvent(event)
+
+    def refresh_all_status(self):
+        """Refresh all status displays - used by F5 shortcut"""
+        try:
+            # Update rotator position if available
+            if ROTATOR_ENABLED and self.rotator:
+                self.update_rotator_position()
+            
+            # Update pass recorder status
+            self.update_passrecorder_status()
+            
+            # Force update of satellite status if we have a satellite
+            if hasattr(self, 'my_satellite') and self.my_satellite.tledata:
+                myloc = ephem.Observer()
+                myloc.lon = str(LONGITUDE)
+                myloc.lat = str(LATITUDE)
+                myloc.elev = ALTITUDE
+                epoch_time = datetime.now(timezone.utc)
+                date_val = epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+                myloc.date = ephem.Date(date_val)
+                
+                # Update satellite position displays
+                self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata, myloc)) + " °")
+                self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata, myloc)) + " °")
+                self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata, myloc)) + " km")
+                self.log_sat_status_illumintated_val.setText(sat_eclipse_calc(self.my_satellite.tledata, myloc))
+                
+                # Update next event display
+                self.log_sat_event_val.setText(str(sat_next_event_calc(self.my_satellite.tledata, myloc)))
+            
+            # Update time display
+            current_utc = datetime.now(timezone.utc)
+            self.log_time_val.setText(current_utc.strftime('%H:%M:%S UTC'))
+            
+            logging.info("Status displays refreshed")
+            
+        except Exception as e:
+            logging.error(f"Error refreshing status displays: {e}")
+
 class WorkerSignals(QObject):
     finished = Signal()
     error = Signal(tuple)
