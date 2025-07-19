@@ -1921,7 +1921,24 @@ class MainWindow(QMainWindow):
                                             
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
-                            new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc))
+                            # Use predictive doppler for linear satellites, especially around TCA
+                            if self.my_satellite.downmode in ["USB", "LSB", "CW"]:
+                                # Calculate current doppler rate to determine prediction time
+                                current_doppler_rate = abs(self.my_satellite.down_doppler_rate) if hasattr(self.my_satellite, 'down_doppler_rate') else 0
+                                
+                                # Use more prediction when doppler rate is high (around TCA)
+                                if current_doppler_rate > 200:  # High rate - likely near TCA
+                                    prediction_time = 0.4  # 400ms prediction
+                                elif current_doppler_rate > 100:  # Moderate rate  
+                                    prediction_time = 0.25  # 250ms prediction
+                                else:
+                                    prediction_time = 0.15  # 150ms prediction for normal tracking
+                                
+                                new_rx_doppler = rx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc, prediction_time)
+                            else:
+                                # Use standard calculation for FM satellites
+                                new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc))
+                                
                             if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
@@ -1932,7 +1949,23 @@ class MainWindow(QMainWindow):
                                 icomTrx.setFrequency(str(rx_doppler))
                                 self.my_satellite.F_RIG = rx_doppler
                         
-                            new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc))
+                            # Apply predictive correction to TX as well for linear satellites
+                            if self.my_satellite.upmode in ["USB", "LSB", "CW"]:
+                                # Use same prediction time as RX
+                                current_doppler_rate = abs(self.my_satellite.up_doppler_rate) if hasattr(self.my_satellite, 'up_doppler_rate') else 0
+                                
+                                if current_doppler_rate > 200:  # High rate - likely near TCA
+                                    prediction_time = 0.4  # 400ms prediction
+                                elif current_doppler_rate > 100:  # Moderate rate
+                                    prediction_time = 0.25  # 250ms prediction  
+                                else:
+                                    prediction_time = 0.15  # 150ms prediction for normal tracking
+                                    
+                                new_tx_doppler = tx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.I, myloc, prediction_time)
+                            else:
+                                # Use standard calculation for FM satellites
+                                new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc))
+                                
                             if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres:
                                 tx_doppler = new_tx_doppler
                                 if self.my_satellite.rig_satmode == 1:
@@ -1967,8 +2000,25 @@ class MainWindow(QMainWindow):
                             time.sleep(FM_update_time) # Slower update rate on FM, max on linear sats
                             
                     else:
-                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
-                        new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
+                        # Non-interactive mode for linear satellites (SSB packet, etc.)
+                        # Use predictive doppler for better TCA tracking
+                        if self.my_satellite.downmode in ["USB", "LSB", "CW"]:
+                            # Calculate prediction time based on doppler rate  
+                            current_doppler_rate = abs(self.my_satellite.down_doppler_rate) if hasattr(self.my_satellite, 'down_doppler_rate') else 0
+                            
+                            if current_doppler_rate > 200:  # High rate - likely near TCA
+                                prediction_time = 0.3  # 300ms prediction for non-interactive
+                            elif current_doppler_rate > 100:  # Moderate rate
+                                prediction_time = 0.2  # 200ms prediction
+                            else:
+                                prediction_time = 0.1  # 100ms prediction for normal tracking
+                                
+                            new_rx_doppler = rx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc, prediction_time)
+                            new_tx_doppler = tx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.I, myloc, prediction_time)
+                        else:
+                            # Standard calculation for FM or other modes
+                            new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
+                            new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
                         # 0 = PTT is pressed
                         # 1 = PTT is released
                         ptt_state_old = ptt_state
@@ -2021,13 +2071,17 @@ class MainWindow(QMainWindow):
             self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
             self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F, myloc))
             self.my_satellite.down_doppler_rate = ((self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2)/0.2
-            if abs(self.my_satellite.down_doppler_rate) > 100.0:
+            # Use higher rate limit for linear satellites (USB, LSB, CW) as they have legitimate high doppler rates at TCA
+            max_doppler_rate = 1000.0 if self.my_satellite.downmode in ["USB", "LSB", "CW"] else 100.0
+            if abs(self.my_satellite.down_doppler_rate) > max_doppler_rate:
                 self.my_satellite.down_doppler_rate = 0.0
                 
             self.my_satellite.up_doppler_old = self.my_satellite.up_doppler
             self.my_satellite.up_doppler = float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I, myloc))
             self.my_satellite.up_doppler_rate = ((self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2)/0.2
-            if abs(self.my_satellite.up_doppler_rate) > 100.0:
+            # Use higher rate limit for linear satellites (USB, LSB, CW) as they have legitimate high doppler rates at TCA
+            max_uplink_rate = 1000.0 if self.my_satellite.upmode in ["USB", "LSB", "CW"] else 100.0
+            if abs(self.my_satellite.up_doppler_rate) > max_uplink_rate:
                 self.my_satellite.up_doppler_rate = 0.0
                 
             self.rxdoppler_val.setText(str('{:,}'.format(self.my_satellite.down_doppler)) + " Hz")
