@@ -689,8 +689,8 @@ class MainWindow(QMainWindow):
             self.recording_text_label = QLabel("Recording:")
             self.recording_status_label = QLabel("✘")
             self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: red}")
-            log_rig_status_layout.addWidget(self.recording_text_label,2,0)
-            log_rig_status_layout.addWidget(self.recording_status_label,2,1)
+            log_rig_status_layout.addWidget(self.recording_text_label,2,0,alignment=Qt.AlignCenter)
+            log_rig_status_layout.addWidget(self.recording_status_label,2,1,alignment=Qt.AlignCenter)
         
         self.log_layout_vline_right = QFrame()
         self.log_layout_vline_right.setFrameShape(QFrame.VLine)
