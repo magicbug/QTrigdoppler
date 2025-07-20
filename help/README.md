@@ -8,6 +8,7 @@ Welcome to the QTRigdoppler help system! This directory contains comprehensive d
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Complete guide to keyboard shortcuts and accessibility features
 - **[Pass Recording](pass-recording.md)** - Comprehensive guide to automatic audio recording
 - **[GPS Integration](gps-integration.md)** - Complete guide to GPS-based location determination
+- **[Rotator Setup](rotator-setup.md)** - Complete guide to antenna rotator configuration and operation
 
 ### 🚀 Planned Documentation
 
@@ -18,7 +19,7 @@ The following help documents are planned for future releases:
 | **Getting Started Guide** | Complete setup and first-use tutorial | Planned |
 | **Radio Configuration** | Setting up ICOM and other radio models | Planned |
 | **Satellite Operations** | Best practices for satellite tracking | Planned |
-| **Rotator Setup** | Configuring antenna rotators | Planned |
+| **Rotator Setup** | Configuring antenna rotators | ✅ Available |
 | **Web API Guide** | Using the web interface | Planned |
 | **Troubleshooting** | Common issues and solutions | Planned |
 | **Advanced Features** | Power user tips and tricks | Planned |
@@ -29,6 +30,7 @@ The following help documents are planned for future releases:
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Current accessibility features
 - **[Pass Recording](pass-recording.md)** - Automatic audio recording setup and usage
 - **[GPS Integration](gps-integration.md)** - GPS-based automatic location determination
+- **[Rotator Setup](rotator-setup.md)** - Antenna rotator configuration and operation
 - **[Main README](../README.md)** - Project overview and setup
 - **[TODO List](../todo.md)** - Planned features and improvements
 
