@@ -234,15 +234,3 @@ Check application logs for rotator-related messages:
 2. **Emergency Stop**: Use "Stop Rotation" button for immediate halt
 3. **Manual Override**: Keep rotator control unit accessible for manual operation
 4. **Power Protection**: Use surge protection for rotator control systems
-
-## 🔗 Integration Features
-
-### Remote Control
-- **Web Interface**: Control rotators via web browser
-- **Remote Server**: Coordinate multiple QTRigdoppler instances
-- **API Integration**: Programmatic rotator control via web API
-
-### Status Monitoring
-- **Real-time Display**: Continuous position updates in GUI
-- **Network Broadcast**: Status shared via web API and remote server
-- **Error Reporting**: Clear indication of connection and operation issues
