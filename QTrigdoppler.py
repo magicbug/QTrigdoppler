@@ -1818,7 +1818,18 @@ class MainWindow(QMainWindow):
                 if RADIO == "910":
                     # Testing current satmode config for V/U or U/V and swapping if needed
                     icomTrx.setVFO("Main")
-                    curr_band = int(icomTrx.getFrequency())
+                    freq_str = icomTrx.getFrequency()
+                    try:
+                        # Handle case where getFrequency returns hex error codes like 'FD'
+                        if freq_str and freq_str.isdigit():
+                            curr_band = int(freq_str)
+                        else:
+                            logging.warning(f"ICOM getFrequency returned non-numeric value: {freq_str}, skipping band check")
+                            curr_band = 0  # Default value, will not trigger exchange
+                    except (ValueError, TypeError) as e:
+                        logging.warning(f"Error parsing ICOM frequency '{freq_str}': {e}, skipping band check")
+                        curr_band = 0  # Default value, will not trigger exchange
+                    
                     if curr_band > 400000000 and self.my_satellite.F_RIG < 400000000:
                         icomTrx.setExchange()
                     elif curr_band < 200000000 and self.my_satellite.F_RIG > 200000000:
@@ -2044,9 +2055,19 @@ class MainWindow(QMainWindow):
                     #print("Ups:" +str(1000000/c.microseconds))  
                     
 
-        except:
-            logging.critical("Failed to open ICOM rig")
-            sys.exit()
+        except Exception as e:
+            global RIG_CONNECTED
+            RIG_CONNECTED = False
+            logging.critical(f"ICOM rig communication error: {e}")
+            logging.warning("Rig connection lost, attempting to reconnect...")
+            
+            # Try to reconnect
+            reconnected = self.attempt_icom_reconnection()
+            if not reconnected:
+                logging.warning("Reconnection failed, continuing in offline mode")
+            
+            # Don't call sys.exit() - let the GUI continue and allow reconnection
+            return
     
     def recurring_utc_clock_timer(self):
         date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
@@ -2057,9 +2078,21 @@ class MainWindow(QMainWindow):
         if icomTrx.is_connected():
             self.log_rig_state_val.setText("✔")
             self.log_rig_state_val.setStyleSheet('color: green')
+            # Reset reconnection counter when connected
+            self._reconnect_counter = 0
         else:
             self.log_rig_state_val.setText("✘")
             self.log_rig_state_val.setStyleSheet('color: red')
+            
+            # Attempt reconnection every 30 seconds (timer runs every ~2 seconds)
+            if not hasattr(self, '_reconnect_counter'):
+                self._reconnect_counter = 0
+            self._reconnect_counter += 1
+            
+            if self._reconnect_counter >= 15:  # 15 * 2 seconds = 30 seconds
+                self._reconnect_counter = 0
+                logging.info("Attempting periodic ICOM reconnection...")
+                self.attempt_icom_reconnection()
             
     
     def recurring_timer(self):
@@ -2541,6 +2574,41 @@ class MainWindow(QMainWindow):
         self.gps_status_label.setText("GPS Status: Fix received")
         self.gps_lock_button.setEnabled(True)
 
+    def attempt_icom_reconnection(self):
+        """Attempt to reconnect to the ICOM rig after communication failure"""
+        global icomTrx, RIG_CONNECTED
+        
+        try:
+            logging.info("Attempting to reconnect to ICOM rig...")
+            
+            # Close existing connection if any
+            if hasattr(icomTrx, 'close'):
+                try:
+                    icomTrx.close()
+                except:
+                    pass  # Ignore errors during cleanup
+            
+            # Create new connection
+            if configur['icom']['radio'] == '9700':
+                icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
+            elif configur['icom']['radio'] == '910':
+                icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
+            
+            # Update connection status
+            RIG_CONNECTED = icomTrx.is_connected()
+            
+            if RIG_CONNECTED:
+                logging.info("Successfully reconnected to ICOM rig")
+                return True
+            else:
+                logging.warning("Failed to reconnect to ICOM rig")
+                return False
+                
+        except Exception as e:
+            logging.error(f"Error during ICOM reconnection attempt: {e}")
+            RIG_CONNECTED = False
+            return False
+
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts for improved accessibility and efficiency"""
         global TRACKING_ACTIVE
@@ -2727,9 +2795,19 @@ class RotatorPositionWorker(QRunnable):
         while self._running:
             try:
                 az, el = self.rotator.get_position()
-                self.signals.position.emit(az, el)
+                # Check if signals object still exists before emitting
+                if hasattr(self, 'signals') and self.signals is not None:
+                    self.signals.position.emit(az, el)
             except Exception as e:
-                self.signals.position.emit(None, None)
+                # Only emit error signal if signals object still exists
+                if hasattr(self, 'signals') and self.signals is not None:
+                    try:
+                        self.signals.position.emit(None, None)
+                    except RuntimeError:
+                        # Signals object was deleted, stop the worker
+                        logging.warning("RotatorPositionWorker signals deleted, stopping worker")
+                        self._running = False
+                        break
             time.sleep(self.poll_interval)
 
 class AudioLevelMeter(QProgressBar):
