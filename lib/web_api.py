@@ -52,6 +52,24 @@ def run_on_ui_thread(func, *args, **kwargs):
         timer = QTimer()
         timer.timeout.connect(callback)
         timer.setSingleShot(True)
+        
+        # Ensure timer is properly cleaned up after use
+        def cleanup_callback():
+            try:
+                result_container['result'] = func(*args, **kwargs)
+                result_container['completed'] = True
+            except Exception as e:
+                result_container['error'] = str(e)
+                result_container['completed'] = True
+                print(f"Error in UI thread callback: {e}")
+                import traceback
+                traceback.print_exc()
+            finally:
+                # Clean up the timer to prevent memory leaks
+                timer.deleteLater()
+        
+        timer.timeout.disconnect()  # Clear any existing connections
+        timer.timeout.connect(cleanup_callback)
         timer.start(0)  # 0 ms = run as soon as possible
         
         # Wait for a reasonable time for the operation to complete

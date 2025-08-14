@@ -32,10 +32,10 @@ from lib.pass_recorder import PassRecorder
 import sounddevice as sd
 from lib import rotator
 from lib.sat_utils import *
-from lib.logbook_connector import *
+# logbook_connector import moved to after QApplication creation to avoid Qt object creation before app init
 import pynmea2
 import serial
-from lib.gps_reader import GPSReader
+# GPSReader import moved to after QApplication creation to avoid Qt object creation before app init
 
 # Set logging level back to WARNING
 logging.basicConfig(level = logging.WARNING)
@@ -109,7 +109,15 @@ elif configur.get('icom', 'fullmode') == "False":
     OPMODE = False
 if configur.get('misc', 'display_map') == "True":
     DISPLAY_MAP = True
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    # Set matplotlib to use a backend compatible with PySide6
+    import matplotlib
+    matplotlib.use('Qt5Agg')  # This actually works with PySide6
+    
+    # Set Qt API to use PySide6 before importing the backend
+    import os
+    os.environ['QT_API'] = 'PySide6'
+    
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
     import matplotlib.pyplot as plt
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
@@ -125,7 +133,7 @@ if configur.has_section('remote_server') and configur.getboolean('remote_server'
 
 if WEBAPI_ENABLED or REMOTE_ENABLED:
     from lib import web_api  # Import the web API module
-    from lib import web_api_proxy
+    # web_api_proxy import moved to after QApplication creation
 
 ### Global constants
 subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
@@ -255,7 +263,8 @@ class MainWindow(QMainWindow):
         if '_PYI_SPLASH_IPC' in os.environ:
             import pyi_splash
             pyi_splash.update_text('UI Loaded ...')
-            pyi_splash.close()
+            # Delay splash close to after main window is fully initialized
+            QTimer.singleShot(100, pyi_splash.close)
         
         ### All of this should be moved to a global settings struct ....
         global LATITUDE
@@ -2314,11 +2323,43 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     logging.error(f"Error stopping audio monitor on exit: {e}")
             
-        # Defensive: clear threadpool to avoid QRunnable errors
+        # Stop all timers to prevent accessibility events during shutdown
+        try:
+            if hasattr(self, 'timer') and self.timer:
+                self.timer.stop()
+                self.timer.deleteLater()
+                self.timer = None
+                logging.debug("Main timer stopped and deleted")
+        except Exception as e:
+            logging.error(f"Error stopping main timer: {e}")
+            
+        try:
+            if hasattr(self, 'utc_clock_timer') and self.utc_clock_timer:
+                self.utc_clock_timer.stop()
+                self.utc_clock_timer.deleteLater()
+                self.utc_clock_timer = None
+                logging.debug("UTC clock timer stopped and deleted")
+        except Exception as e:
+            logging.error(f"Error stopping UTC clock timer: {e}")
+        
+        # Wait for any running workers to complete and clear threadpool
         try:
             self.threadpool.clear()
+            # Give a brief moment for workers to clean up
+            QThread.msleep(50)
+            logging.debug("Threadpool cleared")
         except Exception as e:
             logging.error(f"Error clearing threadpool: {e}")
+            
+        # Stop web API background threads if enabled
+        if WEBAPI_ENABLED:
+            try:
+                import lib.web_api as web_api
+                web_api.stop_status_broadcast_thread()
+                logging.debug("Web API broadcast thread stopped")
+            except Exception as e:
+                logging.error(f"Error stopping web API thread: {e}")
+        
         event.accept()
 
     def update_rotator_position(self):
@@ -2836,10 +2877,20 @@ if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
     logging.critical("***  Icom radio not supported: {badmodel}".format(badmodel=RADIO))
     sys.exit()
 
-# Disable Qt accessibility to prevent ATSPI warnings
-os.environ["QT_ACCESSIBILITY"] = "0"
+# Disable Qt accessibility warnings that are just normal system events
+import os
+os.environ["QT_LOGGING_RULES"] = "qt.accessibility.atspi.warning=false"
 
 app = QApplication(sys.argv)
+
+# Now safe to import Qt-based classes after QApplication exists
+from lib.gps_reader import GPSReader
+from lib.logbook_connector import *
+
+# Import web_api_proxy if needed
+if WEBAPI_ENABLED or REMOTE_ENABLED:
+    from lib import web_api_proxy
+
 window = MainWindow()
 apply_stylesheet(app, theme="dark_lightgreen.xml")
 tooltip_stylesheet = """
@@ -2862,5 +2913,13 @@ tooltip_stylesheet = """
     """
 app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
 window.show()
-app.exec()
+
+# Proper application shutdown handling
+try:
+    exit_code = app.exec()
+finally:
+    # Ensure all events are processed before shutdown
+    app.processEvents()
+    logging.debug("Application shutdown complete")
+    sys.exit(exit_code if 'exit_code' in locals() else 0)
 
