@@ -2831,11 +2831,13 @@ class AudioLevelMeter(QProgressBar):
             }
         """)
 
-## Starts here:
+## Starts here:
 if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
     logging.critical("***  Icom radio not supported: {badmodel}".format(badmodel=RADIO))
     sys.exit()
 
+# Disable Qt accessibility to prevent ATSPI warnings
+os.environ["QT_ACCESSIBILITY"] = "0"
 
 app = QApplication(sys.argv)
 window = MainWindow()
