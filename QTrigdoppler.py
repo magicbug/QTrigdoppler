@@ -68,6 +68,9 @@ RIG_SERIAL_PORT = configur.get('icom', 'serialport')
 RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
+AUTO_TLE_STARTUP = configur.getboolean('misc', 'auto_tle_startup', fallback=False)
+AUTO_TLE_INTERVAL_ENABLED = configur.getboolean('misc', 'auto_tle_interval_enabled', fallback=False)
+AUTO_TLE_INTERVAL_HOURS = configur.getint('misc', 'auto_tle_interval_hours', fallback=24)
 
 # Rotator config
 ROTATOR_ENABLED = configur.getboolean('rotator', 'enabled', fallback=False)
@@ -300,8 +303,25 @@ class MainWindow(QMainWindow):
             
             # Start with lower priority if possible
             self.web_api_thread.start()
-            
-            # Attempt to set thread priority lower (platform-specific)
+        
+        # Initialize auto TLE update functionality
+        # Use a timer to delay startup auto-update to avoid interference with initialization
+        if AUTO_TLE_STARTUP:
+            QTimer.singleShot(5000, self.startup_auto_update_tle)  # 5 second delay
+            logging.info("Startup TLE auto-update scheduled")
+        
+        # Initialize auto TLE update timer if enabled
+        QTimer.singleShot(1000, self.update_auto_tle_timer)  # 1 second delay to ensure GUI is ready
+        
+        # Remote client registration (if enabled)
+        if REMOTE_ENABLED:
+            try:
+                remote_client.register_window(self)
+            except Exception as e:
+                logging.error(f"Error registering with remote client: {e}")
+                
+        # Attempt to set thread priority lower (platform-specific)
+        if WEBAPI_ENABLED:
             try:
                 import platform
                 if platform.system() == 'Windows':
@@ -931,13 +951,47 @@ class MainWindow(QMainWindow):
         self.satsqf.setText(SQFILE)
         files_settings_layout.addWidget(self.satsqf, 2, 1)
         
+        # Auto-update TLE settings
+        self.auto_tle_startup_checkbox = QCheckBox("Auto-update TLE on startup")
+        files_settings_layout.addWidget(self.auto_tle_startup_checkbox, 3, 0, 1, 2)
+        
+        self.auto_tle_interval_checkbox = QCheckBox("Auto-update TLE every:")
+        files_settings_layout.addWidget(self.auto_tle_interval_checkbox, 4, 0)
+        
+        # Interval selection layout
+        interval_layout = QHBoxLayout()
+        self.auto_tle_interval_spinbox = QSpinBox()
+        self.auto_tle_interval_spinbox.setMinimum(1)
+        self.auto_tle_interval_spinbox.setMaximum(168)  # Max 1 week
+        self.auto_tle_interval_spinbox.setValue(24)     # Default 24 hours
+        self.auto_tle_interval_spinbox.setSuffix(" hours")
+        interval_layout.addWidget(self.auto_tle_interval_spinbox)
+        interval_layout.addStretch()
+        
+        interval_widget = QWidget()
+        interval_widget.setLayout(interval_layout)
+        files_settings_layout.addWidget(interval_widget, 4, 1)
+        
+        # Connect signals
+        self.auto_tle_interval_checkbox.toggled.connect(self.auto_tle_interval_spinbox.setEnabled)
+        self.auto_tle_interval_checkbox.toggled.connect(self.update_auto_tle_timer)
+        self.auto_tle_interval_spinbox.valueChanged.connect(self.update_auto_tle_timer)
+        
+        # Initialize controls with config values
+        self.auto_tle_startup_checkbox.setChecked(AUTO_TLE_STARTUP)
+        self.auto_tle_interval_checkbox.setChecked(AUTO_TLE_INTERVAL_ENABLED)
+        self.auto_tle_interval_spinbox.setValue(AUTO_TLE_INTERVAL_HOURS)
+        
+        # Initially disable spinbox if checkbox is unchecked
+        self.auto_tle_interval_spinbox.setEnabled(self.auto_tle_interval_checkbox.isChecked())
+        
         self.UpdateTLEButton = QPushButton("Update TLE")
         self.UpdateTLEButton.clicked.connect(self.update_tle_file)
-        files_settings_layout.addWidget(self.UpdateTLEButton, 3,0)
+        files_settings_layout.addWidget(self.UpdateTLEButton, 5, 0)
         self.UpdateTLEButton.setEnabled(True)
         
         self.tleupdate_stat_lbl = QLabel(LAST_TLE_UPDATE)
-        files_settings_layout.addWidget(self.tleupdate_stat_lbl, 3, 1)
+        files_settings_layout.addWidget(self.tleupdate_stat_lbl, 5, 1)
         
         self.settings_file_box.setLayout(files_settings_layout)
         
@@ -1383,8 +1437,11 @@ class MainWindow(QMainWindow):
             configur['offset_profiles']["satoffset"+str(num_offsets+1)] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
             offset_stored = True
         
-        # Save TLE update
+        # Save TLE update settings
         configur['misc']['last_tle_update'] = LAST_TLE_UPDATE
+        configur['misc']['auto_tle_startup'] = str(self.auto_tle_startup_checkbox.isChecked())
+        configur['misc']['auto_tle_interval_enabled'] = str(self.auto_tle_interval_checkbox.isChecked())
+        configur['misc']['auto_tle_interval_hours'] = str(self.auto_tle_interval_spinbox.value())
         
         ROTATOR_ENABLED = self.rotator_enable_button.isChecked()
         configur['rotator']['enabled'] = str(ROTATOR_ENABLED)
@@ -1503,6 +1560,78 @@ class MainWindow(QMainWindow):
             logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             logging.error(e)
             self.tleupdate_stat_lbl.setText("❌")
+    
+    def update_auto_tle_timer(self):
+        """Update the automatic TLE update timer based on current settings"""
+        # Stop existing timer if running
+        if hasattr(self, 'auto_tle_timer'):
+            self.auto_tle_timer.stop()
+            
+        # Start new timer if interval updates are enabled
+        if self.auto_tle_interval_checkbox.isChecked():
+            if not hasattr(self, 'auto_tle_timer'):
+                self.auto_tle_timer = QTimer()
+                self.auto_tle_timer.timeout.connect(self.auto_update_tle)
+                
+            # Convert hours to milliseconds
+            interval_ms = self.auto_tle_interval_spinbox.value() * 60 * 60 * 1000
+            self.auto_tle_timer.start(interval_ms)
+            logging.info(f"Auto TLE update timer started: every {self.auto_tle_interval_spinbox.value()} hours")
+        else:
+            logging.info("Auto TLE update timer stopped")
+    
+    def auto_update_tle(self):
+        """Automatically update TLE - called by timer or at startup"""
+        logging.info("Starting automatic TLE update...")
+        
+        # Update the status label to show it's an automatic update
+        original_text = self.tleupdate_stat_lbl.text()
+        self.tleupdate_stat_lbl.setText("🔄 Updating...")
+        
+        # Use the existing update_tle_file method but don't stop tracking
+        # if we're currently tracking (startup updates shouldn't interrupt)
+        try:
+            global LAST_TLE_UPDATE
+            urllib.request.urlretrieve(TLEURL, TLEFILE)
+            LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE + " (auto)")
+            self.save_settings()
+            
+            # Refresh satellite dropdown with updated data
+            self.refresh_satellite_dropdown()
+            
+            # Refresh web API satellite list cache and notify clients
+            if WEBAPI_ENABLED:
+                try:
+                    web_api.broadcast_satellite_list_update()
+                    web_api.broadcast_tle_update_complete()
+                except Exception as e:
+                    logging.error(f"Error broadcasting auto TLE update to web clients: {e}")
+            
+            # Reload current satellite TLE data if one is selected (without stopping tracking)
+            if self.my_satellite.name != '':
+                # Store current tracking state
+                was_tracking = hasattr(self, 'timer') and self.timer.isActive()
+                
+                # Update satellite data
+                self.sat_changed(self.my_satellite.name)
+                
+                # If we were tracking, we don't need to restart as sat_changed doesn't stop it
+                # during auto updates (unlike manual updates)
+                
+            logging.info("Automatic TLE update completed successfully")
+            
+        except Exception as e:
+            logging.error(f"Automatic TLE update failed: {e}")
+            self.tleupdate_stat_lbl.setText("❌ Auto update failed")
+    
+    def startup_auto_update_tle(self):
+        """Perform TLE update at startup if enabled"""
+        if self.auto_tle_startup_checkbox.isChecked():
+            logging.info("Performing startup TLE auto-update...")
+            self.auto_update_tle()
+        else:
+            logging.debug("Startup TLE auto-update is disabled")
             
     def sat_changed(self, satname):
         self.my_satellite.name = satname
