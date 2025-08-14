@@ -1481,8 +1481,24 @@ class MainWindow(QMainWindow):
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE)
             self.save_settings()
+            
+            # Refresh satellite dropdown with updated data
+            self.refresh_satellite_dropdown()
+            
+            # Refresh web API satellite list cache and notify clients
+            if WEBAPI_ENABLED:
+                try:
+                    web_api.broadcast_satellite_list_update()
+                    web_api.broadcast_tle_update_complete()
+                except Exception as e:
+                    logging.error(f"Error broadcasting TLE update to web clients: {e}")
+            
+            # Reload current satellite TLE data if one is selected
             if self.my_satellite.name != '':
                 self.sat_changed(self.my_satellite.name)
+                
+            logging.info("TLE update completed successfully - satellite data refreshed without restart")
+            
         except Exception as e:
             logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             logging.error(e)
@@ -1519,6 +1535,77 @@ class MainWindow(QMainWindow):
                 web_api.broadcast_satellite_change(satname)
             except Exception as e:
                 logging.error(f"Error broadcasting satellite change to web clients: {e}")
+    
+    def refresh_satellite_dropdown(self):
+        """Refresh the satellite dropdown with current data from SQF file"""
+        try:
+            # Store current selection
+            current_selection = self.combo1.currentText()
+            current_index = self.combo1.currentIndex()
+            
+            # Block signals to prevent triggering sat_changed during refresh
+            self.combo1.blockSignals(True)
+            
+            # Clear current items
+            self.combo1.clear()
+            
+            # Reload satellite list from SQF file
+            import re
+            satlist = []
+            with open(SQFILE, 'r') as h:
+                sqfdata = h.readlines() 
+                for line in sqfdata:
+                    # Skip comment lines
+                    if line.strip().startswith(';'):
+                        continue
+                        
+                    if ',' in line:
+                        newitem = str(line.split(",")[0].strip())
+                        if newitem:
+                            satlist.append(newitem)
+            
+            # Remove duplicates while preserving order
+            unique_satlist = []
+            for sat in satlist:
+                if sat not in unique_satlist:
+                    unique_satlist.append(sat)
+            
+            # Sort satellite list using the same logic as initial load
+            def sat_sort_key(name):
+                # Extract prefix and number for sorting (e.g., "AO-73" -> ("AO", 73))
+                match = re.match(r'([A-Za-z\-]+)(\d+)', name)
+                if match:
+                    prefix, num = match.groups()
+                    return (prefix, int(num))
+                return (name, 0)
+            
+            unique_satlist.sort(key=sat_sort_key)
+            
+            # Add items back
+            self.combo1.addItem('Select one...')
+            self.combo1.addItems(unique_satlist)
+            
+            # Restore selection if it still exists
+            if current_selection and current_selection != 'Select one...':
+                for i in range(self.combo1.count()):
+                    if self.combo1.itemText(i) == current_selection:
+                        self.combo1.setCurrentIndex(i)
+                        break
+                else:
+                    # Selection no longer exists, reset to first item
+                    self.combo1.setCurrentIndex(0)
+            else:
+                self.combo1.setCurrentIndex(current_index if current_index < self.combo1.count() else 0)
+            
+            # Re-enable signals
+            self.combo1.blockSignals(False)
+            
+            logging.info(f"Satellite dropdown refreshed with {len(unique_satlist)} satellites")
+            
+        except Exception as e:
+            logging.error(f"Error refreshing satellite dropdown: {e}")
+            # Re-enable signals even if there was an error
+            self.combo1.blockSignals(False)
                 
     def tpx_changed(self, tpxname):
         global f_cal
