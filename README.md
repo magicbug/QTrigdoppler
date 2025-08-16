@@ -75,7 +75,8 @@ Currently, using the map is not advised due to bad perfomance. If you choose to 
 # 📋🔄⏳ Changelog
 DL3JOP modifications:
 - Removed hamlib
-- Support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)- Implemented transponder selection
+- Support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested 
+- Implemented transponder selection
 - Implemented correct switch between Split mode for V/V & U/U packet and satmode for V/U,U/V
 - Implemented doppler correction threshold
 - Added SubTone control
