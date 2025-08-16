@@ -2420,9 +2420,14 @@ class MainWindow(QMainWindow):
             date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
             myloc.date = ephem.Date(date_val)
             
+            # ★ SINGLE ORBITAL COMPUTATION ★ - replaces 7-10 individual compute calls
+            self.my_satellite.tledata.compute(myloc)
             
+            # Doppler calculations using direct property access (no additional compute calls)
             self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
-            self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F, myloc))
+            # Match original rx_doppler_val_calc format: format(..., '.2f') then convert to float
+            rx_doppler_raw = -self.my_satellite.tledata.range_velocity * self.my_satellite.F / C
+            self.my_satellite.down_doppler = float(format(rx_doppler_raw, '.2f'))
             self.my_satellite.down_doppler_rate = ((self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2)/0.2
             # Use higher rate limit for linear satellites (USB, LSB, CW) as they have legitimate high doppler rates at TCA
             max_doppler_rate = 1000.0 if self.my_satellite.downmode in ["USB", "LSB", "CW"] else 100.0
@@ -2430,7 +2435,9 @@ class MainWindow(QMainWindow):
                 self.my_satellite.down_doppler_rate = 0.0
                 
             self.my_satellite.up_doppler_old = self.my_satellite.up_doppler
-            self.my_satellite.up_doppler = float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I, myloc))
+            # Match original tx_doppler_val_calc format: format(..., '.2f') then convert to float
+            tx_doppler_raw = self.my_satellite.tledata.range_velocity * self.my_satellite.I / C
+            self.my_satellite.up_doppler = float(format(tx_doppler_raw, '.2f'))
             self.my_satellite.up_doppler_rate = ((self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2)/0.2
             # Use higher rate limit for linear satellites (USB, LSB, CW) as they have legitimate high doppler rates at TCA
             max_uplink_rate = 1000.0 if self.my_satellite.upmode in ["USB", "LSB", "CW"] else 100.0
@@ -2445,30 +2452,37 @@ class MainWindow(QMainWindow):
             self.rxfreq_onsat.setText(str('{:,}'.format(self.my_satellite.F))+ " Hz")
             self.txfreq.setText(str('{:,}'.format(self.my_satellite.I_RIG))+ " Hz")
             self.txfreq_onsat.setText(str('{:,}'.format(self.my_satellite.I))+ " Hz")
-            self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata, myloc)) + " °")
-            self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata, myloc)) + " °")
-            self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata, myloc)) + " km")
-            self.log_sat_status_illumintated_val.setText(sat_eclipse_calc(self.my_satellite.tledata, myloc))
+            
+            # All satellite position data using single computation (no additional compute calls)
+            elevation = format(self.my_satellite.tledata.alt / math.pi * 180.0, '.2f')
+            azimuth = format(self.my_satellite.tledata.az / math.pi * 180.0, '.2f')
+            height = format(float(self.my_satellite.tledata.elevation) / 1000.0, '.2f')
+            eclipse = "☾" if self.my_satellite.tledata.eclipsed else "☀︎"
+            
+            self.log_sat_status_ele_val.setText(str(elevation) + " °")
+            self.log_sat_status_azi_val.setText(str(azimuth) + " °")
+            self.log_sat_status_height_val.setText(str(height) + " km")
+            self.log_sat_status_illumintated_val.setText(eclipse)
             
             if DISPLAY_MAP:
-                self.map_canvas.lat = sat_lat_calc(self.my_satellite.tledata, myloc)
-                self.map_canvas.lon = sat_lon_calc(self.my_satellite.tledata, myloc)
-                self.map_canvas.alt_km = int(round(float(sat_height_calc(self.my_satellite.tledata, myloc))))
+                self.map_canvas.lat = format(self.my_satellite.tledata.sublat / math.pi * 180.0, '.1f')
+                self.map_canvas.lon = format(self.my_satellite.tledata.sublong / math.pi * 180.0, '.1f')
+                self.map_canvas.alt_km = int(round(float(height)))  # Reuse calculated height
                 self.map_canvas.draw_map()
 
             # Cloudlog: only log if F or I changed and satellite is above horizon
             try:
-                # Get elevation value directly
-                elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+                # Use already calculated elevation (no additional compute call)
+                elevation_float = float(elevation)
                 
                 # Update pass recorder with current elevation - no need to log every update
                 if self.my_satellite.name:
-                    self.on_satellite_update(elevation, self.my_satellite.name)
+                    self.on_satellite_update(elevation_float, self.my_satellite.name)
                 
                 # Handle Cloudlog updates
                 F_now = self.my_satellite.F
                 I_now = self.my_satellite.I
-                if elevation > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
+                if elevation_float > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
                     if not CLOUDLOG_ENABLED:
                         logging.debug("Cloudlog: Disabled in config.ini")
                     elif not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
@@ -2489,7 +2503,7 @@ class MainWindow(QMainWindow):
                         self._last_cloudlog_I = self.my_satellite.I
             except Exception as e:
                 logging.error(f"Error getting satellite elevation: {e}")
-                elevation = -1
+                elevation_float = -1
         except:
             logging.warning("Error in label timer")
             traceback.print_exc()
@@ -2534,8 +2548,10 @@ class MainWindow(QMainWindow):
     def get_current_az_el(self):
         # Returns (az, el) as floats for the current satellite
         try:
-            az = float(sat_azi_calc(self.my_satellite.tledata, myloc))
-            el = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+            # Single computation for both azimuth and elevation
+            self.my_satellite.tledata.compute(myloc)
+            az = float(self.my_satellite.tledata.az / math.pi * 180.0)
+            el = float(self.my_satellite.tledata.alt / math.pi * 180.0)
             return az, el
         except Exception as e:
             logging.error(f"Error getting current az/el: {e}")
@@ -3118,11 +3134,17 @@ class MainWindow(QMainWindow):
                 date_val = epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
                 myloc.date = ephem.Date(date_val)
                 
-                # Update satellite position displays
-                self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata, myloc)) + " °")
-                self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata, myloc)) + " °")
-                self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata, myloc)) + " km")
-                self.log_sat_status_illumintated_val.setText(sat_eclipse_calc(self.my_satellite.tledata, myloc))
+                # Update satellite position displays using single computation
+                self.my_satellite.tledata.compute(myloc)
+                elevation = format(self.my_satellite.tledata.alt / math.pi * 180.0, '.2f')
+                azimuth = format(self.my_satellite.tledata.az / math.pi * 180.0, '.2f')
+                height = format(float(self.my_satellite.tledata.elevation) / 1000.0, '.2f')
+                eclipse = "☾" if self.my_satellite.tledata.eclipsed else "☀︎"
+                
+                self.log_sat_status_ele_val.setText(str(elevation) + " °")
+                self.log_sat_status_azi_val.setText(str(azimuth) + " °")
+                self.log_sat_status_height_val.setText(str(height) + " km")
+                self.log_sat_status_illumintated_val.setText(eclipse)
                 
                 # Update next event display
                 self.log_sat_event_val.setText(str(sat_next_event_calc(self.my_satellite.tledata, myloc)))
