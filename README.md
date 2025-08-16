@@ -9,13 +9,13 @@
 
 ## 📌 QTRigdoppler features doppler shift control for ICOM radios
 
-Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
-Adapted by EA4HCF Pedro Cabrera (@PCabreraCamara)  
-Extended and modified by DL3JOP Joshua Petry (@dl3jop)<br/>
+- Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
+- Adapted by EA4HCF Pedro Cabrera (@PCabreraCamara)  
+- Extended and modified by DL3JOP Joshua Petry (@dl3jop)
 
-Contributions in this repo by:<br/>
-Joshua, DL3JOP<br/>
-Peter, 2M0SQL<br/>
+Contributions in this repo by:
+- Joshua, DL3JOP
+- Peter, 2M0SQL
  
 ## 🧠 What QTRigdoppler does
 
@@ -73,22 +73,23 @@ Currently, using the map is not advised due to bad perfomance. If you choose to 
 `pyproj`<br/>
 
 # 📋🔄⏳ Changelog
-DL3JOP modifications: <br/>
-    1) Removed hamlib<br/>
-    2) support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)<br/>
-    3) Implemented transponder selection<br/>
-    4) Implemented correct switch between Split mode for V/V & U/U packet and satmode for V/U,U/V<br/>
-    5) Implemented doppler correction threshold<br/>
-    6) Added SubTone control<br/>
-    7) Various smaller changes and additions<br/>
-    8) Added binaries
+DL3JOP modifications:
+- Removed hamlib
+- Support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)- Implemented transponder selection
+- Implemented correct switch between Split mode for V/V & U/U packet and satmode for V/U,U/V
+- Implemented doppler correction threshold
+- Added SubTone control
+- Various smaller changes and additions
+- Added binaries
 
-2M0SQL Modifications:<br>
-    1) Changed to PySide<br/>
-    2) Implemented Websocket features using Flask and SocketIO<br/>
-    3) Added Cloudlog/Wavelog integration: automatic logging of frequency and satellite info via Cloudlog API, configurable in config.ini.<br/>
-    4) Added ability to automatically record satellite passes to .wav files.
-    5) Added support to use USB / Serial GPS units to get location position.
+2M0SQL Modifications:
+- Changed to PySide
+- Implemented Websocket features using Flask and SocketIO
+- Added Cloudlog/Wavelog integration: automatic logging of frequency and satellite info via Cloudlog API, configurable in config.ini.
+- Added ability to automatically record satellite passes to .wav files.
+- Added support to use USB / Serial GPS units to get location position.
+- Automatic TLE Updating on Startup or based on hourly time period.
+- Help files
     
     
 # 🎯 Roadmap
@@ -99,9 +100,7 @@ DL3JOP modifications: <br/>
   - Refactor tracking loop:
     - no global F0/I0 variables, more abstracted methods to allow eaier implementation of other radios
     
-# 🛠️ Advanced information
-
-## 📚 Documentation
+# 📚 Documentation
 
 For detailed setup and usage instructions, see the [help documentation](help/):
 
