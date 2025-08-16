@@ -66,6 +66,8 @@ class RemoteClient:
     def disconnect(self):
         """Disconnect from the remote server"""
         self.stop_heartbeat()
+        # Clear main window reference to prevent Qt object access after shutdown
+        self.main_window = None
         if self.connected:
             try:
                 self.sio.disconnect()
@@ -131,77 +133,122 @@ class RemoteClient:
         if not self.main_window:
             return {}
         
-        # Check if Stopbutton exists to determine tracking state
-        tracking_active = False
-        if hasattr(self.main_window, 'Stopbutton'):
-            tracking_active = self.main_window.Stopbutton.isEnabled()
-        
-        state = {
-            'tracking': tracking_active,
-            'satellite': self.main_window.my_satellite.name if hasattr(self.main_window, 'my_satellite') and hasattr(self.main_window.my_satellite, 'name') else None,
-            'transponder': getattr(self.main_window, 'my_transponder_name', None) if hasattr(self.main_window, 'my_transponder_name') else None,
-            'rx_offset': self.main_window.rxoffsetbox.value() if hasattr(self.main_window, 'rxoffsetbox') else 0
-        }
-        
-        # Add subtone if available
-        if hasattr(self.main_window, 'combo3'):
-            state['subtone'] = self.main_window.combo3.currentText()
-        
-        # Add satellite info if available
-        if hasattr(self.main_window, 'my_satellite') and hasattr(self.main_window.my_satellite, 'name') and self.main_window.my_satellite.name:
-            sat = self.main_window.my_satellite
-            state['satellite_info'] = {
-                'name': sat.name,
-                'downlink_freq': sat.F if hasattr(sat, 'F') else None,
-                'uplink_freq': sat.I if hasattr(sat, 'I') else None,
-                'downlink_mode': sat.downmode if hasattr(sat, 'downmode') else None,
-                'uplink_mode': sat.upmode if hasattr(sat, 'upmode') else None,
-                'tle_age': sat.tle_age if hasattr(sat, 'tle_age') else None
+        try:
+            # Check if Stopbutton exists and is valid to determine tracking state
+            tracking_active = False
+            if hasattr(self.main_window, 'Stopbutton'):
+                try:
+                    tracking_active = self.main_window.Stopbutton.isEnabled()
+                except RuntimeError:
+                    # Qt object has been deleted, stop heartbeat to prevent further errors
+                    logging.debug("Qt objects deleted, stopping heartbeat")
+                    self.should_run_heartbeat = False
+                    return {}
+            
+            state = {
+                'tracking': tracking_active,
+                'satellite': None,
+                'transponder': None,
+                'rx_offset': 0
             }
-        
-        # Add satellite position if available
-        if hasattr(self.main_window, 'log_sat_status_ele_val') and hasattr(self.main_window, 'log_sat_status_azi_val'):
+            
+            # Safely get satellite name
             try:
-                state['satellite_position'] = {
-                    'elevation': self.main_window.log_sat_status_ele_val.text() if hasattr(self.main_window.log_sat_status_ele_val, 'text') else str(self.main_window.log_sat_status_ele_val),
-                    'azimuth': self.main_window.log_sat_status_azi_val.text() if hasattr(self.main_window.log_sat_status_azi_val, 'text') else str(self.main_window.log_sat_status_azi_val)
-                }
-            except Exception as e:
-                logging.error(f"Error getting satellite position: {e}")
-        
-        # Add doppler if available
-        if hasattr(self.main_window, 'rxdoppler_val') and hasattr(self.main_window, 'txdoppler_val'):
+                if hasattr(self.main_window, 'my_satellite') and hasattr(self.main_window.my_satellite, 'name'):
+                    state['satellite'] = self.main_window.my_satellite.name
+            except (RuntimeError, AttributeError):
+                pass
+            
+            # Safely get transponder name
             try:
-                state['doppler'] = {
-                    'downlink': self.main_window.rxdoppler_val.text() if hasattr(self.main_window.rxdoppler_val, 'text') else str(self.main_window.rxdoppler_val),
-                    'uplink': self.main_window.txdoppler_val.text() if hasattr(self.main_window.txdoppler_val, 'text') else str(self.main_window.txdoppler_val)                }
-            except Exception as e:
-                logging.error(f"Error getting doppler values: {e}")
-                  # Add rotator enabled flag
-        state['rotator_enabled'] = getattr(self.main_window, 'ROTATOR_ENABLED', False)
-        
-        # Add rotator info
-        if state['rotator_enabled'] and hasattr(self.main_window, 'rotator'):
+                if hasattr(self.main_window, 'my_transponder_name'):
+                    state['transponder'] = getattr(self.main_window, 'my_transponder_name', None)
+            except (RuntimeError, AttributeError):
+                pass
+            
+            # Safely get rx offset
             try:
-                # Get actual rotator position from the rotator device
-                if self.main_window.rotator:
-                    az, el = self.main_window.rotator.get_position()
-                    if az is not None and el is not None:
-                        az = f"{float(az):.1f}"
-                        el = f"{float(el):.1f}"
+                if hasattr(self.main_window, 'rxoffsetbox'):
+                    state['rx_offset'] = self.main_window.rxoffsetbox.value()
+            except (RuntimeError, AttributeError):
+                pass
+            
+            # Safely add subtone if available
+            try:
+                if hasattr(self.main_window, 'combo3'):
+                    state['subtone'] = self.main_window.combo3.currentText()
+            except (RuntimeError, AttributeError):
+                pass
+            
+            # Safely add satellite info if available
+            try:
+                if hasattr(self.main_window, 'my_satellite') and hasattr(self.main_window.my_satellite, 'name') and self.main_window.my_satellite.name:
+                    sat = self.main_window.my_satellite
+                    state['satellite_info'] = {
+                        'name': sat.name,
+                        'downlink_freq': sat.F if hasattr(sat, 'F') else None,
+                        'uplink_freq': sat.I if hasattr(sat, 'I') else None,
+                        'downlink_mode': sat.downmode if hasattr(sat, 'downmode') else None,
+                        'uplink_mode': sat.upmode if hasattr(sat, 'upmode') else None,
+                        'tle_age': sat.tle_age if hasattr(sat, 'tle_age') else None
+                    }
+            except (RuntimeError, AttributeError):
+                pass
+            
+            # Safely add satellite position if available
+            try:
+                if hasattr(self.main_window, 'log_sat_status_ele_val') and hasattr(self.main_window, 'log_sat_status_azi_val'):
+                    state['satellite_position'] = {
+                        'elevation': self.main_window.log_sat_status_ele_val.text() if hasattr(self.main_window.log_sat_status_ele_val, 'text') else str(self.main_window.log_sat_status_ele_val),
+                        'azimuth': self.main_window.log_sat_status_azi_val.text() if hasattr(self.main_window.log_sat_status_azi_val, 'text') else str(self.main_window.log_sat_status_azi_val)
+                    }
+            except (RuntimeError, AttributeError):
+                pass
+            
+            # Safely add doppler if available
+            try:
+                if hasattr(self.main_window, 'rxdoppler_val') and hasattr(self.main_window, 'txdoppler_val'):
+                    state['doppler'] = {
+                        'downlink': self.main_window.rxdoppler_val.text() if hasattr(self.main_window.rxdoppler_val, 'text') else str(self.main_window.rxdoppler_val),
+                        'uplink': self.main_window.txdoppler_val.text() if hasattr(self.main_window.txdoppler_val, 'text') else str(self.main_window.txdoppler_val)
+                    }
+            except (RuntimeError, AttributeError):
+                pass
+                
+            # Safely add rotator enabled flag
+            try:
+                state['rotator_enabled'] = getattr(self.main_window, 'ROTATOR_ENABLED', False)
+            except (RuntimeError, AttributeError):
+                state['rotator_enabled'] = False
+            
+            # Safely add rotator info
+            try:
+                if state['rotator_enabled'] and hasattr(self.main_window, 'rotator'):
+                    # Get actual rotator position from the rotator device
+                    if self.main_window.rotator:
+                        az, el = self.main_window.rotator.get_position()
+                        if az is not None and el is not None:
+                            az = f"{float(az):.1f}"
+                            el = f"{float(el):.1f}"
+                        else:
+                            az = "error"
+                            el = "error"
                     else:
                         az = "error"
                         el = "error"
-                else:
-                    az = "error"
-                    el = "error"
+                    
+                    state['rotator'] = {
+                        'azimuth': az,
+                        'elevation': el
+                    }
+            except (RuntimeError, AttributeError):
+                pass
                 
-                state['rotator'] = {
-                    'azimuth': az,
-                    'elevation': el
-                }
-            except Exception as e:
-                logging.error(f"Error getting rotator position: {e}")
+        except Exception as e:
+            # Catch any other unexpected errors and stop heartbeat
+            logging.error(f"Error in get_current_state: {e}")
+            self.should_run_heartbeat = False
+            return {}
         
         return state
     

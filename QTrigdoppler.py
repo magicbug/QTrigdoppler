@@ -37,8 +37,103 @@ import pynmea2
 import serial
 # GPSReader import moved to after QApplication creation to avoid Qt object creation before app init
 
-# Set logging level back to WARNING
-logging.basicConfig(level = logging.WARNING)
+# Configure logging - need to do this before importing config to avoid issues
+import logging.handlers
+import os
+
+def setup_logging():
+    """Set up logging configuration from config file"""
+    # Default logging settings (used if config file is not available)
+    default_level = logging.INFO
+    default_log_to_file = True
+    default_log_file = 'logs/qtrigdoppler.log'
+    default_max_size_mb = 10
+    default_backup_count = 5
+    default_console_output = False
+    
+    try:
+        # Try to read logging config from config.ini
+        from configparser import ConfigParser
+        config = ConfigParser()
+        config.read('config.ini')
+        
+        if config.has_section('logging'):
+            log_level_str = config.get('logging', 'level', fallback='INFO')
+            log_to_file = config.getboolean('logging', 'log_to_file', fallback=True)
+            log_file = config.get('logging', 'log_file', fallback='logs/qtrigdoppler.log')
+            max_size_mb = config.getint('logging', 'max_file_size_mb', fallback=10)
+            backup_count = config.getint('logging', 'backup_count', fallback=5)
+            console_output = config.getboolean('logging', 'console_output', fallback=False)
+        else:
+            # Use defaults if no logging section
+            log_level_str = 'INFO'
+            log_to_file = default_log_to_file
+            log_file = default_log_file
+            max_size_mb = default_max_size_mb
+            backup_count = default_backup_count
+            console_output = default_console_output
+            
+        # Convert log level string to logging constant
+        log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+        
+    except Exception:
+        # If config reading fails, use defaults
+        log_level = default_level
+        log_to_file = default_log_to_file
+        log_file = default_log_file
+        max_size_mb = default_max_size_mb
+        backup_count = default_backup_count
+        console_output = default_console_output
+    
+    # Clear any existing handlers
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    
+    handlers = []
+    
+    # Set up file logging if enabled
+    if log_to_file:
+        # Create logs directory if it doesn't exist
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        # Create rotating file handler
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_file, maxBytes=max_size_mb*1024*1024, backupCount=backup_count
+        )
+        file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        handlers.append(file_handler)
+    
+    # Set up console logging
+    console_handler = logging.StreamHandler()
+    if console_output:
+        # Show all logs in console if enabled
+        console_handler.setLevel(log_level)
+    else:
+        # Only show ERROR and CRITICAL in console
+        console_handler.setLevel(logging.ERROR)
+    console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+    handlers.append(console_handler)
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=log_level,
+        handlers=handlers,
+        force=True  # Force reconfiguration if already configured
+    )
+    
+    return log_file, log_level
+
+# Set up logging
+log_file_path, log_level = setup_logging()
+
+# Log startup message
+logging.info("=" * 50)
+logging.info("QTrigdoppler starting up")
+logging.info(f"Logging configured - Level: {logging.getLevelName(log_level)}, File: {log_file_path}")
+logging.info("=" * 50)
 
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -2520,6 +2615,11 @@ class MainWindow(QMainWindow):
             self.rotator_thread = None
             logging.debug("Rotator thread stopped.")
     def closeEvent(self, event):
+        # Log shutdown
+        logging.info("=" * 50)
+        logging.info("QTrigdoppler shutting down")
+        logging.info("=" * 50)
+        
         # Ensure rotator is stopped and parked on exit
         if ROTATOR_ENABLED:
             self.stop_rotator_thread()
@@ -2577,6 +2677,14 @@ class MainWindow(QMainWindow):
                 logging.debug("Web API broadcast thread stopped")
             except Exception as e:
                 logging.error(f"Error stopping web API thread: {e}")
+        
+        # Stop remote client if enabled
+        if REMOTE_ENABLED:
+            try:
+                remote_client.disconnect()
+                logging.debug("Remote client disconnected")
+            except Exception as e:
+                logging.error(f"Error disconnecting remote client: {e}")
         
         event.accept()
 
