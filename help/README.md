@@ -5,6 +5,7 @@ Welcome to the QTRigdoppler help system! This directory contains comprehensive d
 ## 📚 Available Documentation
 
 ### 🎯 Quick Start
+- **[Configuration Guide](configuration.md)** - Complete config.ini reference and setup guide
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Complete guide to keyboard shortcuts and accessibility features
 - **[Pass Recording](pass-recording.md)** - Comprehensive guide to automatic audio recording
 - **[GPS Integration](gps-integration.md)** - Complete guide to GPS-based location determination
@@ -16,6 +17,7 @@ The following help documents are planned for future releases:
 
 | Document | Description | Status |
 |----------|-------------|--------|
+| **Configuration Guide** | Complete config.ini reference | ✅ Available |
 | **Getting Started Guide** | Complete setup and first-use tutorial | Planned |
 | **Radio Configuration** | Setting up ICOM and other radio models | Planned |
 | **Satellite Operations** | Best practices for satellite tracking | Planned |
@@ -27,24 +29,25 @@ The following help documents are planned for future releases:
 ## 🆘 Need Help?
 
 ### Quick Links
+- **[Configuration Guide](configuration.md)** - Complete config.ini reference and setup
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Current accessibility features
 - **[Pass Recording](pass-recording.md)** - Automatic audio recording setup and usage
 - **[GPS Integration](gps-integration.md)** - GPS-based automatic location determination
 - **[Rotator Setup](rotator-setup.md)** - Antenna rotator configuration and operation
 - **[Main README](../README.md)** - Project overview and setup
-- **[TODO List](../todo.md)** - Planned features and improvements
 
 ### Support Resources
 - **Application Logs**: Check the application logs for detailed system information
-- **Configuration**: Review `config.ini` for setup parameters
+- **Configuration**: Review the [Configuration Guide](configuration.md) for complete config.ini reference
 - **Community**: Join the amateur radio satellite community discussions
 
 ## 🎯 Getting Started
 
 ### New Users
 1. Read the main [README.md](../README.md) for initial setup
-2. Configure your radio and location settings
-3. Try the [keyboard shortcuts](keyboard-shortcuts.md) for efficient operation
+2. Follow the [Configuration Guide](configuration.md) to set up your config.ini
+3. Configure your radio and location settings
+4. Try the [keyboard shortcuts](keyboard-shortcuts.md) for efficient operation
 
 ### Experienced Users
 - Check out planned features in [TODO.md](../todo.md)
