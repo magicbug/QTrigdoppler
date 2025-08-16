@@ -2560,9 +2560,11 @@ class MainWindow(QMainWindow):
         
         # Wait for any running workers to complete and clear threadpool
         try:
+            # Give workers more time to shut down properly
+            QThread.msleep(200)
             self.threadpool.clear()
-            # Give a brief moment for workers to clean up
-            QThread.msleep(50)
+            # Additional time for final cleanup
+            QThread.msleep(100)
             logging.debug("Threadpool cleared")
         except Exception as e:
             logging.error(f"Error clearing threadpool: {e}")
@@ -2598,6 +2600,8 @@ class MainWindow(QMainWindow):
 
     def start_rotator_position_worker(self):
         if self.rotator:
+            # Stop any existing worker first
+            self.stop_rotator_position_worker()
             self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=2.0)
             self.rotator_position_worker.signals.position.connect(self.handle_rotator_position_update)
             QThreadPool.globalInstance().start(self.rotator_position_worker)
@@ -2606,10 +2610,37 @@ class MainWindow(QMainWindow):
         # Defensive: safely stop worker and avoid double-deletion
         if hasattr(self, 'rotator_position_worker') and self.rotator_position_worker:
             try:
+                # Set up a finished signal handler to know when worker is done
+                worker_finished = False
+                def on_worker_finished():
+                    nonlocal worker_finished
+                    worker_finished = True
+                    
+                # Connect to finished signal if possible
+                try:
+                    self.rotator_position_worker.signals.finished.connect(on_worker_finished)
+                except:
+                    pass  # Signal connection failed, continue anyway
+                
+                # Tell worker to stop
                 self.rotator_position_worker.stop()
+                
+                # Wait for worker to finish, with timeout
+                wait_count = 0
+                max_wait = 20  # 200ms maximum wait (20 * 10ms)
+                while not worker_finished and wait_count < max_wait:
+                    QThread.msleep(10)
+                    wait_count += 1
+                    
+                if not worker_finished:
+                    logging.debug("RotatorPositionWorker did not finish within timeout")
+                else:
+                    logging.debug("RotatorPositionWorker finished cleanly")
+                    
             except Exception as e:
                 logging.error(f"Error stopping rotator position worker: {e}")
-            self.rotator_position_worker = None
+            finally:
+                self.rotator_position_worker = None
             
     def toggle_audio_monitoring(self):
         """Start or stop audio level monitoring"""
@@ -3049,23 +3080,41 @@ class RotatorPositionWorker(QRunnable):
 
     @Slot()
     def run(self):
-        while self._running:
-            try:
-                az, el = self.rotator.get_position()
-                # Check if signals object still exists before emitting
-                if hasattr(self, 'signals') and self.signals is not None:
-                    self.signals.position.emit(az, el)
-            except Exception as e:
-                # Only emit error signal if signals object still exists
-                if hasattr(self, 'signals') and self.signals is not None:
-                    try:
-                        self.signals.position.emit(None, None)
-                    except RuntimeError:
-                        # Signals object was deleted, stop the worker
-                        logging.warning("RotatorPositionWorker signals deleted, stopping worker")
-                        self._running = False
-                        break
-            time.sleep(self.poll_interval)
+        try:
+            while self._running:
+                try:
+                    az, el = self.rotator.get_position()
+                    # Check if signals object still exists before emitting
+                    if hasattr(self, 'signals') and self.signals is not None and self._running:
+                        self.signals.position.emit(az, el)
+                except Exception as e:
+                    # Only emit error signal if signals object still exists
+                    if hasattr(self, 'signals') and self.signals is not None and self._running:
+                        try:
+                            self.signals.position.emit(None, None)
+                        except RuntimeError:
+                            # Signals object was deleted, stop the worker
+                            logging.warning("RotatorPositionWorker signals deleted, stopping worker")
+                            self._running = False
+                            break
+                
+                # Use smaller sleep intervals for more responsive shutdown
+                # Break the sleep into smaller chunks to check _running more frequently
+                sleep_count = 0
+                sleep_chunk = 0.1  # 100ms chunks
+                max_chunks = int(self.poll_interval / sleep_chunk)
+                
+                while sleep_count < max_chunks and self._running:
+                    time.sleep(sleep_chunk)
+                    sleep_count += 1
+        finally:
+            # Emit finished signal when worker is truly done
+            if hasattr(self, 'signals') and self.signals is not None:
+                try:
+                    self.signals.finished.emit()
+                except RuntimeError:
+                    # Signals already deleted, which is fine
+                    pass
 
 class AudioLevelMeter(QProgressBar):
     """Custom progress bar for displaying audio input levels"""
