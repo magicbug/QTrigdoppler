@@ -6,6 +6,8 @@ Welcome to the QTRigdoppler help system! This directory contains comprehensive d
 
 ### 🎯 Quick Start
 - **[Configuration Guide](configuration.md)** - Complete config.ini reference and setup guide
+- **[Remote Operation](remote-operation.md)** - Complete guide to web-based remote control systems
+- **[Cloudlog Integration](cloudlog-integration.md)** - Automatic logbook integration with Cloudlog/Wavelog
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Complete guide to keyboard shortcuts and accessibility features
 - **[Pass Recording](pass-recording.md)** - Comprehensive guide to automatic audio recording
 - **[GPS Integration](gps-integration.md)** - Complete guide to GPS-based location determination
@@ -18,11 +20,12 @@ The following help documents are planned for future releases:
 | Document | Description | Status |
 |----------|-------------|--------|
 | **Configuration Guide** | Complete config.ini reference | ✅ Available |
+| **Remote Operation** | Web-based remote control systems | ✅ Available |
+| **Cloudlog Integration** | Automatic logbook integration | ✅ Available |
 | **Getting Started Guide** | Complete setup and first-use tutorial | Planned |
 | **Radio Configuration** | Setting up ICOM and other radio models | Planned |
 | **Satellite Operations** | Best practices for satellite tracking | Planned |
 | **Rotator Setup** | Configuring antenna rotators | ✅ Available |
-| **Web API Guide** | Using the web interface | Planned |
 | **Troubleshooting** | Common issues and solutions | Planned |
 | **Advanced Features** | Power user tips and tricks | Planned |
 
@@ -30,6 +33,8 @@ The following help documents are planned for future releases:
 
 ### Quick Links
 - **[Configuration Guide](configuration.md)** - Complete config.ini reference and setup
+- **[Remote Operation](remote-operation.md)** - Web-based remote control systems
+- **[Cloudlog Integration](cloudlog-integration.md)** - Automatic logbook integration
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Current accessibility features
 - **[Pass Recording](pass-recording.md)** - Automatic audio recording setup and usage
 - **[GPS Integration](gps-integration.md)** - GPS-based automatic location determination
