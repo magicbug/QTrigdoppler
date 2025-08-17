@@ -33,19 +33,22 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller certifi
 
-      - name: Build executable
+      - name: Build executable (Linux)
+        if: matrix.name == 'linux'
         run: |
-          if [ "${{ matrix.name }}" = "linux" ]; then
-            pyinstaller --onefile QTrigdoppler.py \
-              --exclude PyQt6 \
-              --splash images/splash.jpg \
-              --add-data "$(python -m certifi):certifi"
-          else
-            pyinstaller --onefile QTrigdoppler.py \
-              --exclude PyQt6 \
-              --splash images/splash.jpg \
-              --add-data "%(python -m certifi)s;certifi"
-          fi
+          pyinstaller --onefile QTrigdoppler.py \
+            --exclude PyQt6 \
+            --splash images/splash.jpg \
+            --add-data "$(python -m certifi):certifi"
+
+      - name: Build executable (Windows)
+        if: matrix.name == 'windows'
+        run: |
+          pyinstaller --onefile QTrigdoppler.py `
+            --exclude PyQt6 `
+            --splash images/splash.jpg `
+            --add-data "%(python -m certifi)s;certifi"
+        shell: powershell
 
       - name: Prepare package (Linux)
         if: matrix.name == 'linux'
