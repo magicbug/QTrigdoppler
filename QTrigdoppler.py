@@ -68,6 +68,7 @@ RIG_SERIAL_PORT = configur.get('icom', 'serialport')
 RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
+TLE_UPDATE_STARTUP = configur.getboolean('misc', 'tle_update_startup', fallback=False)
 
 # Rotator config
 ROTATOR_ENABLED = configur.getboolean('rotator', 'enabled', fallback=False)
@@ -278,6 +279,7 @@ class MainWindow(QMainWindow):
 
         self.counter = 0
         self.my_satellite = Satellite()
+        
         
         if WEBAPI_ENABLED:
             # Register this window with the web API
@@ -757,7 +759,7 @@ class MainWindow(QMainWindow):
         
         # Files Tab
         self.settings_file_box = QGroupBox("Files")
-        self.settings_file_box.setStyleSheet("QGroupBox{padding-top:1px;padding-bottom:5px; margin-top:5px}")
+        self.settings_file_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
         settings_value_layout.addWidget(self.settings_file_box)
         
         
@@ -922,13 +924,26 @@ class MainWindow(QMainWindow):
         self.satsqf.setText(SQFILE)
         files_settings_layout.addWidget(self.satsqf, 2, 1)
         
+        self.update_tle_startup_label = QLabel("Update  TLE on startup:")
+        files_settings_layout.addWidget(self.update_tle_startup_label, 3, 0)
+        
+        self.update_tle_startup_button = QCheckBox()
+        files_settings_layout.addWidget(self.update_tle_startup_button, 3, 1)
+        if TLE_UPDATE_STARTUP == True:
+            self.update_tle_startup_button.setChecked(1)
+        elif TLE_UPDATE_STARTUP == False:
+            self.update_tle_startup_button.setChecked(0)
+        
         self.UpdateTLEButton = QPushButton("Update TLE")
         self.UpdateTLEButton.clicked.connect(self.update_tle_file)
-        files_settings_layout.addWidget(self.UpdateTLEButton, 3,0)
+        files_settings_layout.addWidget(self.UpdateTLEButton, 4,0, 1, 2)
         self.UpdateTLEButton.setEnabled(True)
         
-        self.tleupdate_stat_lbl = QLabel(LAST_TLE_UPDATE)
-        files_settings_layout.addWidget(self.tleupdate_stat_lbl, 3, 1)
+        self.tleupdate_stat_lbl = QLabel(str(LAST_TLE_UPDATE))
+        self.tleupdate_stat_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.tleupdate_stat_lbl.setAlignment(Qt.AlignCenter)
+        files_settings_layout.addWidget(self.tleupdate_stat_lbl, 5, 0, 1, 2)
+        
         
         self.settings_file_box.setLayout(files_settings_layout)
         
@@ -1297,6 +1312,9 @@ class MainWindow(QMainWindow):
         elif last_gps_port:
             self.gps_status_label.setText("GPS Status: Saved port not available")
             self.gps_enable_checkbox.setChecked(False)
+        
+        if TLE_UPDATE_STARTUP:
+            self.update_tle_file()
     
     def save_settings(self):
         global LATITUDE
@@ -1313,6 +1331,7 @@ class MainWindow(QMainWindow):
         global CVIADDR
         global OPMODE
         global LAST_TLE_UPDATE
+        global TLE_UPDATE_STARTUP
         global RIG_TYPE
         global ROTATOR_SERIAL_PORT
         global ROTATOR_BAUDRATE
@@ -1337,6 +1356,8 @@ class MainWindow(QMainWindow):
         TLEFILE = configur['satellite']['tle_file'] = str(self.sattle.displayText())
         TLEURL =  configur['satellite']['tle_url'] = str(self.sattleurl.displayText())
         SQFILE = configur['satellite']['sqffile'] = str(self.satsqf.displayText())
+        TLE_UPDATE_STARTUP = self.update_tle_startup_button.isChecked()
+        configur['misc']['tle_update_startup'] = str(TLE_UPDATE_STARTUP)
         
         DOPPLER_THRES_FM = int(self.doppler_fm_threshold.displayText())
         configur['satellite']['doppler_threshold_fm'] = str(int(DOPPLER_THRES_FM))
@@ -1464,20 +1485,23 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     logging.error(f"Error broadcasting RX offset button change to web clients: {e}")
     def update_tle_file(self):
-        self.the_stop_button_was_clicked()
+        try:
+            self.the_stop_button_was_clicked()
+        except:
+            pass
         try:
             
             global LAST_TLE_UPDATE
             urllib.request.urlretrieve(TLEURL, TLEFILE)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE)
+            self.tleupdate_stat_lbl.setText("✔ Last Update: " + LAST_TLE_UPDATE)
             self.save_settings()
             if self.my_satellite.name != '':
                 self.sat_changed(self.my_satellite.name)
         except Exception as e:
             logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             logging.error(e)
-            self.tleupdate_stat_lbl.setText("❌")
+            self.tleupdate_stat_lbl.setText("❌ Last Update failed")
             
     def sat_changed(self, satname):
         self.my_satellite.name = satname
@@ -1711,11 +1735,6 @@ class MainWindow(QMainWindow):
             elif tone_name == "None":
                 icomTrx.setToneOn(0)
             
-        if self.my_satellite.rig_satmode == 1:
-            icomTrx.setVFO("Main")
-        else:
-            icomTrx.setVFO("VFOA")
-            
         # Notify web clients of the subtone change
         if WEBAPI_ENABLED:
             try:
@@ -1848,11 +1867,19 @@ class MainWindow(QMainWindow):
                 
                 if self.my_satellite.rig_satmode == 1:
                     icomTrx.setVFO("Main")
+                    if RIG_TYPE == "US":
+                        icomTrx.setToneSquelchOn(0)
+                    elif RIG_TYPE == "EU":
+                        icomTrx.setToneOn(0)
                     icomTrx.setFrequency(str(int(self.my_satellite.F_RIG)))
                     icomTrx.setVFO("SUB")
                     icomTrx.setFrequency(str(int(self.my_satellite.I_RIG)))
                 else:
                     icomTrx.setVFO("VFOA")
+                    if RIG_TYPE == "US":
+                        icomTrx.setToneSquelchOn(0)
+                    elif RIG_TYPE == "EU":
+                        icomTrx.setToneOn(0)
                     icomTrx.setFrequency(str(int(self.my_satellite.F_RIG)))
                     if RX_TPX_ONLY == False:
                         icomTrx.setVFO("VFOB")
@@ -1861,7 +1888,8 @@ class MainWindow(QMainWindow):
                         icomTrx.setVFO("VFOA")
                     else:
                         icomTrx.setSplitOn(0)
-                
+        
+        
                 # Ensure that initial frequencies are always written 
                 tracking_init = 1
 
