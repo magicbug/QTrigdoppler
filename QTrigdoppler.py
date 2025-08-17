@@ -13,6 +13,7 @@ import math
 import time
 import re
 import requests
+import certifi
 import traceback
 from lib import icom
 import os
@@ -1601,7 +1602,7 @@ class MainWindow(QMainWindow):
         try:
             
             global LAST_TLE_UPDATE
-            response = requests.get(TLEURL)
+            response = requests.get(TLEURL, verify=certifi.where())
             with open(TLEFILE, 'wb') as f:
                 f.write(response.content)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1661,7 +1662,7 @@ class MainWindow(QMainWindow):
         # if we're currently tracking (startup updates shouldn't interrupt)
         try:
             global LAST_TLE_UPDATE
-            response = requests.get(TLEURL)
+            response = requests.get(TLEURL, verify=certifi.where())
             with open(TLEFILE, 'wb') as f:
                 f.write(response.content)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
