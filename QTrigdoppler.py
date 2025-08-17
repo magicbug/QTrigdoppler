@@ -25,7 +25,7 @@ from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtCore import Qt, Signal, Slot, QObject, QMetaObject, Q_ARG, QThreadPool
-from qt_material import apply_stylesheet
+from qt_material import apply_stylesheet,list_themes
 import logging
 from serial.tools import list_ports
 from lib.pass_recorder import PassRecorder
@@ -167,6 +167,7 @@ TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
 AUTO_TLE_STARTUP = configur.getboolean('misc', 'auto_tle_startup', fallback=False)
 AUTO_TLE_INTERVAL_ENABLED = configur.getboolean('misc', 'auto_tle_interval_enabled', fallback=False)
 AUTO_TLE_INTERVAL_HOURS = configur.getint('misc', 'auto_tle_interval_hours', fallback=24)
+STYLESHEET = configur.get('misc', 'stylesheet',fallback="dark_lightgreen.xml")
 
 # Rotator config
 ROTATOR_ENABLED = configur.getboolean('rotator', 'enabled', fallback=False)
@@ -387,6 +388,7 @@ class MainWindow(QMainWindow):
         self.counter = 0
         self.my_satellite = Satellite()
         
+        
         if WEBAPI_ENABLED:
             # Register this window with the web API
             web_api.register_window(self)
@@ -550,6 +552,7 @@ class MainWindow(QMainWindow):
         self.tpxtext.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         combo_layout.addWidget(self.tpxtext)
         self.combo2 = QComboBox()
+        self.combo2.addItems(['Select Sat first...'])
         self.tpx_list_view = self.combo1.view()
         self.tpx_list_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)        
         QScroller.grabGesture(self.tpx_list_view.viewport(), QScroller.LeftMouseButtonGesture)
@@ -882,7 +885,7 @@ class MainWindow(QMainWindow):
         
         # Files Tab
         self.settings_file_box = QGroupBox("Files")
-        self.settings_file_box.setStyleSheet("QGroupBox{padding-top:1px;padding-bottom:5px; margin-top:5px}")
+        self.settings_file_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
         settings_value_layout.addWidget(self.settings_file_box)
         
         
@@ -1052,6 +1055,7 @@ class MainWindow(QMainWindow):
         self.satsqf.setText(SQFILE)
         files_settings_layout.addWidget(self.satsqf, 2, 1)
         
+
         # Auto-update TLE settings
         self.auto_tle_startup_checkbox = QCheckBox("Auto-update TLE on startup")
         files_settings_layout.addWidget(self.auto_tle_startup_checkbox, 3, 0, 1, 2)
@@ -1088,13 +1092,28 @@ class MainWindow(QMainWindow):
         
         self.UpdateTLEButton = QPushButton("Update TLE")
         self.UpdateTLEButton.clicked.connect(self.update_tle_file)
-        files_settings_layout.addWidget(self.UpdateTLEButton, 5, 0)
+        files_settings_layout.addWidget(self.UpdateTLEButton, 5, 0, 1, 2)
         self.UpdateTLEButton.setEnabled(True)
+  
+        self.tleupdate_stat_lbl = QLabel(str(LAST_TLE_UPDATE))
+        self.tleupdate_stat_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.tleupdate_stat_lbl.setAlignment(Qt.AlignCenter)
+        files_settings_layout.addWidget(self.tleupdate_stat_lbl, 6, 0, 1, 2)
         
-        self.tleupdate_stat_lbl = QLabel(LAST_TLE_UPDATE)
-        files_settings_layout.addWidget(self.tleupdate_stat_lbl, 5, 1)
+
         
         self.settings_file_box.setLayout(files_settings_layout)
+        
+        # Change stylesheet
+        stylesheet_layout = QHBoxLayout()
+        
+        self.stylesheet_layout_label = QLabel("Application theme:")
+        self.stylesheet_layout_combo = QComboBox()
+        self.stylesheet_layout_combo.addItems(list_themes())
+        self.stylesheet_layout_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        stylesheet_layout.addWidget(self.stylesheet_layout_label)
+        stylesheet_layout.addWidget(self.stylesheet_layout_combo)
+        self.stylesheet_layout_combo.currentTextChanged.connect(self.change_theme)
         
         # Settings store layout
         settings_store_layout = QVBoxLayout()
@@ -1108,6 +1127,7 @@ class MainWindow(QMainWindow):
         # Glueing settinglayouts together
         settings_layout = QVBoxLayout()
         settings_layout.addLayout(settings_value_layout)
+        settings_layout.addLayout(stylesheet_layout)
         settings_layout.addLayout(settings_store_layout)
         
         ### Advanced Settings Tab
@@ -1461,6 +1481,10 @@ class MainWindow(QMainWindow):
         elif last_gps_port:
             self.gps_status_label.setText("GPS Status: Saved port not available")
             self.gps_enable_checkbox.setChecked(False)
+        
+        if TLE_UPDATE_STARTUP:
+            self.update_tle_file()
+        self.change_theme(STYLESHEET)
     
     def save_settings(self):
         global LATITUDE
@@ -1478,6 +1502,7 @@ class MainWindow(QMainWindow):
         global CVIADDR
         global OPMODE
         global LAST_TLE_UPDATE
+        global TLE_UPDATE_STARTUP
         global RIG_TYPE
         global ROTATOR_SERIAL_PORT
         global ROTATOR_BAUDRATE
@@ -1488,6 +1513,7 @@ class MainWindow(QMainWindow):
         global ROTATOR_EL_MIN
         global ROTATOR_EL_MAX
         global ROTATOR_MIN_ELEVATION
+        global STYLESHEET
 
         LATITUDE = self.qth_settings_lat_edit.displayText()
         configur['qth']['latitude'] = str(float(LATITUDE))
@@ -1502,6 +1528,8 @@ class MainWindow(QMainWindow):
         TLEFILE = configur['satellite']['tle_file'] = str(self.sattle.displayText())
         TLEURL =  configur['satellite']['tle_url'] = str(self.sattleurl.displayText())
         SQFILE = configur['satellite']['sqffile'] = str(self.satsqf.displayText())
+        TLE_UPDATE_STARTUP = self.update_tle_startup_button.isChecked()
+        configur['misc']['tle_update_startup'] = str(TLE_UPDATE_STARTUP)
         
         DOPPLER_THRES_FM = int(self.doppler_fm_threshold.displayText())
         configur['satellite']['doppler_threshold_fm'] = str(int(DOPPLER_THRES_FM))
@@ -1605,11 +1633,36 @@ class MainWindow(QMainWindow):
         # GPS QTH settings
         configur['qth']['use_gps'] = str(self.gps_enable_checkbox.isChecked())
         configur['qth']['gps_port'] = self.gps_serialport_val.currentText()
+        
+        configur['misc']['stylesheet'] = STYLESHEET
 
         with open('config.ini', 'w') as configfile:
             configur.write(configfile)
         self.pass_recorder.update_config(configur)
 
+
+    def change_theme(self, theme_name):
+        global STYLESHEET
+        apply_stylesheet(app, theme=theme_name)
+        STYLESHEET = theme_name
+        if "dark" in theme_name.lower():
+            app.setStyleSheet(app.styleSheet() + """
+                QComboBox {
+                    color: palette(highlighted-text);
+                }
+                QLineEdit {
+                    color: palette(highlighted-text);
+                }
+                QSpinBox {
+                    color: palette(highlighted-text);
+                }
+                QComboBox QAbstractItemView {
+                    color: palette(text);
+                    selection-background-color: palette(highlight);
+                    selection-color: palette(highlighted-text);
+                }
+            """)
+        
     def rxoffset_value_changed(self, i):
             global f_cal
             self.my_satellite.new_cal = 1
@@ -1634,13 +1687,16 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     logging.error(f"Error broadcasting RX offset button change to web clients: {e}")
     def update_tle_file(self):
-        self.the_stop_button_was_clicked()
+        try:
+            self.the_stop_button_was_clicked()
+        except:
+            pass
         try:
             
             global LAST_TLE_UPDATE
             urllib.request.urlretrieve(TLEURL, TLEFILE)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE)
+            self.tleupdate_stat_lbl.setText("✔ Last Update: " + LAST_TLE_UPDATE)
             self.save_settings()
             
             # Refresh satellite dropdown with updated data
@@ -1663,7 +1719,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             logging.error(e)
-            self.tleupdate_stat_lbl.setText("❌")
+            self.tleupdate_stat_lbl.setText("❌ Last Update failed")
     
     def update_auto_tle_timer(self):
         """Update the automatic TLE update timer based on current settings"""
@@ -1736,9 +1792,18 @@ class MainWindow(QMainWindow):
             self.auto_update_tle()
         else:
             logging.debug("Startup TLE auto-update is disabled")
+
             
     def sat_changed(self, satname):
         self.my_satellite.name = satname
+        
+        try:
+            text_to_remove = 'Select one...'
+            index = self.combo1.findText(text_to_remove)
+            if index != -1:
+                self.combo1.removeItem(index)
+        except:
+            pass
 
         try:
             with open(SQFILE, 'r') as h:
@@ -2040,11 +2105,6 @@ class MainWindow(QMainWindow):
             elif tone_name == "None":
                 icomTrx.setToneOn(0)
             
-        if self.my_satellite.rig_satmode == 1:
-            icomTrx.setVFO("Main")
-        else:
-            icomTrx.setVFO("VFOA")
-            
         # Notify web clients of the subtone change
         if WEBAPI_ENABLED:
             try:
@@ -2188,11 +2248,19 @@ class MainWindow(QMainWindow):
                 
                 if self.my_satellite.rig_satmode == 1:
                     icomTrx.setVFO("Main")
+                    if RIG_TYPE == "US":
+                        icomTrx.setToneSquelchOn(0)
+                    elif RIG_TYPE == "EU":
+                        icomTrx.setToneOn(0)
                     icomTrx.setFrequency(str(int(self.my_satellite.F_RIG)))
                     icomTrx.setVFO("SUB")
                     icomTrx.setFrequency(str(int(self.my_satellite.I_RIG)))
                 else:
                     icomTrx.setVFO("VFOA")
+                    if RIG_TYPE == "US":
+                        icomTrx.setToneSquelchOn(0)
+                    elif RIG_TYPE == "EU":
+                        icomTrx.setToneOn(0)
                     icomTrx.setFrequency(str(int(self.my_satellite.F_RIG)))
                     if RX_TPX_ONLY == False:
                         icomTrx.setVFO("VFOB")
@@ -2201,7 +2269,8 @@ class MainWindow(QMainWindow):
                         icomTrx.setVFO("VFOA")
                     else:
                         icomTrx.setSplitOn(0)
-                
+        
+        
                 # Ensure that initial frequencies are always written 
                 tracking_init = 1
 
@@ -3296,26 +3365,6 @@ if WEBAPI_ENABLED or REMOTE_ENABLED:
     from lib import web_api_proxy
 
 window = MainWindow()
-apply_stylesheet(app, theme="dark_lightgreen.xml")
-tooltip_stylesheet = """
-        QToolTip {
-            color: white;
-            background-color: black;
-        }
-        QComboBox {
-            color: white;
-        }
-        QSpinBox {
-            color: white;
-        }
-        QDoubleSpinBox {
-            color: white;
-        }
-        QLineEdit {
-            color: white;
-        }
-    """
-app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
 window.show()
 
 # Proper application shutdown handling
