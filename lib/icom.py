@@ -315,7 +315,7 @@ class icom:
         elif downmode == "CW":
             interactive = True
             self.setMode("CW") 
-            doppler_thres = DOPPLER_THRES_LINEAR
+            doppler_thres = doppler_thres_linear
         else:
             logging.warning("*** Downlink mode not implemented yet: {bad}".format(bad=self.my_satellite.downmode))
             sys.exit()
