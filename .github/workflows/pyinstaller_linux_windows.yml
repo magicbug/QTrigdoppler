@@ -12,7 +12,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: windows-latest
+            name: windows
 
     steps:
       - name: Checkout repo
@@ -33,8 +37,17 @@ jobs:
         run: |
           pyinstaller --onefile QTrigdoppler.py --exclude PyQt6 --splash images/splash.jpg
 
+      - name: Prepare package
+        shell: bash
+        run: |
+          mkdir package
+          cp dist/* package/
+          cp config.ini doppler.sqf mykepler.txt package/
+          cd package
+          zip -r ../QTrigdoppler-${{ matrix.name }}.zip *
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: QTrigdoppler-${{ matrix.os }}
-          path: dist/*
+          name: QTrigdoppler-${{ matrix.name }}
+          path: QTrigdoppler-${{ matrix.name }}.zip
