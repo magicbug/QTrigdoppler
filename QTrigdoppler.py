@@ -12,7 +12,7 @@ import sys
 import math
 import time
 import re
-import urllib.request
+import requests
 import traceback
 from lib import icom
 import os
@@ -1601,7 +1601,9 @@ class MainWindow(QMainWindow):
         try:
             
             global LAST_TLE_UPDATE
-            urllib.request.urlretrieve(TLEURL, TLEFILE)
+            response = requests.get(TLEURL)
+            with open(TLEFILE, 'wb') as f:
+                f.write(response.content)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.tleupdate_stat_lbl.setText("✔ Last Update: " + LAST_TLE_UPDATE)
             self.save_settings()
@@ -1659,7 +1661,9 @@ class MainWindow(QMainWindow):
         # if we're currently tracking (startup updates shouldn't interrupt)
         try:
             global LAST_TLE_UPDATE
-            urllib.request.urlretrieve(TLEURL, TLEFILE)
+            response = requests.get(TLEURL)
+            with open(TLEFILE, 'wb') as f:
+                f.write(response.content)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE + " (auto)")
             self.save_settings()
