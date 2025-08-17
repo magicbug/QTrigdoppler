@@ -77,7 +77,7 @@ jobs:
         New-Item -ItemType Directory -Path "release/logs" -Force
         
         # Create setup instructions
-        @"
+        $content = @'
 QTrigdoppler Release Package
 ============================
 
@@ -96,7 +96,8 @@ Setup Instructions:
 3. Run QTrigdoppler-${{ github.ref_name }}.exe
 
 For detailed configuration help, see the files in the help/ directory.
-"@ | Out-File -FilePath "release/README-RELEASE.txt" -Encoding UTF8
+'@
+        $content | Out-File -FilePath "release/README-RELEASE.txt" -Encoding UTF8
     
     - name: Create ZIP archive
       run: |
