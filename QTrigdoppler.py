@@ -428,6 +428,7 @@ class MainWindow(QMainWindow):
         self.tpxtext.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
         combo_layout.addWidget(self.tpxtext)
         self.combo2 = QComboBox()
+        self.combo2.addItems(['Select Sat first...'])
         self.tpx_list_view = self.combo1.view()
         self.tpx_list_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)        
         QScroller.grabGesture(self.tpx_list_view.viewport(), QScroller.LeftMouseButtonGesture)
@@ -1545,6 +1546,14 @@ class MainWindow(QMainWindow):
             
     def sat_changed(self, satname):
         self.my_satellite.name = satname
+        
+        try:
+            text_to_remove = 'Select one...'
+            index = self.combo1.findText(text_to_remove)
+            if index != -1:
+                self.combo1.removeItem(index)
+        except:
+            pass
 
         try:
             with open(SQFILE, 'r') as h:
