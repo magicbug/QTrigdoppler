@@ -2,19 +2,56 @@
 ## Calculates the tx doppler frequency
 import ephem
 import math
+import numpy as np
 from datetime import datetime, timedelta, timezone
 import time
 C = 299792458.
 
 def tx_dopplercalc(ephemdata, freq_at_sat, myloc):
     ephemdata.compute(myloc)
-    doppler = int(freq_at_sat + ephemdata.range_velocity * freq_at_sat / C)
+    doppler = round(freq_at_sat + ephemdata.range_velocity * freq_at_sat / C)
     return doppler
 ## Calculates the rx doppler frequency
 def rx_dopplercalc(ephemdata, freq_at_sat, myloc):
     ephemdata.compute(myloc)
-    doppler = int(freq_at_sat - ephemdata.range_velocity * freq_at_sat / C)
+    doppler = round(freq_at_sat - ephemdata.range_velocity * freq_at_sat / C)
     return doppler
+
+## Predictive tx doppler calculation - predicts future doppler based on rate
+def tx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=0.25):
+    ephemdata.compute(myloc)
+    current_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
+    
+    # Calculate doppler rate by computing velocity at a small time offset
+    future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)  # Convert seconds to days
+    myloc_future = myloc.copy()
+    myloc_future.date = future_time
+    ephemdata.compute(myloc_future)
+    future_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
+    
+    # Calculate rate and predict
+    doppler_rate = (future_doppler - current_doppler) / prediction_seconds
+    predicted_doppler = current_doppler + (doppler_rate * prediction_seconds)
+    
+    return round(predicted_doppler)
+
+## Predictive rx doppler calculation - predicts future doppler based on rate  
+def rx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=0.25):
+    ephemdata.compute(myloc)
+    current_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
+    
+    # Calculate doppler rate by computing velocity at a small time offset
+    future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)  # Convert seconds to days
+    myloc_future = myloc.copy()
+    myloc_future.date = future_time
+    ephemdata.compute(myloc_future)
+    future_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
+    
+    # Calculate rate and predict
+    doppler_rate = (future_doppler - current_doppler) / prediction_seconds
+    predicted_doppler = current_doppler + (doppler_rate * prediction_seconds)
+    
+    return round(predicted_doppler)
 ## Calculates the tx doppler error   
 def tx_doppler_val_calc(ephemdata, freq_at_sat, myloc):
     ephemdata.compute(myloc)

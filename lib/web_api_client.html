@@ -324,6 +324,13 @@
                     updateTransponderDropdown(data.transponders, data.current);
                 });
                 
+                // Handle TLE update completion
+                socket.on('tle_update_complete', function(data) {
+                    logDebug('TLE update completed: ' + data.message + ' at ' + data.timestamp);
+                    // Show a temporary notification
+                    showNotification('TLE Update Complete', 'Satellite data has been refreshed successfully', 'success');
+                });
+                
                 // Handle debug info
                 socket.on('debug_info', function(data) {
                     logDebug('Received debug info:');
@@ -521,6 +528,22 @@
             
             debugArea.value += '[' + (new Date()).toLocaleTimeString() + '] ' + msg + '\n';
             debugArea.scrollTop = debugArea.scrollHeight;
+        }
+        
+        function showNotification(title, message, type) {
+            // Simple notification function - could be enhanced with a proper notification library
+            var notification = title + ': ' + message;
+            logDebug('NOTIFICATION [' + type.toUpperCase() + '] ' + notification);
+            
+            // Also show as a temporary alert-style message
+            if (type === 'success') {
+                // For now, just log it prominently - could be enhanced with toast notifications
+                console.log('✅ ' + notification);
+            } else if (type === 'error') {
+                console.log('❌ ' + notification);
+            } else {
+                console.log('ℹ️ ' + notification);
+            }
         }
         
         // Auto-refresh status every 5 seconds

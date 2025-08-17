@@ -1,0 +1,104 @@
+# QTrigdoppler Configuration File - Example
+# Copy this file to config.ini and modify values according to your setup
+
+[qth]
+# Station location coordinates (required for satellite tracking)
+latitude = 40.7128          # Your station latitude in decimal degrees
+longitude = -74.0060        # Your station longitude in decimal degrees
+altitude = 100.0            # Your station altitude in meters above sea level
+# Radio tuning steps
+step_rx = 1                 # RX frequency step in Hz (used for fine tuning)
+step_tx = 1                 # TX frequency step in Hz (NOT CURRENTLY USED)
+# Maximum frequency offsets for doppler compensation
+max_offset_rx = 5000        # Maximum RX offset in Hz
+max_offset_tx = 5000        # Maximum TX offset in Hz (NOT CURRENTLY USED)
+# GPS integration (optional)
+gps_port = COM3             # GPS serial port for automatic coordinate updates
+
+[satellite]
+# Satellite data files and URLs
+tle_file = mykepler.txt                    # Local TLE (Two-Line Element) file
+tle_url = https://tle.oscarwatch.org/      # URL for TLE updates
+amsatnames = AmsatNames.txt                # AMSAT names file (NOT CURRENTLY USED)
+sqffile = doppler.sqf                      # Satellite frequency file
+# Doppler shift thresholds for different modes
+doppler_threshold_fm = 200                 # FM mode doppler threshold in Hz
+doppler_threshold_linear = 50              # Linear transponder threshold in Hz
+predictive_doppler = False                  # Enable predictive doppler for linear satellites
+
+[icom]
+# Radio configuration for Icom transceivers
+radio = 910                     # Icom radio model number
+cviaddress = 60                 # CI-V address (hex)
+fullmode = False                # Enable full mode control (True/False)
+serialport = /dev/ttyUSB0       # Serial port (Linux: /dev/ttyUSB0, Windows: COM1)
+rig_type = EU                   # Rig type (EU/US/JP for frequency ranges)
+
+[misc]
+# Miscellaneous application settings
+display_map = False                    # Show satellite map (True/False)
+last_tle_update = 2025-01-01 00:00:00  # Last TLE update timestamp (auto-managed)
+tle_update_interval = 86400            # TLE update interval in seconds (86400 = 24 hours)
+auto_tle_startup = False               # Auto-update TLE on startup
+auto_tle_interval_enabled = False      # Enable periodic TLE updates
+auto_tle_interval_hours = 24           # Hours between automatic TLE updates
+voice_announcement = False             # Voice announcements (NOT CURRENTLY USED)
+
+[logging]
+# Application logging configuration
+level = INFO                           # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_to_file = True                     # Enable file logging (True/False)
+log_file = logs/qtrigdoppler.log       # Log file path (relative to app directory)
+max_file_size_mb = 10                  # Max log file size before rotation (MB)
+backup_count = 5                       # Number of backup log files to keep
+console_output = False                 # Show logs in console (True/False)
+
+[web_api]
+# Web API server configuration
+enabled = False                        # Enable web API server (True/False)
+port = 5000                           # Web API server port
+debug = False                         # Enable debug mode (True/False)
+
+[remote_server]
+# Remote server connectivity
+enable = False                               # Enable remote server connection (True/False)
+url = http://your-server.com:5001           # Remote server URL
+port = 5001                                 # Remote server port
+debug = False                               # Enable debug mode (True/False)
+
+[offset_profiles]
+# Predefined frequency offset profiles for specific satellites/transponders
+# Format: satellite_name,transponder_name,rx_offset,tx_offset
+satoffset1 = IO-117,Digipeater,-550,-550
+satoffset2 = MESAT-1,TPX,1400,0
+satoffset3 = JO-97,SSB Transponder,0,-2000
+satoffset4 = RS-44,SSB Transponder #rig1,-500,0
+
+[rotator]
+# Antenna rotator configuration
+enabled = False                        # Enable rotator control (True/False)
+serial_port = COM4                     # Rotator serial port
+baudrate = 4800                       # Serial communication baud rate
+az_park = 0                           # Parking azimuth position (degrees)
+el_park = 0                           # Parking elevation position (degrees)
+az_min = 0                            # Minimum azimuth limit (degrees)
+az_max = 450                          # Maximum azimuth limit (degrees, >360 allows overlap)
+el_min = 0                            # Minimum elevation limit (degrees)
+el_max = 180                          # Maximum elevation limit (degrees)
+min_elevation = 5                     # Minimum elevation for tracking (degrees)
+
+[Cloudlog]
+# Cloudlog/Wavelog integration for automatic logging
+enabled = False                            # Enable Cloudlog integration (True/False)
+api_key = YOUR_API_KEY_HERE               # Your Cloudlog/Wavelog API key
+url = https://your.cloudlog.site          # Your Cloudlog/Wavelog base URL
+
+[passrecording]
+# Automatic pass recording configuration
+enabled = False                            # Enable pass recording (True/False)
+soundcard = default                        # Audio input device (name or 'default')
+save_dir = ./recordings                    # Directory to save recordings
+min_elevation = 10.0                       # Minimum elevation to start recording (degrees)
+sample_rate = 44100                        # Audio sample rate (Hz)
+channels = 1                               # Number of audio channels (1=mono, 2=stereo)
+bit_depth = 16                             # Audio bit depth (8, 16, 24, 32)

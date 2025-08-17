@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import logging
+from datetime import datetime
 
 flask_app = Flask(__name__)
 socketio = SocketIO(flask_app, cors_allowed_origins="*")
@@ -52,6 +53,24 @@ def run_on_ui_thread(func, *args, **kwargs):
         timer = QTimer()
         timer.timeout.connect(callback)
         timer.setSingleShot(True)
+        
+        # Ensure timer is properly cleaned up after use
+        def cleanup_callback():
+            try:
+                result_container['result'] = func(*args, **kwargs)
+                result_container['completed'] = True
+            except Exception as e:
+                result_container['error'] = str(e)
+                result_container['completed'] = True
+                print(f"Error in UI thread callback: {e}")
+                import traceback
+                traceback.print_exc()
+            finally:
+                # Clean up the timer to prevent memory leaks
+                timer.deleteLater()
+        
+        timer.timeout.disconnect()  # Clear any existing connections
+        timer.timeout.connect(cleanup_callback)
         timer.start(0)  # 0 ms = run as soon as possible
         
         # Wait for a reasonable time for the operation to complete
@@ -835,4 +854,35 @@ def load_satellite_list():
         satellite_list_cache = []
 
 def refresh_satellite_list():
-    load_satellite_list() 
+    load_satellite_list()
+
+def broadcast_satellite_list_update():
+    """Broadcast updated satellite list to all connected web clients"""
+    try:
+        # Reload satellite list from file
+        refresh_satellite_list()
+        
+        # Get current satellite selection
+        current_sat = None
+        if main_window and hasattr(main_window, 'my_satellite'):
+            current_sat = main_window.my_satellite.name
+            
+        # Broadcast the updated list to all clients
+        safe_emit('satellite_list', {
+            'satellites': satellite_list_cache if satellite_list_cache is not None else [],
+            'current': current_sat
+        })
+        print(f"Broadcasted updated satellite list to all web clients")
+    except Exception as e:
+        print(f"Error broadcasting satellite list update: {e}")
+
+def broadcast_tle_update_complete():
+    """Notify all web clients that TLE update is complete"""
+    try:
+        safe_emit('tle_update_complete', {
+            'message': 'TLE data has been updated successfully',
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+        print("Broadcasted TLE update completion to all web clients")
+    except Exception as e:
+        print(f"Error broadcasting TLE update completion: {e}") 

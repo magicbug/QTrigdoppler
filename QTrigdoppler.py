@@ -32,13 +32,108 @@ from lib.pass_recorder import PassRecorder
 import sounddevice as sd
 from lib import rotator
 from lib.sat_utils import *
-from lib.logbook_connector import *
+# logbook_connector import moved to after QApplication creation to avoid Qt object creation before app init
 import pynmea2
 import serial
-from lib.gps_reader import GPSReader
+# GPSReader import moved to after QApplication creation to avoid Qt object creation before app init
 
-# Set logging level back to WARNING
-logging.basicConfig(level = logging.WARNING)
+# Configure logging - need to do this before importing config to avoid issues
+import logging.handlers
+import os
+
+def setup_logging():
+    """Set up logging configuration from config file"""
+    # Default logging settings (used if config file is not available)
+    default_level = logging.INFO
+    default_log_to_file = True
+    default_log_file = 'logs/qtrigdoppler.log'
+    default_max_size_mb = 10
+    default_backup_count = 5
+    default_console_output = False
+    
+    try:
+        # Try to read logging config from config.ini
+        from configparser import ConfigParser
+        config = ConfigParser()
+        config.read('config.ini')
+        
+        if config.has_section('logging'):
+            log_level_str = config.get('logging', 'level', fallback='INFO')
+            log_to_file = config.getboolean('logging', 'log_to_file', fallback=True)
+            log_file = config.get('logging', 'log_file', fallback='logs/qtrigdoppler.log')
+            max_size_mb = config.getint('logging', 'max_file_size_mb', fallback=10)
+            backup_count = config.getint('logging', 'backup_count', fallback=5)
+            console_output = config.getboolean('logging', 'console_output', fallback=False)
+        else:
+            # Use defaults if no logging section
+            log_level_str = 'INFO'
+            log_to_file = default_log_to_file
+            log_file = default_log_file
+            max_size_mb = default_max_size_mb
+            backup_count = default_backup_count
+            console_output = default_console_output
+            
+        # Convert log level string to logging constant
+        log_level = getattr(logging, log_level_str.upper(), logging.INFO)
+        
+    except Exception:
+        # If config reading fails, use defaults
+        log_level = default_level
+        log_to_file = default_log_to_file
+        log_file = default_log_file
+        max_size_mb = default_max_size_mb
+        backup_count = default_backup_count
+        console_output = default_console_output
+    
+    # Clear any existing handlers
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    
+    handlers = []
+    
+    # Set up file logging if enabled
+    if log_to_file:
+        # Create logs directory if it doesn't exist
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        # Create rotating file handler
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_file, maxBytes=max_size_mb*1024*1024, backupCount=backup_count
+        )
+        file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        handlers.append(file_handler)
+    
+    # Set up console logging
+    console_handler = logging.StreamHandler()
+    if console_output:
+        # Show all logs in console if enabled
+        console_handler.setLevel(log_level)
+    else:
+        # Only show ERROR and CRITICAL in console
+        console_handler.setLevel(logging.ERROR)
+    console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+    handlers.append(console_handler)
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=log_level,
+        handlers=handlers,
+        force=True  # Force reconfiguration if already configured
+    )
+    
+    return log_file, log_level
+
+# Set up logging
+log_file_path, log_level = setup_logging()
+
+# Log startup message
+logging.info("=" * 50)
+logging.info("QTrigdoppler starting up")
+logging.info(f"Logging configured - Level: {logging.getLevelName(log_level)}, File: {log_file_path}")
+logging.info("=" * 50)
 
 ### Read config and import additional libraries if needed
 # parsing config file
@@ -61,6 +156,7 @@ TLEFILE = configur.get('satellite','tle_file')
 TLEURL = configur.get('satellite','tle_url')
 DOPPLER_THRES_FM = configur.get('satellite', 'doppler_threshold_fm',fallback=200)
 DOPPLER_THRES_LINEAR = configur.get('satellite', 'doppler_threshold_linear',fallback=20)
+PREDICTIVE_DOPPLER = configur.getboolean('satellite', 'predictive_doppler', fallback=True)
 SQFILE = configur.get('satellite','sqffile')
 RADIO = configur.get('icom','radio')
 CVIADDR = configur.get('icom','cviaddress')
@@ -68,7 +164,10 @@ RIG_SERIAL_PORT = configur.get('icom', 'serialport')
 RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
+AUTO_TLE_STARTUP = configur.getboolean('misc', 'auto_tle_startup', fallback=False)
 TLE_UPDATE_STARTUP = configur.getboolean('misc', 'tle_update_startup', fallback=False)
+AUTO_TLE_INTERVAL_ENABLED = configur.getboolean('misc', 'auto_tle_interval_enabled', fallback=False)
+AUTO_TLE_INTERVAL_HOURS = configur.getint('misc', 'auto_tle_interval_hours', fallback=24)
 STYLESHEET = configur.get('misc', 'stylesheet',fallback="dark_lightgreen.xml")
 
 # Rotator config
@@ -111,7 +210,15 @@ elif configur.get('icom', 'fullmode') == "False":
     OPMODE = False
 if configur.get('misc', 'display_map') == "True":
     DISPLAY_MAP = True
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    # Set matplotlib to use a backend compatible with PySide6
+    import matplotlib
+    matplotlib.use('Qt5Agg')  # This actually works with PySide6
+    
+    # Set Qt API to use PySide6 before importing the backend
+    import os
+    os.environ['QT_API'] = 'PySide6'
+    
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
     import matplotlib.pyplot as plt
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
@@ -127,7 +234,7 @@ if configur.has_section('remote_server') and configur.getboolean('remote_server'
 
 if WEBAPI_ENABLED or REMOTE_ENABLED:
     from lib import web_api  # Import the web API module
-    from lib import web_api_proxy
+    # web_api_proxy import moved to after QApplication creation
 
 ### Global constants
 subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
@@ -257,7 +364,8 @@ class MainWindow(QMainWindow):
         if '_PYI_SPLASH_IPC' in os.environ:
             import pyi_splash
             pyi_splash.update_text('UI Loaded ...')
-            pyi_splash.close()
+            # Delay splash close to after main window is fully initialized
+            QTimer.singleShot(100, pyi_splash.close)
         
         ### All of this should be moved to a global settings struct ....
         global LATITUDE
@@ -294,8 +402,25 @@ class MainWindow(QMainWindow):
             
             # Start with lower priority if possible
             self.web_api_thread.start()
-            
-            # Attempt to set thread priority lower (platform-specific)
+        
+        # Initialize auto TLE update functionality
+        # Use a timer to delay startup auto-update to avoid interference with initialization
+        if AUTO_TLE_STARTUP:
+            QTimer.singleShot(5000, self.startup_auto_update_tle)  # 5 second delay
+            logging.info("Startup TLE auto-update scheduled")
+        
+        # Initialize auto TLE update timer if enabled
+        QTimer.singleShot(1000, self.update_auto_tle_timer)  # 1 second delay to ensure GUI is ready
+        
+        # Remote client registration (if enabled)
+        if REMOTE_ENABLED:
+            try:
+                remote_client.register_window(self)
+            except Exception as e:
+                logging.error(f"Error registering with remote client: {e}")
+                
+        # Attempt to set thread priority lower (platform-specific)
+        if WEBAPI_ENABLED:
             try:
                 import platform
                 if platform.system() == 'Windows':
@@ -693,8 +818,8 @@ class MainWindow(QMainWindow):
             self.recording_text_label = QLabel("Recording:")
             self.recording_status_label = QLabel("✘")
             self.recording_status_label.setStyleSheet("QLabel{font-size: 12pt; font-weight: bold; color: red}")
-            log_rig_status_layout.addWidget(self.recording_text_label,2,0)
-            log_rig_status_layout.addWidget(self.recording_status_label,2,1)
+            log_rig_status_layout.addWidget(self.recording_text_label,2,0,alignment=Qt.AlignCenter)
+            log_rig_status_layout.addWidget(self.recording_status_label,2,1,alignment=Qt.AlignCenter)
         
         self.log_layout_vline_right = QFrame()
         self.log_layout_vline_right.setFrameShape(QFrame.VLine)
@@ -885,6 +1010,11 @@ class MainWindow(QMainWindow):
         self.doppler_linear_threshold.setText(str(DOPPLER_THRES_LINEAR))
         radio_settings_layout.addWidget(self.doppler_linear_threshold, 7, 1)
         
+        # Predictive doppler checkbox
+        self.predictive_doppler_checkbox = QCheckBox("Enable predictive doppler for linear satellites")
+        self.predictive_doppler_checkbox.setChecked(PREDICTIVE_DOPPLER)
+        radio_settings_layout.addWidget(self.predictive_doppler_checkbox, 8, 0, 1, 2)
+        
         #self.settings_radio_box.setLayout(radio_settings_layout)
         self.radio_settings_layout_scroller_widget.setLayout(radio_settings_layout)
         self.radio_settings_layout_scroller.setWidget(self.radio_settings_layout_scroller_widget)
@@ -926,26 +1056,52 @@ class MainWindow(QMainWindow):
         self.satsqf.setText(SQFILE)
         files_settings_layout.addWidget(self.satsqf, 2, 1)
         
-        self.update_tle_startup_label = QLabel("Update  TLE on startup:")
-        files_settings_layout.addWidget(self.update_tle_startup_label, 3, 0)
+
+        # Auto-update TLE settings
+        self.auto_tle_startup_checkbox = QCheckBox("Auto-update TLE on startup")
+        files_settings_layout.addWidget(self.auto_tle_startup_checkbox, 3, 0, 1, 2)
         
-        self.update_tle_startup_button = QCheckBox()
-        files_settings_layout.addWidget(self.update_tle_startup_button, 3, 1)
-        if TLE_UPDATE_STARTUP == True:
-            self.update_tle_startup_button.setChecked(1)
-        elif TLE_UPDATE_STARTUP == False:
-            self.update_tle_startup_button.setChecked(0)
+        self.auto_tle_interval_checkbox = QCheckBox("Auto-update TLE every:")
+        files_settings_layout.addWidget(self.auto_tle_interval_checkbox, 4, 0)
+        
+        # Interval selection layout
+        interval_layout = QHBoxLayout()
+        self.auto_tle_interval_spinbox = QSpinBox()
+        self.auto_tle_interval_spinbox.setMinimum(1)
+        self.auto_tle_interval_spinbox.setMaximum(168)  # Max 1 week
+        self.auto_tle_interval_spinbox.setValue(24)     # Default 24 hours
+        self.auto_tle_interval_spinbox.setSuffix(" hours")
+        interval_layout.addWidget(self.auto_tle_interval_spinbox)
+        interval_layout.addStretch()
+        
+        interval_widget = QWidget()
+        interval_widget.setLayout(interval_layout)
+        files_settings_layout.addWidget(interval_widget, 4, 1)
+        
+        # Connect signals
+        self.auto_tle_interval_checkbox.toggled.connect(self.auto_tle_interval_spinbox.setEnabled)
+        self.auto_tle_interval_checkbox.toggled.connect(self.update_auto_tle_timer)
+        self.auto_tle_interval_spinbox.valueChanged.connect(self.update_auto_tle_timer)
+        
+        # Initialize controls with config values
+        self.auto_tle_startup_checkbox.setChecked(AUTO_TLE_STARTUP)
+        self.auto_tle_interval_checkbox.setChecked(AUTO_TLE_INTERVAL_ENABLED)
+        self.auto_tle_interval_spinbox.setValue(AUTO_TLE_INTERVAL_HOURS)
+        
+        # Initially disable spinbox if checkbox is unchecked
+        self.auto_tle_interval_spinbox.setEnabled(self.auto_tle_interval_checkbox.isChecked())
         
         self.UpdateTLEButton = QPushButton("Update TLE")
         self.UpdateTLEButton.clicked.connect(self.update_tle_file)
-        files_settings_layout.addWidget(self.UpdateTLEButton, 4,0, 1, 2)
+        files_settings_layout.addWidget(self.UpdateTLEButton, 5, 0, 1, 2)
         self.UpdateTLEButton.setEnabled(True)
-        
+  
         self.tleupdate_stat_lbl = QLabel(str(LAST_TLE_UPDATE))
         self.tleupdate_stat_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.tleupdate_stat_lbl.setAlignment(Qt.AlignCenter)
-        files_settings_layout.addWidget(self.tleupdate_stat_lbl, 5, 0, 1, 2)
+        files_settings_layout.addWidget(self.tleupdate_stat_lbl, 6, 0, 1, 2)
         
+
         
         self.settings_file_box.setLayout(files_settings_layout)
         
@@ -1339,6 +1495,7 @@ class MainWindow(QMainWindow):
         global MAX_OFFSET_RX
         global DOPPLER_THRES_FM
         global DOPPLER_THRES_LINEAR
+        global PREDICTIVE_DOPPLER
         global TLEFILE
         global TLEURL
         global SQFILE
@@ -1372,13 +1529,15 @@ class MainWindow(QMainWindow):
         TLEFILE = configur['satellite']['tle_file'] = str(self.sattle.displayText())
         TLEURL =  configur['satellite']['tle_url'] = str(self.sattleurl.displayText())
         SQFILE = configur['satellite']['sqffile'] = str(self.satsqf.displayText())
-        TLE_UPDATE_STARTUP = self.update_tle_startup_button.isChecked()
+        TLE_UPDATE_STARTUP = self.auto_tle_startup_checkbox.isChecked()
         configur['misc']['tle_update_startup'] = str(TLE_UPDATE_STARTUP)
         
         DOPPLER_THRES_FM = int(self.doppler_fm_threshold.displayText())
         configur['satellite']['doppler_threshold_fm'] = str(int(DOPPLER_THRES_FM))
         DOPPLER_THRES_LINEAR = int(self.doppler_linear_threshold.displayText())
         configur['satellite']['doppler_threshold_linear'] = str(int(DOPPLER_THRES_LINEAR))
+        PREDICTIVE_DOPPLER = self.predictive_doppler_checkbox.isChecked()
+        configur['satellite']['predictive_doppler'] = str(PREDICTIVE_DOPPLER)
         
         if self.radiolistcomb.currentText() == "Icom 9700":
             RADIO = configur['icom']['radio'] = '9700'
@@ -1411,8 +1570,11 @@ class MainWindow(QMainWindow):
             configur['offset_profiles']["satoffset"+str(num_offsets+1)] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
             offset_stored = True
         
-        # Save TLE update
+        # Save TLE update settings
         configur['misc']['last_tle_update'] = LAST_TLE_UPDATE
+        configur['misc']['auto_tle_startup'] = str(self.auto_tle_startup_checkbox.isChecked())
+        configur['misc']['auto_tle_interval_enabled'] = str(self.auto_tle_interval_checkbox.isChecked())
+        configur['misc']['auto_tle_interval_hours'] = str(self.auto_tle_interval_spinbox.value())
         
         ROTATOR_ENABLED = self.rotator_enable_button.isChecked()
         configur['rotator']['enabled'] = str(ROTATOR_ENABLED)
@@ -1537,12 +1699,101 @@ class MainWindow(QMainWindow):
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.tleupdate_stat_lbl.setText("✔ Last Update: " + LAST_TLE_UPDATE)
             self.save_settings()
+            
+            # Refresh satellite dropdown with updated data
+            self.refresh_satellite_dropdown()
+            
+            # Refresh web API satellite list cache and notify clients
+            if WEBAPI_ENABLED:
+                try:
+                    web_api.broadcast_satellite_list_update()
+                    web_api.broadcast_tle_update_complete()
+                except Exception as e:
+                    logging.error(f"Error broadcasting TLE update to web clients: {e}")
+            
+            # Reload current satellite TLE data if one is selected
             if self.my_satellite.name != '':
                 self.sat_changed(self.my_satellite.name)
+                
+            logging.info("TLE update completed successfully - satellite data refreshed without restart")
+            
         except Exception as e:
             logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             logging.error(e)
             self.tleupdate_stat_lbl.setText("❌ Last Update failed")
+    
+    def update_auto_tle_timer(self):
+        """Update the automatic TLE update timer based on current settings"""
+        # Stop existing timer if running
+        if hasattr(self, 'auto_tle_timer'):
+            self.auto_tle_timer.stop()
+            
+        # Start new timer if interval updates are enabled
+        if self.auto_tle_interval_checkbox.isChecked():
+            if not hasattr(self, 'auto_tle_timer'):
+                self.auto_tle_timer = QTimer()
+                self.auto_tle_timer.timeout.connect(self.auto_update_tle)
+                
+            # Convert hours to milliseconds
+            interval_ms = self.auto_tle_interval_spinbox.value() * 60 * 60 * 1000
+            self.auto_tle_timer.start(interval_ms)
+            logging.info(f"Auto TLE update timer started: every {self.auto_tle_interval_spinbox.value()} hours")
+        else:
+            logging.info("Auto TLE update timer stopped")
+    
+    def auto_update_tle(self):
+        """Automatically update TLE - called by timer or at startup"""
+        logging.info("Starting automatic TLE update...")
+        
+        # Update the status label to show it's an automatic update
+        original_text = self.tleupdate_stat_lbl.text()
+        self.tleupdate_stat_lbl.setText("🔄 Updating...")
+        
+        # Use the existing update_tle_file method but don't stop tracking
+        # if we're currently tracking (startup updates shouldn't interrupt)
+        try:
+            global LAST_TLE_UPDATE
+            urllib.request.urlretrieve(TLEURL, TLEFILE)
+            LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE + " (auto)")
+            self.save_settings()
+            
+            # Refresh satellite dropdown with updated data
+            self.refresh_satellite_dropdown()
+            
+            # Refresh web API satellite list cache and notify clients
+            if WEBAPI_ENABLED:
+                try:
+                    web_api.broadcast_satellite_list_update()
+                    web_api.broadcast_tle_update_complete()
+                except Exception as e:
+                    logging.error(f"Error broadcasting auto TLE update to web clients: {e}")
+            
+            # Reload current satellite TLE data if one is selected (without stopping tracking)
+            if self.my_satellite.name != '':
+                # Store current tracking state
+                was_tracking = hasattr(self, 'timer') and self.timer.isActive()
+                
+                # Update satellite data
+                self.sat_changed(self.my_satellite.name)
+                
+                # If we were tracking, we don't need to restart as sat_changed doesn't stop it
+                # during auto updates (unlike manual updates)
+                
+            logging.info("Automatic TLE update completed successfully")
+            
+        except Exception as e:
+            logging.error(f"Automatic TLE update failed: {e}")
+            self.tleupdate_stat_lbl.setText("❌ Auto update failed")
+    
+    def startup_auto_update_tle(self):
+        """Perform TLE update at startup if enabled"""
+        if self.auto_tle_startup_checkbox.isChecked():
+            logging.info("Performing startup TLE auto-update...")
+            self.auto_update_tle()
+        else:
+            logging.debug("Startup TLE auto-update is disabled")
+
             
     def sat_changed(self, satname):
         self.my_satellite.name = satname
@@ -1583,6 +1834,77 @@ class MainWindow(QMainWindow):
                 web_api.broadcast_satellite_change(satname)
             except Exception as e:
                 logging.error(f"Error broadcasting satellite change to web clients: {e}")
+    
+    def refresh_satellite_dropdown(self):
+        """Refresh the satellite dropdown with current data from SQF file"""
+        try:
+            # Store current selection
+            current_selection = self.combo1.currentText()
+            current_index = self.combo1.currentIndex()
+            
+            # Block signals to prevent triggering sat_changed during refresh
+            self.combo1.blockSignals(True)
+            
+            # Clear current items
+            self.combo1.clear()
+            
+            # Reload satellite list from SQF file
+            import re
+            satlist = []
+            with open(SQFILE, 'r') as h:
+                sqfdata = h.readlines() 
+                for line in sqfdata:
+                    # Skip comment lines
+                    if line.strip().startswith(';'):
+                        continue
+                        
+                    if ',' in line:
+                        newitem = str(line.split(",")[0].strip())
+                        if newitem:
+                            satlist.append(newitem)
+            
+            # Remove duplicates while preserving order
+            unique_satlist = []
+            for sat in satlist:
+                if sat not in unique_satlist:
+                    unique_satlist.append(sat)
+            
+            # Sort satellite list using the same logic as initial load
+            def sat_sort_key(name):
+                # Extract prefix and number for sorting (e.g., "AO-73" -> ("AO", 73))
+                match = re.match(r'([A-Za-z\-]+)(\d+)', name)
+                if match:
+                    prefix, num = match.groups()
+                    return (prefix, int(num))
+                return (name, 0)
+            
+            unique_satlist.sort(key=sat_sort_key)
+            
+            # Add items back
+            self.combo1.addItem('Select one...')
+            self.combo1.addItems(unique_satlist)
+            
+            # Restore selection if it still exists
+            if current_selection and current_selection != 'Select one...':
+                for i in range(self.combo1.count()):
+                    if self.combo1.itemText(i) == current_selection:
+                        self.combo1.setCurrentIndex(i)
+                        break
+                else:
+                    # Selection no longer exists, reset to first item
+                    self.combo1.setCurrentIndex(0)
+            else:
+                self.combo1.setCurrentIndex(current_index if current_index < self.combo1.count() else 0)
+            
+            # Re-enable signals
+            self.combo1.blockSignals(False)
+            
+            logging.info(f"Satellite dropdown refreshed with {len(unique_satlist)} satellites")
+            
+        except Exception as e:
+            logging.error(f"Error refreshing satellite dropdown: {e}")
+            # Re-enable signals even if there was an error
+            self.combo1.blockSignals(False)
                 
     def tpx_changed(self, tpxname):
         global f_cal
@@ -1886,7 +2208,18 @@ class MainWindow(QMainWindow):
                 if RADIO == "910":
                     # Testing current satmode config for V/U or U/V and swapping if needed
                     icomTrx.setVFO("Main")
-                    curr_band = int(icomTrx.getFrequency())
+                    freq_str = icomTrx.getFrequency()
+                    try:
+                        # Handle case where getFrequency returns hex error codes like 'FD'
+                        if freq_str and freq_str.isdigit():
+                            curr_band = int(freq_str)
+                        else:
+                            logging.warning(f"ICOM getFrequency returned non-numeric value: {freq_str}, skipping band check")
+                            curr_band = 0  # Default value, will not trigger exchange
+                    except (ValueError, TypeError) as e:
+                        logging.warning(f"Error parsing ICOM frequency '{freq_str}': {e}, skipping band check")
+                        curr_band = 0  # Default value, will not trigger exchange
+                    
                     if curr_band > 400000000 and self.my_satellite.F_RIG < 400000000:
                         icomTrx.setExchange()
                     elif curr_band < 200000000 and self.my_satellite.F_RIG > 200000000:
@@ -1998,7 +2331,24 @@ class MainWindow(QMainWindow):
                                             
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
-                            new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc))
+                            # Use predictive doppler for linear satellites if enabled, especially around TCA
+                            if self.my_satellite.downmode in ["USB", "LSB", "CW"] and PREDICTIVE_DOPPLER:
+                                # Calculate current doppler rate to determine prediction time
+                                current_doppler_rate = abs(self.my_satellite.down_doppler_rate) if hasattr(self.my_satellite, 'down_doppler_rate') else 0
+                                
+                                # Use more prediction when doppler rate is high (around TCA)
+                                if current_doppler_rate > 200:  # High rate - likely near TCA
+                                    prediction_time = 0.4  # 400ms prediction
+                                elif current_doppler_rate > 100:  # Moderate rate  
+                                    prediction_time = 0.25  # 250ms prediction
+                                else:
+                                    prediction_time = 0.15  # 150ms prediction for normal tracking
+                                
+                                new_rx_doppler = rx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc, prediction_time)
+                            else:
+                                # Use standard calculation for FM satellites or when predictive doppler is disabled
+                                new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc))
+                                
                             if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
@@ -2009,7 +2359,23 @@ class MainWindow(QMainWindow):
                                 icomTrx.setFrequency(str(rx_doppler))
                                 self.my_satellite.F_RIG = rx_doppler
                         
-                            new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc))
+                            # Apply predictive correction to TX as well for linear satellites
+                            if self.my_satellite.upmode in ["USB", "LSB", "CW"]:
+                                # Use same prediction time as RX
+                                current_doppler_rate = abs(self.my_satellite.up_doppler_rate) if hasattr(self.my_satellite, 'up_doppler_rate') else 0
+                                
+                                if current_doppler_rate > 200:  # High rate - likely near TCA
+                                    prediction_time = 0.4  # 400ms prediction
+                                elif current_doppler_rate > 100:  # Moderate rate
+                                    prediction_time = 0.25  # 250ms prediction  
+                                else:
+                                    prediction_time = 0.15  # 150ms prediction for normal tracking
+                                    
+                                new_tx_doppler = tx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.I, myloc, prediction_time)
+                            else:
+                                # Use standard calculation for FM satellites
+                                new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc))
+                                
                             if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres:
                                 tx_doppler = new_tx_doppler
                                 if self.my_satellite.rig_satmode == 1:
@@ -2044,8 +2410,25 @@ class MainWindow(QMainWindow):
                             time.sleep(FM_update_time) # Slower update rate on FM, max on linear sats
                             
                     else:
-                        new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
-                        new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
+                        # Non-interactive mode for linear satellites (SSB packet, etc.)
+                        # Use predictive doppler for better TCA tracking if enabled
+                        if self.my_satellite.downmode in ["USB", "LSB", "CW"] and PREDICTIVE_DOPPLER:
+                            # Calculate prediction time based on doppler rate  
+                            current_doppler_rate = abs(self.my_satellite.down_doppler_rate) if hasattr(self.my_satellite, 'down_doppler_rate') else 0
+                            
+                            if current_doppler_rate > 200:  # High rate - likely near TCA
+                                prediction_time = 0.3  # 300ms prediction for non-interactive
+                            elif current_doppler_rate > 100:  # Moderate rate
+                                prediction_time = 0.2  # 200ms prediction
+                            else:
+                                prediction_time = 0.1  # 100ms prediction for normal tracking
+                                
+                            new_rx_doppler = rx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc, prediction_time)
+                            new_tx_doppler = tx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.I, myloc, prediction_time)
+                        else:
+                            # Standard calculation for FM or other modes, or when predictive doppler is disabled
+                            new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
+                            new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
                         # 0 = PTT is pressed
                         # 1 = PTT is released
                         ptt_state_old = ptt_state
@@ -2071,9 +2454,19 @@ class MainWindow(QMainWindow):
                     #print("Ups:" +str(1000000/c.microseconds))  
                     
 
-        except:
-            logging.critical("Failed to open ICOM rig")
-            sys.exit()
+        except Exception as e:
+            global RIG_CONNECTED
+            RIG_CONNECTED = False
+            logging.critical(f"ICOM rig communication error: {e}")
+            logging.warning("Rig connection lost, attempting to reconnect...")
+            
+            # Try to reconnect
+            reconnected = self.attempt_icom_reconnection()
+            if not reconnected:
+                logging.warning("Reconnection failed, continuing in offline mode")
+            
+            # Don't call sys.exit() - let the GUI continue and allow reconnection
+            return
     
     def recurring_utc_clock_timer(self):
         date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
@@ -2084,9 +2477,21 @@ class MainWindow(QMainWindow):
         if icomTrx.is_connected():
             self.log_rig_state_val.setText("✔")
             self.log_rig_state_val.setStyleSheet('color: green')
+            # Reset reconnection counter when connected
+            self._reconnect_counter = 0
         else:
             self.log_rig_state_val.setText("✘")
             self.log_rig_state_val.setStyleSheet('color: red')
+            
+            # Attempt reconnection every 30 seconds (timer runs every ~2 seconds)
+            if not hasattr(self, '_reconnect_counter'):
+                self._reconnect_counter = 0
+            self._reconnect_counter += 1
+            
+            if self._reconnect_counter >= 15:  # 15 * 2 seconds = 30 seconds
+                self._reconnect_counter = 0
+                logging.info("Attempting periodic ICOM reconnection...")
+                self.attempt_icom_reconnection()
             
     
     def recurring_timer(self):
@@ -2094,17 +2499,28 @@ class MainWindow(QMainWindow):
             date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
             myloc.date = ephem.Date(date_val)
             
+            # ★ SINGLE ORBITAL COMPUTATION ★ - replaces 7-10 individual compute calls
+            self.my_satellite.tledata.compute(myloc)
             
+            # Doppler calculations using direct property access (no additional compute calls)
             self.my_satellite.down_doppler_old = self.my_satellite.down_doppler
-            self.my_satellite.down_doppler = float(rx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.F, myloc))
+            # Match original rx_doppler_val_calc format: format(..., '.2f') then convert to float
+            rx_doppler_raw = -self.my_satellite.tledata.range_velocity * self.my_satellite.F / C
+            self.my_satellite.down_doppler = float(format(rx_doppler_raw, '.2f'))
             self.my_satellite.down_doppler_rate = ((self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2)/0.2
-            if abs(self.my_satellite.down_doppler_rate) > 100.0:
+            # Use higher rate limit for linear satellites (USB, LSB, CW) as they have legitimate high doppler rates at TCA
+            max_doppler_rate = 1000.0 if self.my_satellite.downmode in ["USB", "LSB", "CW"] else 100.0
+            if abs(self.my_satellite.down_doppler_rate) > max_doppler_rate:
                 self.my_satellite.down_doppler_rate = 0.0
                 
             self.my_satellite.up_doppler_old = self.my_satellite.up_doppler
-            self.my_satellite.up_doppler = float(tx_doppler_val_calc(self.my_satellite.tledata,self.my_satellite.I, myloc))
+            # Match original tx_doppler_val_calc format: format(..., '.2f') then convert to float
+            tx_doppler_raw = self.my_satellite.tledata.range_velocity * self.my_satellite.I / C
+            self.my_satellite.up_doppler = float(format(tx_doppler_raw, '.2f'))
             self.my_satellite.up_doppler_rate = ((self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2)/0.2
-            if abs(self.my_satellite.up_doppler_rate) > 100.0:
+            # Use higher rate limit for linear satellites (USB, LSB, CW) as they have legitimate high doppler rates at TCA
+            max_uplink_rate = 1000.0 if self.my_satellite.upmode in ["USB", "LSB", "CW"] else 100.0
+            if abs(self.my_satellite.up_doppler_rate) > max_uplink_rate:
                 self.my_satellite.up_doppler_rate = 0.0
                 
             self.rxdoppler_val.setText(str('{:,}'.format(self.my_satellite.down_doppler)) + " Hz")
@@ -2115,30 +2531,37 @@ class MainWindow(QMainWindow):
             self.rxfreq_onsat.setText(str('{:,}'.format(self.my_satellite.F))+ " Hz")
             self.txfreq.setText(str('{:,}'.format(self.my_satellite.I_RIG))+ " Hz")
             self.txfreq_onsat.setText(str('{:,}'.format(self.my_satellite.I))+ " Hz")
-            self.log_sat_status_ele_val.setText(str(sat_ele_calc(self.my_satellite.tledata, myloc)) + " °")
-            self.log_sat_status_azi_val.setText(str(sat_azi_calc(self.my_satellite.tledata, myloc)) + " °")
-            self.log_sat_status_height_val.setText(str(sat_height_calc(self.my_satellite.tledata, myloc)) + " km")
-            self.log_sat_status_illumintated_val.setText(sat_eclipse_calc(self.my_satellite.tledata, myloc))
+            
+            # All satellite position data using single computation (no additional compute calls)
+            elevation = format(self.my_satellite.tledata.alt / math.pi * 180.0, '.2f')
+            azimuth = format(self.my_satellite.tledata.az / math.pi * 180.0, '.2f')
+            height = format(float(self.my_satellite.tledata.elevation) / 1000.0, '.2f')
+            eclipse = "☾" if self.my_satellite.tledata.eclipsed else "☀︎"
+            
+            self.log_sat_status_ele_val.setText(str(elevation) + " °")
+            self.log_sat_status_azi_val.setText(str(azimuth) + " °")
+            self.log_sat_status_height_val.setText(str(height) + " km")
+            self.log_sat_status_illumintated_val.setText(eclipse)
             
             if DISPLAY_MAP:
-                self.map_canvas.lat = sat_lat_calc(self.my_satellite.tledata, myloc)
-                self.map_canvas.lon = sat_lon_calc(self.my_satellite.tledata, myloc)
-                self.map_canvas.alt_km = int(round(float(sat_height_calc(self.my_satellite.tledata, myloc))))
+                self.map_canvas.lat = format(self.my_satellite.tledata.sublat / math.pi * 180.0, '.1f')
+                self.map_canvas.lon = format(self.my_satellite.tledata.sublong / math.pi * 180.0, '.1f')
+                self.map_canvas.alt_km = int(round(float(height)))  # Reuse calculated height
                 self.map_canvas.draw_map()
 
             # Cloudlog: only log if F or I changed and satellite is above horizon
             try:
-                # Get elevation value directly
-                elevation = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+                # Use already calculated elevation (no additional compute call)
+                elevation_float = float(elevation)
                 
                 # Update pass recorder with current elevation - no need to log every update
                 if self.my_satellite.name:
-                    self.on_satellite_update(elevation, self.my_satellite.name)
+                    self.on_satellite_update(elevation_float, self.my_satellite.name)
                 
                 # Handle Cloudlog updates
                 F_now = self.my_satellite.F
                 I_now = self.my_satellite.I
-                if elevation > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
+                if elevation_float > 0.0 and (F_now != self._last_cloudlog_F or I_now != self._last_cloudlog_I):
                     if not CLOUDLOG_ENABLED:
                         logging.debug("Cloudlog: Disabled in config.ini")
                     elif not CLOUDLOG_API_KEY or not CLOUDLOG_URL:
@@ -2159,7 +2582,7 @@ class MainWindow(QMainWindow):
                         self._last_cloudlog_I = self.my_satellite.I
             except Exception as e:
                 logging.error(f"Error getting satellite elevation: {e}")
-                elevation = -1
+                elevation_float = -1
         except:
             logging.warning("Error in label timer")
             traceback.print_exc()
@@ -2204,8 +2627,10 @@ class MainWindow(QMainWindow):
     def get_current_az_el(self):
         # Returns (az, el) as floats for the current satellite
         try:
-            az = float(sat_azi_calc(self.my_satellite.tledata, myloc))
-            el = float(sat_ele_calc(self.my_satellite.tledata, myloc))
+            # Single computation for both azimuth and elevation
+            self.my_satellite.tledata.compute(myloc)
+            az = float(self.my_satellite.tledata.az / math.pi * 180.0)
+            el = float(self.my_satellite.tledata.alt / math.pi * 180.0)
             return az, el
         except Exception as e:
             logging.error(f"Error getting current az/el: {e}")
@@ -2285,6 +2710,11 @@ class MainWindow(QMainWindow):
             self.rotator_thread = None
             logging.debug("Rotator thread stopped.")
     def closeEvent(self, event):
+        # Log shutdown
+        logging.info("=" * 50)
+        logging.info("QTrigdoppler shutting down")
+        logging.info("=" * 50)
+        
         # Ensure rotator is stopped and parked on exit
         if ROTATOR_ENABLED:
             self.stop_rotator_thread()
@@ -2304,11 +2734,53 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     logging.error(f"Error stopping audio monitor on exit: {e}")
             
-        # Defensive: clear threadpool to avoid QRunnable errors
+        # Stop all timers to prevent accessibility events during shutdown
         try:
+            if hasattr(self, 'timer') and self.timer:
+                self.timer.stop()
+                self.timer.deleteLater()
+                self.timer = None
+                logging.debug("Main timer stopped and deleted")
+        except Exception as e:
+            logging.error(f"Error stopping main timer: {e}")
+            
+        try:
+            if hasattr(self, 'utc_clock_timer') and self.utc_clock_timer:
+                self.utc_clock_timer.stop()
+                self.utc_clock_timer.deleteLater()
+                self.utc_clock_timer = None
+                logging.debug("UTC clock timer stopped and deleted")
+        except Exception as e:
+            logging.error(f"Error stopping UTC clock timer: {e}")
+        
+        # Wait for any running workers to complete and clear threadpool
+        try:
+            # Give workers more time to shut down properly
+            QThread.msleep(200)
             self.threadpool.clear()
+            # Additional time for final cleanup
+            QThread.msleep(100)
+            logging.debug("Threadpool cleared")
         except Exception as e:
             logging.error(f"Error clearing threadpool: {e}")
+            
+        # Stop web API background threads if enabled
+        if WEBAPI_ENABLED:
+            try:
+                import lib.web_api as web_api
+                web_api.stop_status_broadcast_thread()
+                logging.debug("Web API broadcast thread stopped")
+            except Exception as e:
+                logging.error(f"Error stopping web API thread: {e}")
+        
+        # Stop remote client if enabled
+        if REMOTE_ENABLED:
+            try:
+                remote_client.disconnect()
+                logging.debug("Remote client disconnected")
+            except Exception as e:
+                logging.error(f"Error disconnecting remote client: {e}")
+        
         event.accept()
 
     def update_rotator_position(self):
@@ -2331,6 +2803,8 @@ class MainWindow(QMainWindow):
 
     def start_rotator_position_worker(self):
         if self.rotator:
+            # Stop any existing worker first
+            self.stop_rotator_position_worker()
             self.rotator_position_worker = RotatorPositionWorker(self.rotator, poll_interval=2.0)
             self.rotator_position_worker.signals.position.connect(self.handle_rotator_position_update)
             QThreadPool.globalInstance().start(self.rotator_position_worker)
@@ -2339,10 +2813,37 @@ class MainWindow(QMainWindow):
         # Defensive: safely stop worker and avoid double-deletion
         if hasattr(self, 'rotator_position_worker') and self.rotator_position_worker:
             try:
+                # Set up a finished signal handler to know when worker is done
+                worker_finished = False
+                def on_worker_finished():
+                    nonlocal worker_finished
+                    worker_finished = True
+                    
+                # Connect to finished signal if possible
+                try:
+                    self.rotator_position_worker.signals.finished.connect(on_worker_finished)
+                except:
+                    pass  # Signal connection failed, continue anyway
+                
+                # Tell worker to stop
                 self.rotator_position_worker.stop()
+                
+                # Wait for worker to finish, with timeout
+                wait_count = 0
+                max_wait = 20  # 200ms maximum wait (20 * 10ms)
+                while not worker_finished and wait_count < max_wait:
+                    QThread.msleep(10)
+                    wait_count += 1
+                    
+                if not worker_finished:
+                    logging.debug("RotatorPositionWorker did not finish within timeout")
+                else:
+                    logging.debug("RotatorPositionWorker finished cleanly")
+                    
             except Exception as e:
                 logging.error(f"Error stopping rotator position worker: {e}")
-            self.rotator_position_worker = None
+            finally:
+                self.rotator_position_worker = None
             
     def toggle_audio_monitoring(self):
         """Start or stop audio level monitoring"""
@@ -2564,6 +3065,178 @@ class MainWindow(QMainWindow):
         self.gps_status_label.setText("GPS Status: Fix received")
         self.gps_lock_button.setEnabled(True)
 
+    def attempt_icom_reconnection(self):
+        """Attempt to reconnect to the ICOM rig after communication failure"""
+        global icomTrx, RIG_CONNECTED
+        
+        try:
+            logging.info("Attempting to reconnect to ICOM rig...")
+            
+            # Close existing connection if any
+            if hasattr(icomTrx, 'close'):
+                try:
+                    icomTrx.close()
+                except:
+                    pass  # Ignore errors during cleanup
+            
+            # Create new connection
+            if configur['icom']['radio'] == '9700':
+                icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
+            elif configur['icom']['radio'] == '910':
+                icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
+            
+            # Update connection status
+            RIG_CONNECTED = icomTrx.is_connected()
+            
+            if RIG_CONNECTED:
+                logging.info("Successfully reconnected to ICOM rig")
+                return True
+            else:
+                logging.warning("Failed to reconnect to ICOM rig")
+                return False
+                
+        except Exception as e:
+            logging.error(f"Error during ICOM reconnection attempt: {e}")
+            RIG_CONNECTED = False
+            return False
+
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts for improved accessibility and efficiency"""
+        global TRACKING_ACTIVE
+        
+        key = event.key()
+        modifiers = event.modifiers()
+        
+        try:
+            # Ctrl+S - Save Settings
+            if modifiers == Qt.ControlModifier and key == Qt.Key_S:
+                logging.info("Keyboard shortcut: Ctrl+S - Saving settings")
+                self.save_settings()
+                return
+            
+            # T - Start Tracking
+            elif key == Qt.Key_T:
+                if TRACKING_ACTIVE:
+                    logging.warning("Keyboard shortcut: T - Cannot start tracking, already in progress")
+                elif not self.my_satellite.name:
+                    logging.warning("Keyboard shortcut: T - Cannot start tracking, no satellite selected")
+                elif not hasattr(self, 'my_transponder_name') or not self.my_transponder_name:
+                    logging.warning("Keyboard shortcut: T - Cannot start tracking, no transponder selected")
+                elif not self.my_satellite.tledata:
+                    logging.warning("Keyboard shortcut: T - Cannot start tracking, no TLE data available")
+                else:
+                    logging.info("Keyboard shortcut: T - Starting tracking")
+                    self.init_worker()
+                return
+            
+            # S or Esc - Stop Tracking
+            elif key == Qt.Key_S or key == Qt.Key_Escape:
+                if not TRACKING_ACTIVE:
+                    logging.warning("Keyboard shortcut: S/Esc - Cannot stop tracking, not currently tracking")
+                else:
+                    action = "S" if key == Qt.Key_S else "Esc"
+                    logging.info(f"Keyboard shortcut: {action} - Stopping tracking")
+                    self.the_stop_button_was_clicked()
+                return
+            
+            # Space - Toggle Tracking
+            elif key == Qt.Key_Space:
+                if TRACKING_ACTIVE:
+                    logging.info("Keyboard shortcut: Space - Stopping tracking (toggle)")
+                    self.the_stop_button_was_clicked()
+                elif not self.my_satellite.name:
+                    logging.warning("Keyboard shortcut: Space - Cannot start tracking, no satellite selected")
+                elif not hasattr(self, 'my_transponder_name') or not self.my_transponder_name:
+                    logging.warning("Keyboard shortcut: Space - Cannot start tracking, no transponder selected")
+                elif not self.my_satellite.tledata:
+                    logging.warning("Keyboard shortcut: Space - Cannot start tracking, no TLE data available")
+                else:
+                    logging.info("Keyboard shortcut: Space - Starting tracking (toggle)")
+                    self.init_worker()
+                return
+            
+            # R - Refresh TLE Data
+            elif key == Qt.Key_R:
+                logging.info("Keyboard shortcut: R - Refreshing TLE data")
+                self.update_tle_file()
+                return
+            
+            # M - Memory to VFO (Sync frequencies)
+            elif key == Qt.Key_M:
+                if TRACKING_ACTIVE:
+                    logging.warning("Keyboard shortcut: M - Cannot sync frequencies while tracking")
+                elif not self.my_satellite.name:
+                    logging.warning("Keyboard shortcut: M - Cannot sync frequencies, no satellite selected")
+                else:
+                    logging.info("Keyboard shortcut: M - Syncing memory frequencies to VFO")
+                    self.the_sync_button_was_clicked()
+                return
+            
+            # F5 - Refresh Status
+            elif key == Qt.Key_F5:
+                logging.info("Keyboard shortcut: F5 - Refreshing status displays")
+                self.refresh_all_status()
+                return
+            
+            # P - Park Rotators
+            elif key == Qt.Key_P:
+                if not ROTATOR_ENABLED:
+                    logging.warning("Keyboard shortcut: P - Cannot park rotators, rotator system not enabled")
+                else:
+                    logging.info("Keyboard shortcut: P - Parking rotators")
+                    self.park_rotators()
+                return
+                
+        except Exception as e:
+            logging.error(f"Error handling keyboard shortcut: {e}")
+        
+        # If no shortcut matched, call the parent implementation
+        super().keyPressEvent(event)
+
+    def refresh_all_status(self):
+        """Refresh all status displays - used by F5 shortcut"""
+        try:
+            # Update rotator position if available
+            if ROTATOR_ENABLED and self.rotator:
+                self.update_rotator_position()
+            
+            # Update pass recorder status
+            self.update_passrecorder_status()
+            
+            # Force update of satellite status if we have a satellite
+            if hasattr(self, 'my_satellite') and self.my_satellite.tledata:
+                myloc = ephem.Observer()
+                myloc.lon = str(LONGITUDE)
+                myloc.lat = str(LATITUDE)
+                myloc.elev = ALTITUDE
+                epoch_time = datetime.now(timezone.utc)
+                date_val = epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+                myloc.date = ephem.Date(date_val)
+                
+                # Update satellite position displays using single computation
+                self.my_satellite.tledata.compute(myloc)
+                elevation = format(self.my_satellite.tledata.alt / math.pi * 180.0, '.2f')
+                azimuth = format(self.my_satellite.tledata.az / math.pi * 180.0, '.2f')
+                height = format(float(self.my_satellite.tledata.elevation) / 1000.0, '.2f')
+                eclipse = "☾" if self.my_satellite.tledata.eclipsed else "☀︎"
+                
+                self.log_sat_status_ele_val.setText(str(elevation) + " °")
+                self.log_sat_status_azi_val.setText(str(azimuth) + " °")
+                self.log_sat_status_height_val.setText(str(height) + " km")
+                self.log_sat_status_illumintated_val.setText(eclipse)
+                
+                # Update next event display
+                self.log_sat_event_val.setText(str(sat_next_event_calc(self.my_satellite.tledata, myloc)))
+            
+            # Update time display
+            current_utc = datetime.now(timezone.utc)
+            self.log_time_val.setText(current_utc.strftime('%H:%M:%S UTC'))
+            
+            logging.info("Status displays refreshed")
+            
+        except Exception as e:
+            logging.error(f"Error refreshing status displays: {e}")
+
 class WorkerSignals(QObject):
     finished = Signal()
     error = Signal(tuple)
@@ -2616,13 +3289,41 @@ class RotatorPositionWorker(QRunnable):
 
     @Slot()
     def run(self):
-        while self._running:
-            try:
-                az, el = self.rotator.get_position()
-                self.signals.position.emit(az, el)
-            except Exception as e:
-                self.signals.position.emit(None, None)
-            time.sleep(self.poll_interval)
+        try:
+            while self._running:
+                try:
+                    az, el = self.rotator.get_position()
+                    # Check if signals object still exists before emitting
+                    if hasattr(self, 'signals') and self.signals is not None and self._running:
+                        self.signals.position.emit(az, el)
+                except Exception as e:
+                    # Only emit error signal if signals object still exists
+                    if hasattr(self, 'signals') and self.signals is not None and self._running:
+                        try:
+                            self.signals.position.emit(None, None)
+                        except RuntimeError:
+                            # Signals object was deleted, stop the worker
+                            logging.warning("RotatorPositionWorker signals deleted, stopping worker")
+                            self._running = False
+                            break
+                
+                # Use smaller sleep intervals for more responsive shutdown
+                # Break the sleep into smaller chunks to check _running more frequently
+                sleep_count = 0
+                sleep_chunk = 0.1  # 100ms chunks
+                max_chunks = int(self.poll_interval / sleep_chunk)
+                
+                while sleep_count < max_chunks and self._running:
+                    time.sleep(sleep_chunk)
+                    sleep_count += 1
+        finally:
+            # Emit finished signal when worker is truly done
+            if hasattr(self, 'signals') and self.signals is not None:
+                try:
+                    self.signals.finished.emit()
+                except RuntimeError:
+                    # Signals already deleted, which is fine
+                    pass
 
 class AudioLevelMeter(QProgressBar):
     """Custom progress bar for displaying audio input levels"""
@@ -2645,14 +3346,34 @@ class AudioLevelMeter(QProgressBar):
             }
         """)
 
-## Starts here:
+## Starts here:
 if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
     logging.critical("***  Icom radio not supported: {badmodel}".format(badmodel=RADIO))
     sys.exit()
 
+# Disable Qt accessibility warnings that are just normal system events
+import os
+os.environ["QT_LOGGING_RULES"] = "qt.accessibility.atspi.warning=false"
 
 app = QApplication(sys.argv)
+
+# Now safe to import Qt-based classes after QApplication exists
+from lib.gps_reader import GPSReader
+from lib.logbook_connector import *
+
+# Import web_api_proxy if needed
+if WEBAPI_ENABLED or REMOTE_ENABLED:
+    from lib import web_api_proxy
+
 window = MainWindow()
 window.show()
-app.exec()
+
+# Proper application shutdown handling
+try:
+    exit_code = app.exec()
+finally:
+    # Ensure all events are processed before shutdown
+    app.processEvents()
+    logging.debug("Application shutdown complete")
+    sys.exit(exit_code if 'exit_code' in locals() else 0)
 

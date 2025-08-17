@@ -9,13 +9,13 @@
 
 ## 📌 QTRigdoppler features doppler shift control for ICOM radios
 
-Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
-Adapted by EA4HCF Pedro Cabrera (@PCabreraCamara)  
-Extended and modified by DL3JOP Joshua Petry (@dl3jop)<br/>
+- Based on K8DP Doug Papay rigdoppler (@K8DP_Doug)  
+- Adapted by EA4HCF Pedro Cabrera (@PCabreraCamara)  
+- Extended and modified by DL3JOP Joshua Petry (@dl3jop)
 
-Contributions in this repo by:<br/>
-Joshua, DL3JOP<br/>
-Peter, 2M0SQL<br/>
+Contributions in this repo by:
+- Joshua, DL3JOP
+- Peter, 2M0SQL
  
 ## 🧠 What QTRigdoppler does
 
@@ -73,22 +73,24 @@ Currently, using the map is not advised due to bad perfomance. If you choose to 
 `pyproj`<br/>
 
 # 📋🔄⏳ Changelog
-DL3JOP modifications: <br/>
-    1) Removed hamlib<br/>
-    2) support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested)<br/>
-    3) Implemented transponder selection<br/>
-    4) Implemented correct switch between Split mode for V/V & U/U packet and satmode for V/U,U/V<br/>
-    5) Implemented doppler correction threshold<br/>
-    6) Added SubTone control<br/>
-    7) Various smaller changes and additions<br/>
-    8) Added binaries
+DL3JOP modifications:
+- Removed hamlib
+- Support for IC-910H by direct serial communication, IC-9700 should work as well (not yet tested 
+- Implemented transponder selection
+- Implemented correct switch between Split mode for V/V & U/U packet and satmode for V/U,U/V
+- Implemented doppler correction threshold
+- Added SubTone control
+- Various smaller changes and additions
+- Added binaries
 
-2M0SQL Modifications:<br>
-    1) Changed to PySide<br/>
-    2) Implemented Websocket features using Flask and SocketIO<br/>
-    3) Added Cloudlog/Wavelog integration: automatic logging of frequency and satellite info via Cloudlog API, configurable in config.ini.<br/>
-    4) Added ability to automatically record satellite passes to .wav files.
-    5) Added support to use USB / Serial GPS units to get location position.
+2M0SQL Modifications:
+- Changed to PySide
+- Implemented Websocket features using Flask and SocketIO
+- Added Cloudlog/Wavelog integration: automatic logging of frequency and satellite info via Cloudlog API, configurable in config.ini.
+- Added ability to automatically record satellite passes to .wav files.
+- Added support to use USB / Serial GPS units to get location position.
+- Automatic TLE Updating on Startup or based on hourly time period.
+- Help files
     
     
 # 🎯 Roadmap
@@ -99,183 +101,17 @@ DL3JOP modifications: <br/>
   - Refactor tracking loop:
     - no global F0/I0 variables, more abstracted methods to allow eaier implementation of other radios
     
-# 🛠️ Advanced information
-    
-## Remote Server Configuration
+# 📚 Documentation
 
-QTrigdoppler includes a remote server component built with Node.js that enables remote control and integration with other applications. Here's how to set it up:
+For detailed setup and usage instructions, see the [help documentation](help/):
 
-### Prerequisites
-
-1. Install Node.js from [https://nodejs.org/](https://nodejs.org/) or using your system's package manager
-2. Verify the installation by running:
-   ```bash
-   node --version
-   ```
-
-### Installation
-
-1. Navigate to the QTrigdoppler directory
-2. Install the required Node.js dependencies:
-   ```bash
-   npm install express socket.io ini
-   ```
-
-### Configuration
-
-The remote server can be configured through the `config.ini` file under the `[remote_server]` section:
-
-```ini
-[remote_server]
-enable = True
-url = http://localhost:5001
-port = 5001
-debug = False
-```
-
-- `enable`: Set to `True` to enable the remote server
-- `url`: The URL where the server will be accessible
-- `port`: The port number for the server (default: 5001)
-- `debug`: Set to `True` for additional debug logging
-
-### Starting the Server
-
-To start the remote server:
-```bash
-node remote_server.js
-```
-
-The server will start on the configured port (default: 5001) and be ready to accept connections from QTrigdoppler clients.
-
-### Features
-
-The remote server provides:
-- WebSocket interface for real-time updates
-- Cross-origin resource sharing (CORS) support
-- Integration capabilities with other applications
-- Tracking of satellite and transponder data
-- Real-time doppler shift information
-- Rotator control support (when enabled)
-
-### Integration
-
-Other applications can connect to the remote server using WebSocket or HTTP protocols. The server exposes various endpoints and events for satellite tracking, frequency control, and rotator management.
-
-## Web API and WebSocket Usage
-### Configuration
-The web API can be configured in the `config.ini` file under the `[web_api]` section:
-
-```ini
-[web_api]
-enabled = True
-port = 5000
-debug = False
-```
-
-- `enabled`: Set to `True` to enable the web API, or `False` to disable it
-- `port`: The TCP port the web server will listen on (default: 5000)
-- `debug`: Set to `True` to enable debug output, or `False` for normal operation
-
-### Usage
-When enabled, the web API server starts automatically with QTrigdoppler. You can access the web interface by opening a web browser and navigating to:
-
-```
-http://localhost:5000/
-```
-
-(Replace `localhost` with the IP address of the computer running QTrigdoppler if accessing from another device)
-
-The web interface allows you to:
-- Start/stop satellite tracking
-- Select different satellites and transponders
-- Set subtones
-- Adjust RX offset
-
-## WebSocket API (for Developers)
-
-The web API uses Flask-SocketIO for real-time communication. You can integrate it with your own applications by connecting to the Socket.IO endpoints. All events are real-time and changes are reflected immediately in the desktop app and all connected clients.
-
-### Connecting to the Server
-- By default, the server runs on port 5000.
-- To connect from another device on your local network, use:
-  
-  `http://<your-computer-ip>:5000`
-  
-  (e.g., `http://192.168.1.100:5000`)
-
-### Available WebSocket Events
-
-| Event                | Parameters                        | Description                                 |
-|----------------------|------------------------------------|---------------------------------------------|
-| `get_status`         | none                               | Request current status and settings         |
-| `get_satellite_list` | none                               | Request list of available satellites        |
-| `select_satellite`   | `{ satellite: <name> }`            | Select a satellite by name                  |
-| `get_transponder_list` | `{ satellite: <name> }`          | Get transponders for a satellite            |
-| `select_transponder` | `{ transponder: <name> }`          | Select a transponder by name                |
-| `set_subtone`        | `{ subtone: <value> }`             | Set the radio subtone (e.g., 'None', '67 Hz') |
-| `set_rx_offset`      | `{ offset: <integer> }`            | Set RX frequency offset in Hz               |
-| `start_tracking`     | none                               | Start satellite tracking                    |
-| `stop_tracking`      | none                               | Stop satellite tracking                     |
-| `debug_main_window`  | none                               | Get debug info about the main window        |
-
-#### Server → Client Events
-
-| Event                | Data Example                      | Description                                 |
-|----------------------|------------------------------------|---------------------------------------------|
-| `status`             | `{ tracking, satellite, ... }`     | Current status and settings                 |
-| `satellite_list`     | `{ satellites: [...], current }`   | List of satellites and current selection    |
-| `transponder_list`   | `{ transponders: [...], current }` | List of transponders and current selection  |
-| `debug_info`         | `{ attributes, ... }`              | Debug information about the main window     |
-
-### Example Usage (JavaScript)
-
-```js
-const socket = io('http://192.168.1.100:5000');
-
-// Request current status
-socket.emit('get_status');
-
-// Select a satellite
-socket.emit('select_satellite', { satellite: 'ISS' });
-
-// Set RX offset
-socket.emit('set_rx_offset', { offset: 100 });
-
-// Listen for status updates
-socket.on('status', (data) => {
-    console.log('Status:', data);
-});
-```
-
-- The web client (`web_api_client.html`) demonstrates all available features and can be used as a reference.
-- The server must be running and accessible from your network for remote clients to connect.
-
-For more advanced integration, see the code in `web_api_client.html` or contact the project maintainers.
-
-
-## Cloudlog/Wavelog Integration
-QTrigdoppler can automatically send frequency and satellite information to [Cloudlog](https://cloudlog.co.uk/) or [Wavelog](https://www.wavelog.org/)  via its API.
-
-### Configuration
-
-Add or update the `[Cloudlog]` section in your `config.ini`:
-
-```ini
-[Cloudlog]
-enabled = True
-api_key = YOUR_API_KEY
-url = https://your.cloudlog.site
-```
-
-- `enabled`: Set to `True` to enable Cloudlog/Wavelog logging, or `False` to disable it.
-- `api_key`: Your Cloudlog/Wavelog API key.
-- `url`: The base URL of your Cloudlog7Wavelog installation (e.g., `https://your.cloudlog.site`). The API endpoint used is `/index.php/api/radio`.
-
-### How it Works
-
-- When you select a new transponder, QTrigdoppler will send the current TX and RX frequencies, modes, and satellite name to Cloudlog.
-- If the mode is `FMN`, it will be sent as `FM` to Cloudlog/Wavelog.
-- All Cloudlog/wavelog API activity and errors are logged to the console.
+- **[Configuration Guide](help/configuration.md)** - Complete config.ini reference and setup
+- **[Remote Operation](help/remote-operation.md)** - Web-based remote control systems  
+- **[Cloudlog Integration](help/cloudlog-integration.md)** - Automatic logbook integration with Cloudlog/Wavelog
+- **[Pass Recording](help/pass-recording.md)** - Automatic audio recording during satellite passes
+- **[GPS Integration](help/gps-integration.md)** - GPS-based automatic location determination
+- **[Rotator Setup](help/rotator-setup.md)** - Antenna rotator configuration and operation
+- **[Keyboard Shortcuts](help/keyboard-shortcuts.md)** - Keyboard shortcuts and accessibility features
 
 ## 🛠️ Compile using pyinstaller
 
