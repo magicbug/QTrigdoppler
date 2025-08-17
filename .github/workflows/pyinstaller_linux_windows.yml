@@ -37,14 +37,24 @@ jobs:
         run: |
           pyinstaller --onefile QTrigdoppler.py --exclude PyQt6 --splash images/splash.jpg
 
-      - name: Prepare package
-        shell: bash
+      - name: Prepare package (Linux)
+        if: matrix.name == 'linux'
         run: |
           mkdir package
           cp dist/* package/
           cp config.ini doppler.sqf mykepler.txt package/
           cd package
           zip -r ../QTrigdoppler-${{ matrix.name }}.zip *
+
+      - name: Prepare package (Windows)
+        if: matrix.name == 'windows'
+        run: |
+          mkdir package
+          copy dist\* package\
+          copy config.ini package\
+          copy doppler.sqf package\
+          copy mykepler.txt package\
+          Compress-Archive -Path package\* -DestinationPath QTrigdoppler-${{ matrix.name }}.zip
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
