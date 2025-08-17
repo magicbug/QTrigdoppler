@@ -2644,26 +2644,6 @@ if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
 
 app = QApplication(sys.argv)
 window = MainWindow()
-#apply_stylesheet(app, theme="dark_lightgreen.xml")
-tooltip_stylesheet = """
-        QToolTip {
-            color: white;
-            background-color: black;
-        }
-        QComboBox {
-            color: white;
-        }
-        QSpinBox {
-            color: white;
-        }
-        QDoubleSpinBox {
-            color: white;
-        }
-        QLineEdit {
-            color: white;
-        }
-    """
-#app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
 window.show()
 app.exec()
 
