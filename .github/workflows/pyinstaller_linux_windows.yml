@@ -61,3 +61,9 @@ jobs:
         with:
           name: QTrigdoppler-${{ matrix.name }}
           path: QTrigdoppler-${{ matrix.name }}.zip
+          
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: QTrigdoppler-${{ matrix.name }}.zip
