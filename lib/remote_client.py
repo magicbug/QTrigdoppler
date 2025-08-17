@@ -487,3 +487,7 @@ def broadcast_full_status():
     """Broadcast full status update"""
     if remote_client.connected:
         remote_client.send_full_status()
+
+def disconnect():
+    """Disconnect from the remote server"""
+    remote_client.disconnect()
