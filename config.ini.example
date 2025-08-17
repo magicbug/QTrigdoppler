@@ -24,6 +24,7 @@ sqffile = doppler.sqf                      # Satellite frequency file
 # Doppler shift thresholds for different modes
 doppler_threshold_fm = 200                 # FM mode doppler threshold in Hz
 doppler_threshold_linear = 50              # Linear transponder threshold in Hz
+predictive_doppler = False                  # Enable predictive doppler for linear satellites
 
 [icom]
 # Radio configuration for Icom transceivers

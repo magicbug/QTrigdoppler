@@ -156,6 +156,7 @@ TLEFILE = configur.get('satellite','tle_file')
 TLEURL = configur.get('satellite','tle_url')
 DOPPLER_THRES_FM = configur.get('satellite', 'doppler_threshold_fm',fallback=200)
 DOPPLER_THRES_LINEAR = configur.get('satellite', 'doppler_threshold_linear',fallback=20)
+PREDICTIVE_DOPPLER = configur.getboolean('satellite', 'predictive_doppler', fallback=True)
 SQFILE = configur.get('satellite','sqffile')
 RADIO = configur.get('icom','radio')
 CVIADDR = configur.get('icom','cviaddress')
@@ -1005,6 +1006,11 @@ class MainWindow(QMainWindow):
         self.doppler_linear_threshold.setText(str(DOPPLER_THRES_LINEAR))
         radio_settings_layout.addWidget(self.doppler_linear_threshold, 7, 1)
         
+        # Predictive doppler checkbox
+        self.predictive_doppler_checkbox = QCheckBox("Enable predictive doppler for linear satellites")
+        self.predictive_doppler_checkbox.setChecked(PREDICTIVE_DOPPLER)
+        radio_settings_layout.addWidget(self.predictive_doppler_checkbox, 8, 0, 1, 2)
+        
         #self.settings_radio_box.setLayout(radio_settings_layout)
         self.radio_settings_layout_scroller_widget.setLayout(radio_settings_layout)
         self.radio_settings_layout_scroller.setWidget(self.radio_settings_layout_scroller_widget)
@@ -1464,6 +1470,7 @@ class MainWindow(QMainWindow):
         global MAX_OFFSET_RX
         global DOPPLER_THRES_FM
         global DOPPLER_THRES_LINEAR
+        global PREDICTIVE_DOPPLER
         global TLEFILE
         global TLEURL
         global SQFILE
@@ -1500,6 +1507,8 @@ class MainWindow(QMainWindow):
         configur['satellite']['doppler_threshold_fm'] = str(int(DOPPLER_THRES_FM))
         DOPPLER_THRES_LINEAR = int(self.doppler_linear_threshold.displayText())
         configur['satellite']['doppler_threshold_linear'] = str(int(DOPPLER_THRES_LINEAR))
+        PREDICTIVE_DOPPLER = self.predictive_doppler_checkbox.isChecked()
+        configur['satellite']['predictive_doppler'] = str(PREDICTIVE_DOPPLER)
         
         if self.radiolistcomb.currentText() == "Icom 9700":
             RADIO = configur['icom']['radio'] = '9700'
@@ -2252,8 +2261,8 @@ class MainWindow(QMainWindow):
                                             
                         # check if dial isn't moving, might be skipable as later conditional check yields the same         
                         if updated_rx and vfo_not_moving and vfo_not_moving_old:#old_user_Freq == user_Freq and False:
-                            # Use predictive doppler for linear satellites, especially around TCA
-                            if self.my_satellite.downmode in ["USB", "LSB", "CW"]:
+                            # Use predictive doppler for linear satellites if enabled, especially around TCA
+                            if self.my_satellite.downmode in ["USB", "LSB", "CW"] and PREDICTIVE_DOPPLER:
                                 # Calculate current doppler rate to determine prediction time
                                 current_doppler_rate = abs(self.my_satellite.down_doppler_rate) if hasattr(self.my_satellite, 'down_doppler_rate') else 0
                                 
@@ -2267,7 +2276,7 @@ class MainWindow(QMainWindow):
                                 
                                 new_rx_doppler = rx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc, prediction_time)
                             else:
-                                # Use standard calculation for FM satellites
+                                # Use standard calculation for FM satellites or when predictive doppler is disabled
                                 new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc))
                                 
                             if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres:
@@ -2332,8 +2341,8 @@ class MainWindow(QMainWindow):
                             
                     else:
                         # Non-interactive mode for linear satellites (SSB packet, etc.)
-                        # Use predictive doppler for better TCA tracking
-                        if self.my_satellite.downmode in ["USB", "LSB", "CW"]:
+                        # Use predictive doppler for better TCA tracking if enabled
+                        if self.my_satellite.downmode in ["USB", "LSB", "CW"] and PREDICTIVE_DOPPLER:
                             # Calculate prediction time based on doppler rate  
                             current_doppler_rate = abs(self.my_satellite.down_doppler_rate) if hasattr(self.my_satellite, 'down_doppler_rate') else 0
                             
@@ -2347,7 +2356,7 @@ class MainWindow(QMainWindow):
                             new_rx_doppler = rx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc, prediction_time)
                             new_tx_doppler = tx_dopplercalc_predictive(self.my_satellite.tledata, self.my_satellite.I, myloc, prediction_time)
                         else:
-                            # Standard calculation for FM or other modes
+                            # Standard calculation for FM or other modes, or when predictive doppler is disabled
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
                             new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
                         # 0 = PTT is pressed

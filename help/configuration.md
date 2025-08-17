@@ -54,6 +54,7 @@ Configuration for satellite tracking data sources and parameters.
 | `sqffile` | string | **Yes** | Satellite frequency definition file | `doppler.sqf` |
 | `doppler_threshold_fm` | int | No | FM mode doppler threshold in Hz | `200` |
 | `doppler_threshold_linear` | int | No | Linear transponder threshold in Hz | `50` |
+|| `predictive_doppler` | bool | No | Enable predictive doppler for linear satellites | `True`/`False` |
 
 **Example:**
 ```ini
@@ -63,6 +64,7 @@ tle_url = https://tle.oscarwatch.org/
 sqffile = doppler.sqf
 doppler_threshold_fm = 200
 doppler_threshold_linear = 50
+predictive_doppler = True
 ```
 
 ### [icom] - Radio Configuration
@@ -329,6 +331,7 @@ altitude = 100.0
 tle_file = mykepler.txt
 tle_url = https://tle.oscarwatch.org/
 sqffile = doppler.sqf
+predictive_doppler = True
 
 [icom]
 radio = 910
@@ -347,6 +350,7 @@ altitude = 100.0
 tle_file = mykepler.txt
 tle_url = https://tle.oscarwatch.org/
 sqffile = doppler.sqf
+predictive_doppler = True
 
 [icom]
 radio = 910
