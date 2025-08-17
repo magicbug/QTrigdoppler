@@ -208,23 +208,6 @@ if configur.get('icom', 'fullmode') == "True":
     OPMODE = True
 elif configur.get('icom', 'fullmode') == "False":
     OPMODE = False
-if configur.get('misc', 'display_map') == "True":
-    DISPLAY_MAP = True
-    # Set matplotlib to use a backend compatible with PySide6
-    import matplotlib
-    matplotlib.use('Qt5Agg')  # This actually works with PySide6
-    
-    # Set Qt API to use PySide6 before importing the backend
-    import os
-    os.environ['QT_API'] = 'PySide6'
-    
-    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-    import matplotlib.pyplot as plt
-    import cartopy.crs as ccrs
-    import cartopy.feature as cfeature
-    from pyproj import Geod
-elif configur.get('misc', 'display_map') == "False":
-    DISPLAY_MAP = False
 
 # Import the remote client if section exists
 REMOTE_ENABLED = False
@@ -238,10 +221,7 @@ if WEBAPI_ENABLED or REMOTE_ENABLED:
 
 ### Global constants
 subtone_list = ["None", "67 Hz", "71.9 Hz", "74.4 Hz", "141.3 Hz"]
-if DISPLAY_MAP:
-    GEOD = Geod(ellps="WGS84")
 
-#i = 0
 useroffsets = []
 for (each_key, each_val) in configur.items('offset_profiles'):
     # Format SATNAME,TRANSPONDER,RXoffset,TXoffset
@@ -298,66 +278,6 @@ class Satellite:
     F_RIG = 0.0
     I_RIG = 0.0
     
-if DISPLAY_MAP:
-    class SatMapCanvas(FigureCanvas):
-        def __init__(self, lat, lon, alt_km):
-            self.fig = plt.figure()
-            self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
-            super().__init__(self.fig)
-            self.lat = lat
-            self.lon = lon
-            self.alt_km = alt_km
-            self.ax = self.fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
-            self.ax.clear()
-            self.ax.set_global()
-            self.ax.stock_img()
-            self.ax.coastlines()
-            self.ax.add_feature(cfeature.BORDERS, linestyle=':')
-            self.ax.set_aspect('auto')
-
-    
-        def draw_map(self):
-            for l in self.ax.get_lines():
-                l.remove()
-    
-            # Generate geodesic footprint
-            azimuths = np.linspace(0, 360, 361)
-            radius_m = footprint_radius_km(self.alt_km) * 1000
-            lons, lats, _ = GEOD.fwd(
-                np.full(azimuths.shape, self.lon),
-                np.full(azimuths.shape, self.lat),
-                azimuths,
-                np.full(azimuths.shape, radius_m)
-            )
-    
-            # Normalize longitudes
-            lons = ((lons + 180) % 360) - 180
-            lats = np.clip(lats, -90, 90)
-    
-            # Split into segments to handle wraparound
-            segments = []
-            seg_lon = [lons[0]]
-            seg_lat = [lats[0]]
-            for i in range(1, len(lons)):
-                if abs(lons[i] - lons[i-1]) > 180 or abs(lats[i] - lats[i-1]) > 90:
-                    segments.append((seg_lon, seg_lat))
-                    seg_lon = []
-                    seg_lat = []
-                seg_lon.append(lons[i])
-                seg_lat.append(lats[i])
-            if seg_lon:
-                segments.append((seg_lon, seg_lat))
-    
-            # Plot all segments
-            for seg_lon, seg_lat in segments:
-                self.ax.plot(seg_lon, seg_lat, 'b--', transform=ccrs.PlateCarree(), linewidth=1)
-            
-            # Plot satellite subpoint
-            self.ax.plot(float(self.lon), float(self.lat), 'ro', markersize=6, label="Subpoint", transform=ccrs.PlateCarree())
-    
-            self.draw()
-
-
 class MainWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
@@ -496,16 +416,12 @@ class MainWindow(QMainWindow):
         overview_pagelayout = QVBoxLayout()
         
         control_container = QWidget()
-        map_container = QWidget()
         log_container = QWidget()
 
         control_layout = QHBoxLayout(control_container)
-        map_layout = QHBoxLayout(map_container)
         log_layout = QHBoxLayout(log_container)
 
         overview_pagelayout.addWidget(control_container,stretch=2)
-        if DISPLAY_MAP:
-            overview_pagelayout.addWidget(map_container, stretch=1)
         overview_pagelayout.addWidget(log_container, stretch=1)
         
         labels_layout = QVBoxLayout()
@@ -859,18 +775,6 @@ class MainWindow(QMainWindow):
                 self.rotator_az_val.setText("error")
                 self.rotator_el_val.setText("error")
             self.start_rotator_position_worker()
-        
-        ## Map layout
-        if DISPLAY_MAP:
-            self.mapbox = QGroupBox()
-            self.mapbox.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 14pt;} QLabel{font-size: 14pt;}")
-            mapbox_layout = QHBoxLayout()
-            self.mapbox.setLayout(mapbox_layout)
-            map_layout.addWidget(self.mapbox)
-            self.map_canvas = SatMapCanvas(-60, -80, 1)
-            mapbox_layout.addWidget(self.map_canvas)
-        
-        
         
         ### Settings Tab
         settings_value_layout = QHBoxLayout()
@@ -2544,12 +2448,6 @@ class MainWindow(QMainWindow):
             self.log_sat_status_azi_val.setText(str(azimuth) + " °")
             self.log_sat_status_height_val.setText(str(height) + " km")
             self.log_sat_status_illumintated_val.setText(eclipse)
-            
-            if DISPLAY_MAP:
-                self.map_canvas.lat = format(self.my_satellite.tledata.sublat / math.pi * 180.0, '.1f')
-                self.map_canvas.lon = format(self.my_satellite.tledata.sublong / math.pi * 180.0, '.1f')
-                self.map_canvas.alt_km = int(round(float(height)))  # Reuse calculated height
-                self.map_canvas.draw_map()
 
             # Cloudlog: only log if F or I changed and satellite is above horizon
             try:
