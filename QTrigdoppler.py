@@ -264,6 +264,8 @@ TRACKING_ACTIVE = True # tracking on/off
 INTERACTIVE = False # read user vfo/dial input - disable for inband packet
 RX_TPX_ONLY = False
 RIG_CONNECTED = False
+DOPPLER_UPDATE_LOCK = False
+
 if configur['icom']['radio'] == '9700':
     icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
 elif configur['icom']['radio'] == '910':
@@ -2069,7 +2071,7 @@ class MainWindow(QMainWindow):
                 logging.error(f"Error broadcasting transponder change to web clients: {e}")
             
     def tone_changed(self, tone_name):
-        
+        DOPPLER_UPDATE_LOCK = True
         if self.my_satellite.rig_satmode == 1:
             icomTrx.setVFO("Sub")
         else:
@@ -2105,7 +2107,7 @@ class MainWindow(QMainWindow):
                 icomTrx.setToneOn(1)
             elif tone_name == "None":
                 icomTrx.setToneOn(0)
-            
+        DOPPLER_UPDATE_LOCK = False
         # Notify web clients of the subtone change
         if WEBAPI_ENABLED:
             try:
@@ -2349,7 +2351,7 @@ class MainWindow(QMainWindow):
                                 # Use standard calculation for FM satellites or when predictive doppler is disabled
                                 new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc))
                                 
-                            if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres:
+                            if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres and DOPPLER_UPDATE_LOCK == False:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("Main")
@@ -2376,7 +2378,7 @@ class MainWindow(QMainWindow):
                                 # Use standard calculation for FM satellites
                                 new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc))
                                 
-                            if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres:
+                            if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres and DOPPLER_UPDATE_LOCK == False:
                                 tx_doppler = new_tx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("SUB")
@@ -2393,13 +2395,13 @@ class MainWindow(QMainWindow):
                     elif self.my_satellite.rig_satmode == 1:
                         new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
-                        if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres or tracking_init == 1:
+                        if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres or tracking_init == 1 and DOPPLER_UPDATE_LOCK == False:
                                 tracking_init = 0
                                 rx_doppler = new_rx_doppler
                                 icomTrx.setVFO("MAIN")
                                 icomTrx.setFrequency(str(rx_doppler))
                                 self.my_satellite.F_RIG = rx_doppler
-                        if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres or tracking_init == 1:
+                        if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres or tracking_init == 1 and DOPPLER_UPDATE_LOCK == False:
                                 tracking_init = 0
                                 tx_doppler = new_tx_doppler
                                 icomTrx.setVFO("SUB")
