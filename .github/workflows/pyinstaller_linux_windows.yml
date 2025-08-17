@@ -31,20 +31,35 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller certifi
 
       - name: Build executable
         run: |
-          pyinstaller --onefile QTrigdoppler.py --exclude PyQt6 --splash images/splash.jpg
+          if [ "${{ matrix.name }}" = "linux" ]; then
+            pyinstaller --onefile QTrigdoppler.py \
+              --exclude PyQt6 \
+              --splash images/splash.jpg \
+              --add-data "$(python -m certifi):certifi"
+          else
+            pyinstaller --onefile QTrigdoppler.py \
+              --exclude PyQt6 \
+              --splash images/splash.jpg \
+              --add-data "%(python -m certifi)s;certifi"
+          fi
 
       - name: Prepare package (Linux)
         if: matrix.name == 'linux'
         run: |
           mkdir package
-          cp dist/* package/
-          cp config.ini doppler.sqf mykepler.txt package/
-          cd package
-          zip -r ../QTrigdoppler-${{ matrix.name }}.zip *
+          if [ "${{ matrix.name }}" = "linux" ]; then
+            cp dist/* package/
+            cp config.ini doppler.sqf mykepler.txt package/
+          else
+            copy dist\* package\
+            copy config.ini package\
+            copy doppler.sqf package\
+            copy mykepler.txt package\
+          fi
 
       - name: Prepare package (Windows)
         if: matrix.name == 'windows'
