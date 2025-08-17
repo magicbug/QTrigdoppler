@@ -54,7 +54,7 @@ Configuration for satellite tracking data sources and parameters.
 | `sqffile` | string | **Yes** | Satellite frequency definition file | `doppler.sqf` |
 | `doppler_threshold_fm` | int | No | FM mode doppler threshold in Hz | `200` |
 | `doppler_threshold_linear` | int | No | Linear transponder threshold in Hz | `50` |
-|| `predictive_doppler` | bool | No | Enable predictive doppler for linear satellites | `True`/`False` |
+| `predictive_doppler` | bool | No | Enable predictive doppler for linear satellites | `True`/`False` |
 
 **Example:**
 ```ini
