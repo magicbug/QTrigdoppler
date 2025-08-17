@@ -25,7 +25,7 @@ from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtCore import Qt, Signal, Slot, QObject, QMetaObject, Q_ARG, QThreadPool
-from qt_material import apply_stylesheet
+from qt_material import apply_stylesheet,list_themes
 import logging
 from serial.tools import list_ports
 from lib.pass_recorder import PassRecorder
@@ -69,6 +69,7 @@ RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
 TLE_UPDATE_STARTUP = configur.getboolean('misc', 'tle_update_startup', fallback=False)
+STYLESHEET = configur.get('misc', 'stylesheet',fallback="dark_lightgreen.xml")
 
 # Rotator config
 ROTATOR_ENABLED = configur.getboolean('rotator', 'enabled', fallback=False)
@@ -947,6 +948,17 @@ class MainWindow(QMainWindow):
         
         self.settings_file_box.setLayout(files_settings_layout)
         
+        # Change stylesheet
+        stylesheet_layout = QHBoxLayout()
+        
+        self.stylesheet_layout_label = QLabel("Application theme:")
+        self.stylesheet_layout_combo = QComboBox()
+        self.stylesheet_layout_combo.addItems(list_themes())
+        self.stylesheet_layout_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        stylesheet_layout.addWidget(self.stylesheet_layout_label)
+        stylesheet_layout.addWidget(self.stylesheet_layout_combo)
+        self.stylesheet_layout_combo.currentTextChanged.connect(self.change_theme)
+        
         # Settings store layout
         settings_store_layout = QVBoxLayout()
         
@@ -959,6 +971,7 @@ class MainWindow(QMainWindow):
         # Glueing settinglayouts together
         settings_layout = QVBoxLayout()
         settings_layout.addLayout(settings_value_layout)
+        settings_layout.addLayout(stylesheet_layout)
         settings_layout.addLayout(settings_store_layout)
         
         ### Advanced Settings Tab
@@ -1315,6 +1328,7 @@ class MainWindow(QMainWindow):
         
         if TLE_UPDATE_STARTUP:
             self.update_tle_file()
+        self.change_theme(STYLESHEET)
     
     def save_settings(self):
         global LATITUDE
@@ -1342,6 +1356,7 @@ class MainWindow(QMainWindow):
         global ROTATOR_EL_MIN
         global ROTATOR_EL_MAX
         global ROTATOR_MIN_ELEVATION
+        global STYLESHEET
 
         LATITUDE = self.qth_settings_lat_edit.displayText()
         configur['qth']['latitude'] = str(float(LATITUDE))
@@ -1456,11 +1471,36 @@ class MainWindow(QMainWindow):
         # GPS QTH settings
         configur['qth']['use_gps'] = str(self.gps_enable_checkbox.isChecked())
         configur['qth']['gps_port'] = self.gps_serialport_val.currentText()
+        
+        configur['misc']['stylesheet'] = STYLESHEET
 
         with open('config.ini', 'w') as configfile:
             configur.write(configfile)
         self.pass_recorder.update_config(configur)
 
+
+    def change_theme(self, theme_name):
+        global STYLESHEET
+        apply_stylesheet(app, theme=theme_name)
+        STYLESHEET = theme_name
+        if "dark" in theme_name.lower():
+            app.setStyleSheet(app.styleSheet() + """
+                QComboBox {
+                    color: palette(highlighted-text);
+                }
+                QLineEdit {
+                    color: palette(highlighted-text);
+                }
+                QSpinBox {
+                    color: palette(highlighted-text);
+                }
+                QComboBox QAbstractItemView {
+                    color: palette(text);
+                    selection-background-color: palette(highlight);
+                    selection-color: palette(highlighted-text);
+                }
+            """)
+        
     def rxoffset_value_changed(self, i):
             global f_cal
             self.my_satellite.new_cal = 1
@@ -2604,7 +2644,7 @@ if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
 
 app = QApplication(sys.argv)
 window = MainWindow()
-apply_stylesheet(app, theme="dark_lightgreen.xml")
+#apply_stylesheet(app, theme="dark_lightgreen.xml")
 tooltip_stylesheet = """
         QToolTip {
             color: white;
@@ -2623,7 +2663,7 @@ tooltip_stylesheet = """
             color: white;
         }
     """
-app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
+#app.setStyleSheet(app.styleSheet()+tooltip_stylesheet)
 window.show()
 app.exec()
 
