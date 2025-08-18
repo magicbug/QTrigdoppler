@@ -40,7 +40,7 @@ jobs:
         if: matrix.name == 'linux'
         run: |
           mkdir package
-          cp dist/* package/
+          cp -r dist/* package/
           cp config.ini doppler.sqf mykepler.txt package/
           cd package
           zip -r ../QTrigdoppler-multifile-${{ matrix.name }}.zip *
@@ -49,7 +49,7 @@ jobs:
         if: matrix.name == 'windows'
         run: |
           mkdir package
-          copy dist\* package\
+          xcopy dist\* package\
           copy config.ini package\
           copy doppler.sqf package\
           copy mykepler.txt package\
