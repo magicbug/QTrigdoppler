@@ -827,8 +827,6 @@ class MainWindow(QMainWindow):
         self.settings_qth_box.setLayout(qth_settings_layout)
         
         ## Radio
-        self.radio_settings_layout_scroller = QScrollArea()
-        self.radio_settings_layout_scroller_widget = QWidget()
         radio_settings_layout = QGridLayout()
         
         # Radio selector
@@ -919,15 +917,7 @@ class MainWindow(QMainWindow):
         self.predictive_doppler_checkbox.setChecked(PREDICTIVE_DOPPLER)
         radio_settings_layout.addWidget(self.predictive_doppler_checkbox, 8, 0, 1, 2)
         
-        #self.settings_radio_box.setLayout(radio_settings_layout)
-        self.radio_settings_layout_scroller_widget.setLayout(radio_settings_layout)
-        self.radio_settings_layout_scroller.setWidget(self.radio_settings_layout_scroller_widget)
-        self.radio_settings_layout_scroller.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.radio_settings_layout_scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.radio_settings_layout_scroller.setWidgetResizable(True)
-        self.radio_settings_layout_scroller_layout = QHBoxLayout()
-        self.radio_settings_layout_scroller_layout.addWidget(self.radio_settings_layout_scroller)
-        self.settings_radio_box.setLayout(self.radio_settings_layout_scroller_layout)
+        self.settings_radio_box.setLayout(radio_settings_layout)
         
         ## Files
         files_settings_layout = QGridLayout()
@@ -1133,8 +1123,6 @@ class MainWindow(QMainWindow):
         self.adv_settings_rotator_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
         adv_settings_value_layout.addWidget(self.adv_settings_rotator_box, 0,1)
         
-        self.rotator_settings_layout_scroller = QScrollArea()
-        self.rotator_settings_layout_scroller_widget = QWidget()
         
         ## Enable
         rotator_settings_layout = QGridLayout()
@@ -1217,16 +1205,8 @@ class MainWindow(QMainWindow):
         self.rotator_minelev_val.setMaxLength(6)
         self.rotator_minelev_val.setText(str(ROTATOR_MIN_ELEVATION))
         rotator_settings_layout.addWidget(self.rotator_minelev_val, 9, 1)
-        
-        self.rotator_settings_layout_scroller.setLayout(rotator_settings_layout)
-        self.rotator_settings_layout_scroller.setWidget(self.rotator_settings_layout_scroller_widget)
-        self.rotator_settings_layout_scroller.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.rotator_settings_layout_scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.rotator_settings_layout_scroller.setWidgetResizable(True)
-        self.rotator_settings_layout_scroller_layout = QHBoxLayout()
-        self.rotator_settings_layout_scroller_layout.addWidget(self.rotator_settings_layout_scroller)
             
-        self.adv_settings_rotator_box.setLayout(self.rotator_settings_layout_scroller_layout)
+        self.adv_settings_rotator_box.setLayout(rotator_settings_layout)
         
         #Store button
         adv_settings_store_layout = QVBoxLayout()
