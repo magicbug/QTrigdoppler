@@ -35,26 +35,25 @@ jobs:
       - name: Build executable
         run: |
           pyinstaller QTrigdoppler.py --noconsole --exclude PyQt6 --splash images/splash.jpg
-
-      - name: Prepare package
+        
+      - name: Prepare package (Linux)
+        if: matrix.name == 'linux'
         run: |
-          # Create package folder
           mkdir package
-      
-          # Copy PyInstaller output recursively
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            cp -r dist/QTrigdoppler/* package/
-            cp config.ini doppler.sqf mykepler.txt package/
-            cd package
-            zip -r ../QTrigdoppler-multifile-${RUNNER_OS,,}.zip *
-          else
-            pwsh -Command "
-              New-Item -ItemType Directory -Force -Path package
-              Copy-Item -Path 'dist\QTrigdoppler\*' -Destination 'package' -Recurse -Force
-              Copy-Item -Path 'config.ini','doppler.sqf','mykepler.txt' -Destination 'package' -Force
-              Compress-Archive -Path 'package\*' -DestinationPath 'QTrigdoppler-multifile-windows.zip' -Force
-            "
+          cp -r dist/QTrigdoppler/* package/
+          cp config.ini doppler.sqf mykepler.txt package/
+          cd package
+          zip -r ../QTrigdoppler-multifile-linux.zip *
         shell: bash
+      
+      - name: Prepare package (Windows)
+        if: matrix.name == 'windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path package
+          Copy-Item -Path 'dist\QTrigdoppler\*' -Destination 'package' -Recurse -Force
+          Copy-Item -Path 'config.ini','doppler.sqf','mykepler.txt' -Destination 'package' -Force
+          Compress-Archive -Path 'package\*' -DestinationPath 'QTrigdoppler-multifile-windows.zip' -Force
+        shell: pwsh
 
 
       - name: Upload artifacts
