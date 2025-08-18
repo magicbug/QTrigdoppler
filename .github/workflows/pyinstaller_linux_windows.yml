@@ -34,7 +34,7 @@ jobs:
 
       - name: Build executable
         run: |
-          pyinstaller --onefile QTrigdoppler.py --exclude PyQt6 --splash images/splash.jpg
+          pyinstaller --onefile QTrigdoppler.py --noconsole --exclude PyQt6 --splash images/splash.jpg
 
       - name: Prepare package (Linux)
         if: matrix.name == 'linux'
