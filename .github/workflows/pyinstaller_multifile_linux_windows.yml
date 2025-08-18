@@ -1,4 +1,4 @@
-name: Build QTrigdoppler executables
+name: Build QTrigdoppler multifile executables
 
 on:
   pull_request:
