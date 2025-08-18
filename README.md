@@ -26,6 +26,14 @@ QTRigdoppler keeps track of satellites and their transponders. It handles mutlip
  4) Rotators can be connected to sync their postion with the current satellite.<br/>
  5) A websocket option enable integration into software like [Zenith](https://github.com/magicbug/Zenith).<br/>
  6) There is an optional map you can use to plot the satellites position<br/>
+
+## 🌓 Choose your style
+QTRigdoppler now comes with many themes you can choose from. A brief selection of some themes:
+<picture>
+ <source media="(prefers-color-scheme: dark)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/themes.jpg">
+ <source media="(prefers-color-scheme: light)" srcset="https://github.com/dl3jop/QTrigdoppler/blob/main/images/themes.jpg">
+ <img alt="Shows different QTRigDoppler GUI themes." src="https://github.com/dl3jop/QTrigdoppler/blob/main/images/themes.jpg">
+</picture>
  
 ## 📥💻 Installation and Usage
 
