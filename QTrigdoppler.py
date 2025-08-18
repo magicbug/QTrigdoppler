@@ -856,14 +856,14 @@ class MainWindow(QMainWindow):
             self.radiotypecomb.setCurrentText('US/TSQL')
         
         # CI-V selector
-        self.radicvi_lbl = QLabel("CVI address:")
+        self.radicvi_lbl = QLabel("CVI address (hex):")
         radio_settings_layout.addWidget(self.radicvi_lbl, 2, 0)
         self.radicvi = QLineEdit()
         self.radicvi.setMaxLength(2)
         self.radicvi.setText(CVIADDR)
         radio_settings_layout.addWidget(self.radicvi, 2, 1)
         
-        self.rig_serialport_lbl = QLabel("Port:")
+        self.rig_serialport_lbl = QLabel("Serial port:")
         radio_settings_layout.addWidget(self.rig_serialport_lbl, 3, 0)
 
         # Replace QLineEdit with QComboBox for COM port selection
@@ -877,7 +877,7 @@ class MainWindow(QMainWindow):
         radio_settings_layout.addWidget(self.rig_serialport_val, 3, 1)
         
         # 1x Label step RX
-        self.qthsteprx_lbl = QLabel("Step (Hz) for RX offset:")
+        self.qthsteprx_lbl = QLabel("Min. step RX offset (Hz):")
         radio_settings_layout.addWidget(self.qthsteprx_lbl, 4, 0)
 
         self.qthsteprx = QLineEdit()
@@ -886,7 +886,7 @@ class MainWindow(QMainWindow):
         radio_settings_layout.addWidget(self.qthsteprx, 4, 1)
 
         # 1x Label Max Offset RX
-        self.qthmaxoffrx_lbl = QLabel("Max Offset (Hz) for RX:")
+        self.qthmaxoffrx_lbl = QLabel("Max. RX offset (Hz) :")
         radio_settings_layout.addWidget(self.qthmaxoffrx_lbl, 5, 0)
 
         self.qthmaxoffrx = QLineEdit()
@@ -895,7 +895,7 @@ class MainWindow(QMainWindow):
         radio_settings_layout.addWidget(self.qthmaxoffrx, 5, 1)
 
         # 1x Label doppler fm threshold
-        self.doppler_fm_threshold_lbl = QLabel("Doppler threshold for FM")
+        self.doppler_fm_threshold_lbl = QLabel("FM doppler threshold:")
         radio_settings_layout.addWidget(self.doppler_fm_threshold_lbl, 6, 0)
 
         self.doppler_fm_threshold = QLineEdit()
@@ -904,7 +904,7 @@ class MainWindow(QMainWindow):
         radio_settings_layout.addWidget(self.doppler_fm_threshold, 6, 1)
         
         # 1x Label doppler linear threshold
-        self.doppler_linear_threshold_lbl = QLabel("Doppler threshold for Linear")
+        self.doppler_linear_threshold_lbl = QLabel("Linear doppler threshold:")
         radio_settings_layout.addWidget(self.doppler_linear_threshold_lbl, 7, 0)
 
         self.doppler_linear_threshold = QLineEdit()
