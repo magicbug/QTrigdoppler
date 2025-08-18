@@ -25,20 +25,15 @@ from configparser import ConfigParser
 from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
-from PySide6.QtCore import Qt, Signal, Slot, QObject, QMetaObject, Q_ARG, QThreadPool
 from qt_material import apply_stylesheet,list_themes
-import logging
 from serial.tools import list_ports
 from lib.pass_recorder import PassRecorder
 import sounddevice as sd
 from lib import rotator
 from lib.sat_utils import *
-# logbook_connector import moved to after QApplication creation to avoid Qt object creation before app init
 import pynmea2
 import serial
-# GPSReader import moved to after QApplication creation to avoid Qt object creation before app init
-
-# Configure logging - need to do this before importing config to avoid issues
+import logging
 import logging.handlers
 import os
 
