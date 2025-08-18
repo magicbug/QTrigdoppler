@@ -801,7 +801,7 @@ class MainWindow(QMainWindow):
         qth_settings_layout = QGridLayout()
         
         # LAT
-        self.qth_settings_lat_lbl = QLabel("QTH latitude:")
+        self.qth_settings_lat_lbl = QLabel("Latitude:")
         qth_settings_layout.addWidget(self.qth_settings_lat_lbl, 0,0)
         self.qth_settings_lat_edit = QLineEdit()
         self.qth_settings_lat_edit.setMaxLength(10)
@@ -809,7 +809,7 @@ class MainWindow(QMainWindow):
         qth_settings_layout.addWidget(self.qth_settings_lat_edit, 0,1)        
         
         # LONG
-        self.qth_settings_long_lbl = QLabel("QTH longitude:")
+        self.qth_settings_long_lbl = QLabel("Longitude:")
         qth_settings_layout.addWidget(self.qth_settings_long_lbl, 1, 0)
         self.qth_settings_long_edit = QLineEdit()
         self.qth_settings_long_edit.setMaxLength(10)
@@ -817,7 +817,7 @@ class MainWindow(QMainWindow):
         qth_settings_layout.addWidget(self.qth_settings_long_edit, 1, 1)        
         
         # Altitude
-        self.qth_settings_alt_lbl = QLabel("QTH Altitude (meters):")
+        self.qth_settings_alt_lbl = QLabel("Altitude (m):")
         qth_settings_layout.addWidget(self.qth_settings_alt_lbl, 2, 0)
         self.qth_settings_alt_edit = QLineEdit()
         self.qth_settings_alt_edit.setMaxLength(10)
@@ -848,17 +848,14 @@ class MainWindow(QMainWindow):
         # Radio config --> EU/Tone or US/TQSL
         self.radio_country_config_lbl = QLabel("Radio type:")
         radio_settings_layout.addWidget(self.radio_country_config_lbl, 1, 0)
-        self.radio_country_config_eu_button = QRadioButton("EU/Tone")
-        self.radio_country_config_us_button = QRadioButton("US/TSQL")
-        self.radio_country_config_group = QButtonGroup()
-        self.radio_country_config_group.addButton(self.radio_country_config_eu_button)
-        self.radio_country_config_group.addButton(self.radio_country_config_us_button)
-        radio_settings_layout.addWidget(self.radio_country_config_eu_button, 1, 1)
-        radio_settings_layout.addWidget(self.radio_country_config_us_button, 1, 2)
+        self.radiotypecomb = QComboBox()
+        self.radiotypecomb.addItem('EU/Tone')
+        self.radiotypecomb.addItem('US/TSQL')
+        radio_settings_layout.addWidget(self.radiotypecomb, 1, 1)
         if RIG_TYPE == "EU":
-            self.radio_country_config_eu_button.setChecked(1)
+            self.radiotypecomb.setCurrentText('EU/Tone')
         elif RIG_TYPE == "US":
-            self.radio_country_config_us_button.setChecked(1)
+            self.radiotypecomb.setCurrentText('US/TSQL')
         
         # CI-V selector
         self.radicvi_lbl = QLabel("CVI address:")
@@ -1451,9 +1448,9 @@ class MainWindow(QMainWindow):
         elif self.radiolistcomb.currentText() == "Icom 910H":
             RADIO = configur['icom']['radio'] = '910'
             
-        if self.radio_country_config_eu_button.isChecked():
+        if self.radiotypecomb.currentText() == 'EU/Tone':
             RIG_TYPE = "EU"
-        elif self.radio_country_config_us_button.isChecked():
+        elif self.radiotypecomb.currentText() == 'US/TSQL':
             RIG_TYPE = "US"
         configur['icom']['rig_type'] = RIG_TYPE
 
