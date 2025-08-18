@@ -669,25 +669,25 @@ class MainWindow(QMainWindow):
         # Output log
         
         self.log_sat_status = QGroupBox()
-        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:0px;padding-bottom:0px; margin-top:0px;font-size: 16pt;} QLabel{font-size: 16pt;}")
+        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 16pt;} QLabel{font-size: 16pt;}")
         log_sat_status_layout = QGridLayout()
         
         self.log_sat_status_ele_lbl = QLabel("🛰 Elevation:")
         log_sat_status_layout.addWidget(self.log_sat_status_ele_lbl, 0, 0,alignment=Qt.AlignCenter)
 
-        self.log_sat_status_ele_val = QLabel("0.0 °")
+        self.log_sat_status_ele_val = QLabel("0.00 °")
         log_sat_status_layout.addWidget(self.log_sat_status_ele_val, 0, 1,alignment=Qt.AlignCenter)
         
         self.log_sat_status_azi_lbl = QLabel("🛰 Azimuth:")
         log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 1, 0,alignment=Qt.AlignCenter)
 
-        self.log_sat_status_azi_val = QLabel("0.0 °")
+        self.log_sat_status_azi_val = QLabel("0.00 °")
         log_sat_status_layout.addWidget(self.log_sat_status_azi_val, 1, 1,alignment=Qt.AlignCenter)
         
         self.log_sat_status_height_lbl = QLabel("🛰 Height:")
         log_sat_status_layout.addWidget(self.log_sat_status_height_lbl, 0, 3,alignment=Qt.AlignCenter)
 
-        self.log_sat_status_height_val = QLabel("0.0 m")
+        self.log_sat_status_height_val = QLabel("0000.00 km")
         log_sat_status_layout.addWidget(self.log_sat_status_height_val, 0, 4,alignment=Qt.AlignCenter)
         
         self.log_sat_status_illuminated_lbl = QLabel("🛰 Visibility:")
@@ -706,6 +706,12 @@ class MainWindow(QMainWindow):
         self.log_sat_status.setLayout(log_sat_status_layout)
         log_layout.addWidget(self.log_sat_status, stretch=2)
         
+        log_sat_status_layout.setColumnStretch(0, 1)
+        log_sat_status_layout.setColumnStretch(1, 1)
+        log_sat_status_layout.setColumnStretch(2, 0)
+        log_sat_status_layout.setColumnStretch(3, 1)
+        log_sat_status_layout.setColumnStretch(4, 1)
+        
         self.log_rig_status = QGroupBox()
         self.log_rig_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 12pt;} QLabel{font-size: 12pt;}")
         log_rig_status_layout = QGridLayout()
@@ -723,7 +729,7 @@ class MainWindow(QMainWindow):
         self.log_tle_state_val = QLabel("{0} day(s)".format(self.my_satellite.tle_age))
         log_rig_status_layout.addWidget(self.log_tle_state_val, 0, 4,alignment=Qt.AlignCenter)
         
-        self.log_sat_event_val = QLabel("events n/a")
+        self.log_sat_event_val = QLabel("AOS in 00:00:00")
         log_rig_status_layout.addWidget(self.log_sat_event_val, 1, 3, 1,2,alignment=Qt.AlignCenter)
         
         self.log_time_lbl = QLabel("UTC:")
@@ -776,7 +782,12 @@ class MainWindow(QMainWindow):
                 self.rotator_az_val.setText("error")
                 self.rotator_el_val.setText("error")
             self.start_rotator_position_worker()
-        
+        log_rig_status_layout.setColumnStretch(0, 1)
+        log_rig_status_layout.setColumnStretch(1, 1)
+        log_rig_status_layout.setColumnStretch(2, 1)
+        log_rig_status_layout.setColumnStretch(3, 1)
+        log_rig_status_layout.setColumnStretch(4, 1)
+
         ### Settings Tab
         settings_value_layout = QHBoxLayout()
         
@@ -3250,6 +3261,14 @@ if WEBAPI_ENABLED or REMOTE_ENABLED:
 
 window = MainWindow()
 window.show()
+
+# This part aligns the window to its optimal size
+window.adjustSize()
+def widen_a_bit():
+    pad = window.fontMetrics().horizontalAdvance("M") * 20  # Magic padding number
+    window.resize(window.sizeHint().width() + pad,
+                  window.sizeHint().height())
+QTimer.singleShot(0, widen_a_bit)  # run after the event loop lays out widgets
 
 # Proper application shutdown handling
 try:
