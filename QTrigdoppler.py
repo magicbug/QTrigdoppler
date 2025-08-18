@@ -1000,7 +1000,7 @@ class MainWindow(QMainWindow):
         files_settings_layout.addWidget(self.UpdateTLEButton, 5, 0, 1, 2)
         self.UpdateTLEButton.setEnabled(True)
   
-        self.tleupdate_stat_lbl = QLabel(str(LAST_TLE_UPDATE))
+        self.tleupdate_stat_lbl = QLabel("Last update: " + str(LAST_TLE_UPDATE))
         self.tleupdate_stat_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.tleupdate_stat_lbl.setAlignment(Qt.AlignCenter)
         files_settings_layout.addWidget(self.tleupdate_stat_lbl, 6, 0, 1, 2)
@@ -1254,6 +1254,7 @@ class MainWindow(QMainWindow):
         self.passrec_soundcard_label = QLabel("Soundcard:")
         passrec_settings_layout.addWidget(self.passrec_soundcard_label, 1, 0)
         self.passrec_soundcard_dropdown = QComboBox()
+        self.passrec_soundcard_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         devices = sd.query_devices()
         input_devices = [(i, d) for i, d in enumerate(devices) if d['max_input_channels'] > 0]
         for idx, dev in input_devices:
@@ -1603,7 +1604,7 @@ class MainWindow(QMainWindow):
             with open(TLEFILE, 'wb') as f:
                 f.write(response.content)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.tleupdate_stat_lbl.setText("✔ Last Update: " + LAST_TLE_UPDATE)
+            self.tleupdate_stat_lbl.setText("Last Update: " + LAST_TLE_UPDATE + " ✔")
             self.save_settings()
             
             # Refresh satellite dropdown with updated data
@@ -1626,7 +1627,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             logging.error(e)
-            self.tleupdate_stat_lbl.setText("❌ Last Update failed")
+            self.tleupdate_stat_lbl.setText("Last Update failed ❌")
     
     def update_auto_tle_timer(self):
         """Update the automatic TLE update timer based on current settings"""
