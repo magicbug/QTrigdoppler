@@ -12,7 +12,8 @@ import sys
 import math
 import time
 import re
-import urllib.request
+import requests
+import certifi
 import traceback
 from lib import icom
 import os
@@ -24,20 +25,15 @@ from configparser import ConfigParser
 from PySide6.QtGui import *
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
-from PySide6.QtCore import Qt, Signal, Slot, QObject, QMetaObject, Q_ARG, QThreadPool
 from qt_material import apply_stylesheet,list_themes
-import logging
 from serial.tools import list_ports
 from lib.pass_recorder import PassRecorder
 import sounddevice as sd
 from lib import rotator
 from lib.sat_utils import *
-# logbook_connector import moved to after QApplication creation to avoid Qt object creation before app init
 import pynmea2
 import serial
-# GPSReader import moved to after QApplication creation to avoid Qt object creation before app init
-
-# Configure logging - need to do this before importing config to avoid issues
+import logging
 import logging.handlers
 import os
 
@@ -668,25 +664,25 @@ class MainWindow(QMainWindow):
         # Output log
         
         self.log_sat_status = QGroupBox()
-        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:0px;padding-bottom:0px; margin-top:0px;font-size: 16pt;} QLabel{font-size: 16pt;}")
+        self.log_sat_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 16pt;} QLabel{font-size: 16pt;}")
         log_sat_status_layout = QGridLayout()
         
         self.log_sat_status_ele_lbl = QLabel("🛰 Elevation:")
         log_sat_status_layout.addWidget(self.log_sat_status_ele_lbl, 0, 0,alignment=Qt.AlignCenter)
 
-        self.log_sat_status_ele_val = QLabel("0.0 °")
+        self.log_sat_status_ele_val = QLabel("0.00 °")
         log_sat_status_layout.addWidget(self.log_sat_status_ele_val, 0, 1,alignment=Qt.AlignCenter)
         
         self.log_sat_status_azi_lbl = QLabel("🛰 Azimuth:")
         log_sat_status_layout.addWidget(self.log_sat_status_azi_lbl, 1, 0,alignment=Qt.AlignCenter)
 
-        self.log_sat_status_azi_val = QLabel("0.0 °")
+        self.log_sat_status_azi_val = QLabel("0.00 °")
         log_sat_status_layout.addWidget(self.log_sat_status_azi_val, 1, 1,alignment=Qt.AlignCenter)
         
         self.log_sat_status_height_lbl = QLabel("🛰 Height:")
         log_sat_status_layout.addWidget(self.log_sat_status_height_lbl, 0, 3,alignment=Qt.AlignCenter)
 
-        self.log_sat_status_height_val = QLabel("0.0 m")
+        self.log_sat_status_height_val = QLabel("0000.00 km")
         log_sat_status_layout.addWidget(self.log_sat_status_height_val, 0, 4,alignment=Qt.AlignCenter)
         
         self.log_sat_status_illuminated_lbl = QLabel("🛰 Visibility:")
@@ -705,6 +701,12 @@ class MainWindow(QMainWindow):
         self.log_sat_status.setLayout(log_sat_status_layout)
         log_layout.addWidget(self.log_sat_status, stretch=2)
         
+        log_sat_status_layout.setColumnStretch(0, 1)
+        log_sat_status_layout.setColumnStretch(1, 1)
+        log_sat_status_layout.setColumnStretch(2, 0)
+        log_sat_status_layout.setColumnStretch(3, 1)
+        log_sat_status_layout.setColumnStretch(4, 1)
+        
         self.log_rig_status = QGroupBox()
         self.log_rig_status.setStyleSheet("QGroupBox{padding-top:2px;padding-bottom:2px; margin-top:0px;font-size: 12pt;} QLabel{font-size: 12pt;}")
         log_rig_status_layout = QGridLayout()
@@ -722,7 +724,7 @@ class MainWindow(QMainWindow):
         self.log_tle_state_val = QLabel("{0} day(s)".format(self.my_satellite.tle_age))
         log_rig_status_layout.addWidget(self.log_tle_state_val, 0, 4,alignment=Qt.AlignCenter)
         
-        self.log_sat_event_val = QLabel("events n/a")
+        self.log_sat_event_val = QLabel("AOS in 00:00:00")
         log_rig_status_layout.addWidget(self.log_sat_event_val, 1, 3, 1,2,alignment=Qt.AlignCenter)
         
         self.log_time_lbl = QLabel("UTC:")
@@ -775,7 +777,12 @@ class MainWindow(QMainWindow):
                 self.rotator_az_val.setText("error")
                 self.rotator_el_val.setText("error")
             self.start_rotator_position_worker()
-        
+        log_rig_status_layout.setColumnStretch(0, 1)
+        log_rig_status_layout.setColumnStretch(1, 1)
+        log_rig_status_layout.setColumnStretch(2, 1)
+        log_rig_status_layout.setColumnStretch(3, 1)
+        log_rig_status_layout.setColumnStretch(4, 1)
+
         ### Settings Tab
         settings_value_layout = QHBoxLayout()
         
@@ -800,7 +807,7 @@ class MainWindow(QMainWindow):
         qth_settings_layout = QGridLayout()
         
         # LAT
-        self.qth_settings_lat_lbl = QLabel("QTH latitude:")
+        self.qth_settings_lat_lbl = QLabel("Latitude:")
         qth_settings_layout.addWidget(self.qth_settings_lat_lbl, 0,0)
         self.qth_settings_lat_edit = QLineEdit()
         self.qth_settings_lat_edit.setMaxLength(10)
@@ -808,7 +815,7 @@ class MainWindow(QMainWindow):
         qth_settings_layout.addWidget(self.qth_settings_lat_edit, 0,1)        
         
         # LONG
-        self.qth_settings_long_lbl = QLabel("QTH longitude:")
+        self.qth_settings_long_lbl = QLabel("Longitude:")
         qth_settings_layout.addWidget(self.qth_settings_long_lbl, 1, 0)
         self.qth_settings_long_edit = QLineEdit()
         self.qth_settings_long_edit.setMaxLength(10)
@@ -816,7 +823,7 @@ class MainWindow(QMainWindow):
         qth_settings_layout.addWidget(self.qth_settings_long_edit, 1, 1)        
         
         # Altitude
-        self.qth_settings_alt_lbl = QLabel("QTH Altitude (meters):")
+        self.qth_settings_alt_lbl = QLabel("Altitude (m):")
         qth_settings_layout.addWidget(self.qth_settings_alt_lbl, 2, 0)
         self.qth_settings_alt_edit = QLineEdit()
         self.qth_settings_alt_edit.setMaxLength(10)
@@ -826,8 +833,6 @@ class MainWindow(QMainWindow):
         self.settings_qth_box.setLayout(qth_settings_layout)
         
         ## Radio
-        self.radio_settings_layout_scroller = QScrollArea()
-        self.radio_settings_layout_scroller_widget = QWidget()
         radio_settings_layout = QGridLayout()
         
         # Radio selector
@@ -847,27 +852,24 @@ class MainWindow(QMainWindow):
         # Radio config --> EU/Tone or US/TQSL
         self.radio_country_config_lbl = QLabel("Radio type:")
         radio_settings_layout.addWidget(self.radio_country_config_lbl, 1, 0)
-        self.radio_country_config_eu_button = QRadioButton("EU/Tone")
-        self.radio_country_config_us_button = QRadioButton("US/TSQL")
-        self.radio_country_config_group = QButtonGroup()
-        self.radio_country_config_group.addButton(self.radio_country_config_eu_button)
-        self.radio_country_config_group.addButton(self.radio_country_config_us_button)
-        radio_settings_layout.addWidget(self.radio_country_config_eu_button, 1, 1)
-        radio_settings_layout.addWidget(self.radio_country_config_us_button, 1, 2)
+        self.radiotypecomb = QComboBox()
+        self.radiotypecomb.addItem('EU/Tone')
+        self.radiotypecomb.addItem('US/TSQL')
+        radio_settings_layout.addWidget(self.radiotypecomb, 1, 1)
         if RIG_TYPE == "EU":
-            self.radio_country_config_eu_button.setChecked(1)
+            self.radiotypecomb.setCurrentText('EU/Tone')
         elif RIG_TYPE == "US":
-            self.radio_country_config_us_button.setChecked(1)
+            self.radiotypecomb.setCurrentText('US/TSQL')
         
         # CI-V selector
-        self.radicvi_lbl = QLabel("CVI address:")
+        self.radicvi_lbl = QLabel("CVI address (hex):")
         radio_settings_layout.addWidget(self.radicvi_lbl, 2, 0)
         self.radicvi = QLineEdit()
         self.radicvi.setMaxLength(2)
         self.radicvi.setText(CVIADDR)
         radio_settings_layout.addWidget(self.radicvi, 2, 1)
         
-        self.rig_serialport_lbl = QLabel("Port:")
+        self.rig_serialport_lbl = QLabel("Serial port:")
         radio_settings_layout.addWidget(self.rig_serialport_lbl, 3, 0)
 
         # Replace QLineEdit with QComboBox for COM port selection
@@ -881,7 +883,7 @@ class MainWindow(QMainWindow):
         radio_settings_layout.addWidget(self.rig_serialport_val, 3, 1)
         
         # 1x Label step RX
-        self.qthsteprx_lbl = QLabel("Step (Hz) for RX offset:")
+        self.qthsteprx_lbl = QLabel("Min. step RX offset (Hz):")
         radio_settings_layout.addWidget(self.qthsteprx_lbl, 4, 0)
 
         self.qthsteprx = QLineEdit()
@@ -890,7 +892,7 @@ class MainWindow(QMainWindow):
         radio_settings_layout.addWidget(self.qthsteprx, 4, 1)
 
         # 1x Label Max Offset RX
-        self.qthmaxoffrx_lbl = QLabel("Max Offset (Hz) for RX:")
+        self.qthmaxoffrx_lbl = QLabel("Max. RX offset (Hz) :")
         radio_settings_layout.addWidget(self.qthmaxoffrx_lbl, 5, 0)
 
         self.qthmaxoffrx = QLineEdit()
@@ -899,7 +901,7 @@ class MainWindow(QMainWindow):
         radio_settings_layout.addWidget(self.qthmaxoffrx, 5, 1)
 
         # 1x Label doppler fm threshold
-        self.doppler_fm_threshold_lbl = QLabel("Doppler threshold for FM")
+        self.doppler_fm_threshold_lbl = QLabel("FM doppler threshold:")
         radio_settings_layout.addWidget(self.doppler_fm_threshold_lbl, 6, 0)
 
         self.doppler_fm_threshold = QLineEdit()
@@ -908,7 +910,7 @@ class MainWindow(QMainWindow):
         radio_settings_layout.addWidget(self.doppler_fm_threshold, 6, 1)
         
         # 1x Label doppler linear threshold
-        self.doppler_linear_threshold_lbl = QLabel("Doppler threshold for Linear")
+        self.doppler_linear_threshold_lbl = QLabel("Linear doppler threshold:")
         radio_settings_layout.addWidget(self.doppler_linear_threshold_lbl, 7, 0)
 
         self.doppler_linear_threshold = QLineEdit()
@@ -921,15 +923,7 @@ class MainWindow(QMainWindow):
         self.predictive_doppler_checkbox.setChecked(PREDICTIVE_DOPPLER)
         radio_settings_layout.addWidget(self.predictive_doppler_checkbox, 8, 0, 1, 2)
         
-        #self.settings_radio_box.setLayout(radio_settings_layout)
-        self.radio_settings_layout_scroller_widget.setLayout(radio_settings_layout)
-        self.radio_settings_layout_scroller.setWidget(self.radio_settings_layout_scroller_widget)
-        self.radio_settings_layout_scroller.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.radio_settings_layout_scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.radio_settings_layout_scroller.setWidgetResizable(True)
-        self.radio_settings_layout_scroller_layout = QHBoxLayout()
-        self.radio_settings_layout_scroller_layout.addWidget(self.radio_settings_layout_scroller)
-        self.settings_radio_box.setLayout(self.radio_settings_layout_scroller_layout)
+        self.settings_radio_box.setLayout(radio_settings_layout)
         
         ## Files
         files_settings_layout = QGridLayout()
@@ -1002,7 +996,7 @@ class MainWindow(QMainWindow):
         files_settings_layout.addWidget(self.UpdateTLEButton, 5, 0, 1, 2)
         self.UpdateTLEButton.setEnabled(True)
   
-        self.tleupdate_stat_lbl = QLabel(str(LAST_TLE_UPDATE))
+        self.tleupdate_stat_lbl = QLabel("Last update: " + str(LAST_TLE_UPDATE))
         self.tleupdate_stat_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.tleupdate_stat_lbl.setAlignment(Qt.AlignCenter)
         files_settings_layout.addWidget(self.tleupdate_stat_lbl, 6, 0, 1, 2)
@@ -1135,8 +1129,6 @@ class MainWindow(QMainWindow):
         self.adv_settings_rotator_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
         adv_settings_value_layout.addWidget(self.adv_settings_rotator_box, 0,1)
         
-        self.rotator_settings_layout_scroller = QScrollArea()
-        self.rotator_settings_layout_scroller_widget = QWidget()
         
         ## Enable
         rotator_settings_layout = QGridLayout()
@@ -1219,16 +1211,8 @@ class MainWindow(QMainWindow):
         self.rotator_minelev_val.setMaxLength(6)
         self.rotator_minelev_val.setText(str(ROTATOR_MIN_ELEVATION))
         rotator_settings_layout.addWidget(self.rotator_minelev_val, 9, 1)
-        
-        self.rotator_settings_layout_scroller.setLayout(rotator_settings_layout)
-        self.rotator_settings_layout_scroller.setWidget(self.rotator_settings_layout_scroller_widget)
-        self.rotator_settings_layout_scroller.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        self.rotator_settings_layout_scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.rotator_settings_layout_scroller.setWidgetResizable(True)
-        self.rotator_settings_layout_scroller_layout = QHBoxLayout()
-        self.rotator_settings_layout_scroller_layout.addWidget(self.rotator_settings_layout_scroller)
             
-        self.adv_settings_rotator_box.setLayout(self.rotator_settings_layout_scroller_layout)
+        self.adv_settings_rotator_box.setLayout(rotator_settings_layout)
         
         #Store button
         adv_settings_store_layout = QVBoxLayout()
@@ -1256,6 +1240,7 @@ class MainWindow(QMainWindow):
         self.passrec_soundcard_label = QLabel("Soundcard:")
         passrec_settings_layout.addWidget(self.passrec_soundcard_label, 1, 0)
         self.passrec_soundcard_dropdown = QComboBox()
+        self.passrec_soundcard_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         devices = sd.query_devices()
         input_devices = [(i, d) for i, d in enumerate(devices) if d['max_input_channels'] > 0]
         for idx, dev in input_devices:
@@ -1450,9 +1435,9 @@ class MainWindow(QMainWindow):
         elif self.radiolistcomb.currentText() == "Icom 910H":
             RADIO = configur['icom']['radio'] = '910'
             
-        if self.radio_country_config_eu_button.isChecked():
+        if self.radiotypecomb.currentText() == 'EU/Tone':
             RIG_TYPE = "EU"
-        elif self.radio_country_config_us_button.isChecked():
+        elif self.radiotypecomb.currentText() == 'US/TSQL':
             RIG_TYPE = "US"
         configur['icom']['rig_type'] = RIG_TYPE
 
@@ -1601,9 +1586,11 @@ class MainWindow(QMainWindow):
         try:
             
             global LAST_TLE_UPDATE
-            urllib.request.urlretrieve(TLEURL, TLEFILE)
+            response = requests.get(TLEURL, verify=certifi.where())
+            with open(TLEFILE, 'wb') as f:
+                f.write(response.content)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.tleupdate_stat_lbl.setText("✔ Last Update: " + LAST_TLE_UPDATE)
+            self.tleupdate_stat_lbl.setText("Last Update: " + LAST_TLE_UPDATE + " ✔")
             self.save_settings()
             
             # Refresh satellite dropdown with updated data
@@ -1626,7 +1613,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             logging.error(e)
-            self.tleupdate_stat_lbl.setText("❌ Last Update failed")
+            self.tleupdate_stat_lbl.setText("Last Update failed ❌")
     
     def update_auto_tle_timer(self):
         """Update the automatic TLE update timer based on current settings"""
@@ -1659,7 +1646,9 @@ class MainWindow(QMainWindow):
         # if we're currently tracking (startup updates shouldn't interrupt)
         try:
             global LAST_TLE_UPDATE
-            urllib.request.urlretrieve(TLEURL, TLEFILE)
+            response = requests.get(TLEURL, verify=certifi.where())
+            with open(TLEFILE, 'wb') as f:
+                f.write(response.content)
             LAST_TLE_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.tleupdate_stat_lbl.setText("✔" + LAST_TLE_UPDATE + " (auto)")
             self.save_settings()
@@ -3267,6 +3256,14 @@ if WEBAPI_ENABLED or REMOTE_ENABLED:
 
 window = MainWindow()
 window.show()
+
+# This part aligns the window to its optimal size
+window.adjustSize()
+def widen_a_bit():
+    pad = window.fontMetrics().horizontalAdvance("M") * 20  # Magic padding number
+    window.resize(window.sizeHint().width() + pad,
+                  window.sizeHint().height())
+QTimer.singleShot(0, widen_a_bit)  # run after the event loop lays out widgets
 
 # Proper application shutdown handling
 try:

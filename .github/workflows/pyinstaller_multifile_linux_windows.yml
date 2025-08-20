@@ -1,0 +1,69 @@
+name: Build QTrigdoppler multifile executables
+
+on:
+  pull_request:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: windows-latest
+            name: windows
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        run: |
+          pyinstaller QTrigdoppler.py --noconsole --exclude PyQt6 --splash images/splash.jpg
+        
+      - name: Prepare package (Linux)
+        if: matrix.name == 'linux'
+        run: |
+          mkdir package
+          cp -r dist/QTrigdoppler/* package/
+          cp config.ini doppler.sqf mykepler.txt package/
+          cd package
+          zip -r ../QTrigdoppler-multifile-linux.zip *
+        shell: bash
+      
+      - name: Prepare package (Windows)
+        if: matrix.name == 'windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path package
+          Copy-Item -Path 'dist\QTrigdoppler\*' -Destination 'package' -Recurse -Force
+          Copy-Item -Path 'config.ini','doppler.sqf','mykepler.txt' -Destination 'package' -Force
+          Compress-Archive -Path 'package\*' -DestinationPath 'QTrigdoppler-multifile-windows.zip' -Force
+        shell: pwsh
+
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: QTrigdoppler-multifile-${{ matrix.name }}
+          path: package/*
+          
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: package/*
