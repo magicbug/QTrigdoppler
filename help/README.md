@@ -52,7 +52,8 @@ The following help documents are planned for future releases:
 1. Read the main [README.md](../README.md) for initial setup
 2. Follow the [Configuration Guide](configuration.md) to set up your config.ini
 3. Configure your radio and location settings
-4. Try the [keyboard shortcuts](keyboard-shortcuts.md) for efficient operation
+4. Update your satellite database using the "Update Satellite Database" button in Settings
+5. Try the [keyboard shortcuts](keyboard-shortcuts.md) for efficient operation
 
 ### Experienced Users
 - Check out planned features in [TODO.md](../todo.md)

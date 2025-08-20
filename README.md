@@ -98,6 +98,7 @@ DL3JOP modifications:
 - Added ability to automatically record satellite passes to .wav files.
 - Added support to use USB / Serial GPS units to get location position.
 - Automatic TLE Updating on Startup or based on hourly time period.
+- Satellite Database (doppler.sqf) downloading with merge or replace options from oscarwatch.org.
 - Help files
     
     

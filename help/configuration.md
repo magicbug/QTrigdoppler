@@ -67,6 +67,23 @@ doppler_threshold_linear = 50
 predictive_doppler = True
 ```
 
+#### Satellite Database Updates
+
+QTrigdoppler can automatically update the satellite frequency database (doppler.sqf) from oscarwatch.org:
+
+**UI Location**: Settings → Files → "Update Satellite Database" button
+
+**Update Options**:
+- **Replace Complete File**: Downloads and replaces the entire doppler.sqf file
+- **Merge New Satellites**: Adds only new satellites while preserving existing entries
+
+**Features**:
+- Progress indication during download
+- Detailed feedback showing which satellites were added during merge
+- Automatic satellite list refresh after update
+- Error handling with user-friendly messages
+- Logging of all update operations
+
 ### [icom] - Radio Configuration
 
 Settings for Icom transceiver control via CI-V interface.
@@ -97,6 +114,7 @@ Miscellaneous application behavior settings.
 |---------|------|----------|-------------|---------|
 | `display_map` | bool | No | Show satellite ground track map | `True`/`False` |
 | `last_tle_update` | string | No | Last TLE update timestamp (auto-managed) | `2025-01-01 00:00:00` |
+| `last_doppler_update` | string | No | Last doppler.sqf update timestamp (auto-managed) | `Never` |
 | `tle_update_interval` | int | No | TLE update interval in seconds | `86400` (24 hours) |
 | `auto_tle_startup` | bool | No | Auto-update TLE files on startup | `True`/`False` |
 | `auto_tle_interval_enabled` | bool | No | Enable periodic TLE updates | `True`/`False` |
@@ -287,6 +305,7 @@ These items can be safely removed from your configuration file.
 
 Some configuration values are automatically updated by the application:
 - `[misc]` → `last_tle_update` - Updated when TLE files are refreshed
+- `[misc]` → `last_doppler_update` - Updated when satellite database (doppler.sqf) is refreshed
 - `[offset_profiles]` → `satoffsetN` - New profiles added when offsets are saved
 - `[qth]` → `gps_port` - Updated when GPS port is selected
 
