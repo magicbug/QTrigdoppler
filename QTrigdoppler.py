@@ -159,6 +159,7 @@ CVIADDR = configur.get('icom','cviaddress')
 RIG_SERIAL_PORT = configur.get('icom', 'serialport')
 RIG_TYPE = configur.get('icom', 'rig_type')
 LAST_TLE_UPDATE = configur.get('misc', 'last_tle_update')
+LAST_DOPPLER_UPDATE = configur.get('misc', 'last_doppler_update', fallback='Never')
 TLE_UPDATE_INTERVAL = configur.get('misc', 'tle_update_interval')
 AUTO_TLE_STARTUP = configur.getboolean('misc', 'auto_tle_startup', fallback=False)
 TLE_UPDATE_STARTUP = configur.getboolean('misc', 'tle_update_startup', fallback=False)
@@ -1001,6 +1002,17 @@ class MainWindow(QMainWindow):
         self.tleupdate_stat_lbl.setAlignment(Qt.AlignCenter)
         files_settings_layout.addWidget(self.tleupdate_stat_lbl, 6, 0, 1, 2)
         
+        # Doppler.sqf update button
+        self.UpdateDopplerButton = QPushButton("Update Satellite Database")
+        self.UpdateDopplerButton.clicked.connect(self.update_doppler_file)
+        files_settings_layout.addWidget(self.UpdateDopplerButton, 7, 0, 1, 2)
+        self.UpdateDopplerButton.setEnabled(True)
+        
+        self.dopplerupdate_stat_lbl = QLabel("Last update: " + str(LAST_DOPPLER_UPDATE))
+        self.dopplerupdate_stat_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.dopplerupdate_stat_lbl.setAlignment(Qt.AlignCenter)
+        files_settings_layout.addWidget(self.dopplerupdate_stat_lbl, 8, 0, 1, 2)
+        
 
         
         self.settings_file_box.setLayout(files_settings_layout)
@@ -1394,6 +1406,7 @@ class MainWindow(QMainWindow):
         global CVIADDR
         global OPMODE
         global LAST_TLE_UPDATE
+        global LAST_DOPPLER_UPDATE
         global TLE_UPDATE_STARTUP
         global RIG_TYPE
         global ROTATOR_SERIAL_PORT
@@ -1463,6 +1476,7 @@ class MainWindow(QMainWindow):
         
         # Save TLE update settings
         configur['misc']['last_tle_update'] = LAST_TLE_UPDATE
+        configur['misc']['last_doppler_update'] = LAST_DOPPLER_UPDATE
         configur['misc']['auto_tle_startup'] = str(self.auto_tle_startup_checkbox.isChecked())
         configur['misc']['auto_tle_interval_enabled'] = str(self.auto_tle_interval_checkbox.isChecked())
         configur['misc']['auto_tle_interval_hours'] = str(self.auto_tle_interval_spinbox.value())
@@ -1614,6 +1628,198 @@ class MainWindow(QMainWindow):
             logging.error("***  Unable to download TLE file: {theurl}".format(theurl=TLEURL))
             logging.error(e)
             self.tleupdate_stat_lbl.setText("Last Update failed ❌")
+    
+    def update_doppler_file(self):
+        """Update the doppler.sqf file with user choice of merge or replace"""
+        
+        # Create a dialog to ask user for merge or replace option
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Update Satellite Database")
+        dialog.setModal(True)
+        dialog.resize(400, 200)
+        
+        layout = QVBoxLayout()
+        
+        # Add explanation text
+        explanation = QLabel(
+            "Choose how to update the satellite database (doppler.sqf):\n\n"
+            "• Replace: Download the latest complete file from oscarwatch.org\n"
+            "• Merge: Add new satellites while keeping your existing entries"
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+        
+        # Add buttons
+        button_layout = QHBoxLayout()
+        
+        replace_button = QPushButton("Replace Complete File")
+        replace_button.clicked.connect(lambda: self.perform_doppler_update(dialog, "replace"))
+        
+        merge_button = QPushButton("Merge New Satellites")
+        merge_button.clicked.connect(lambda: self.perform_doppler_update(dialog, "merge"))
+        
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(dialog.reject)
+        
+        button_layout.addWidget(replace_button)
+        button_layout.addWidget(merge_button)
+        button_layout.addWidget(cancel_button)
+        
+        layout.addLayout(button_layout)
+        dialog.setLayout(layout)
+        
+        # Show the dialog
+        dialog.exec_()
+    
+    def perform_doppler_update(self, dialog, update_type):
+        """Perform the actual doppler.sqf update"""
+        try:
+            # Stop tracking if running
+            try:
+                self.the_stop_button_was_clicked()
+            except:
+                pass
+            
+            dialog.accept()  # Close the dialog
+            
+            global LAST_DOPPLER_UPDATE
+            doppler_url = "https://tle.oscarwatch.org/doppler.sqf"
+            
+            # Update status label to show progress
+            self.dopplerupdate_stat_lbl.setText("🔄 Downloading...")
+            QApplication.processEvents()  # Update the UI
+            
+            # Download the new file
+            response = requests.get(doppler_url, verify=certifi.where())
+            new_content = response.text
+            
+            if update_type == "replace":
+                # Simply replace the entire file
+                with open(SQFILE, 'w') as f:
+                    f.write(new_content)
+                logging.info("Doppler.sqf file replaced completely")
+                
+                # Count satellites in the new file for user feedback
+                new_lines = new_content.split('\n')
+                total_satellites = 0
+                for line in new_lines:
+                    if not line.strip().startswith(';') and line.strip():
+                        parts = line.strip().split(',')
+                        if len(parts) > 0 and parts[0].strip():
+                            total_satellites += 1
+                
+                # Show user confirmation
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Information)
+                msg.setWindowTitle("Replace Successful")
+                msg.setText(f"Successfully replaced the satellite database.")
+                msg.setInformativeText(f"The new database contains {total_satellites} satellites.")
+                msg.exec_()
+                
+            elif update_type == "merge":
+                # Read existing file and merge with new content
+                existing_satellites = set()
+                existing_lines = []
+                
+                try:
+                    with open(SQFILE, 'r') as f:
+                        existing_lines = f.readlines()
+                    
+                    # Parse existing satellites
+                    for line in existing_lines:
+                        if not line.strip().startswith(';') and line.strip():
+                            parts = line.strip().split(',')
+                            if len(parts) > 0:
+                                sat_name = parts[0].strip()
+                                existing_satellites.add(sat_name)
+                                
+                except FileNotFoundError:
+                    # If file doesn't exist, treat as replace
+                    existing_lines = []
+                    existing_satellites = set()
+                
+                # Parse new content to find new satellites
+                new_lines = new_content.split('\n')
+                merged_content = existing_lines.copy()
+                
+                # Add new satellites that don't exist in current file
+                new_satellites_count = 0
+                new_satellites_list = []
+                for line in new_lines:
+                    if not line.strip().startswith(';') and line.strip():
+                        parts = line.strip().split(',')
+                        if len(parts) > 0:
+                            sat_name = parts[0].strip()
+                            if sat_name and sat_name not in existing_satellites:
+                                merged_content.append(line + '\n' if not line.endswith('\n') else line)
+                                existing_satellites.add(sat_name)
+                                new_satellites_list.append(sat_name)
+                                new_satellites_count += 1
+                
+                # Write merged content
+                with open(SQFILE, 'w') as f:
+                    f.writelines(merged_content)
+                
+                if new_satellites_count > 0:
+                    logging.info(f"Doppler.sqf file merged - {new_satellites_count} new satellites added: {', '.join(new_satellites_list)}")
+                    
+                    # Show user which satellites were added
+                    if new_satellites_count <= 15:  # Show individual names if reasonable number
+                        msg = QMessageBox()
+                        msg.setIcon(QMessageBox.Information)
+                        msg.setWindowTitle("Merge Successful")
+                        msg.setText(f"Successfully merged {new_satellites_count} new satellites:")
+                        msg.setDetailedText('\n'.join(f"• {sat}" for sat in new_satellites_list))
+                        msg.exec_()
+                    else:  # Just show count if too many
+                        msg = QMessageBox()
+                        msg.setIcon(QMessageBox.Information)
+                        msg.setWindowTitle("Merge Successful")
+                        msg.setText(f"Successfully merged {new_satellites_count} new satellites into the database.")
+                        msg.setInformativeText("Check the application log for the complete list of added satellites.")
+                        msg.exec_()
+                else:
+                    logging.info("Doppler.sqf file merge completed - no new satellites found")
+                    # Show user that no new satellites were found
+                    msg = QMessageBox()
+                    msg.setIcon(QMessageBox.Information)
+                    msg.setWindowTitle("Merge Complete")
+                    msg.setText("No new satellites were found to merge.")
+                    msg.setInformativeText("Your satellite database is already up to date.")
+                    msg.exec_()
+            
+            # Update timestamp and status
+            LAST_DOPPLER_UPDATE = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.dopplerupdate_stat_lbl.setText("Last Update: " + LAST_DOPPLER_UPDATE + " ✔")
+            self.save_settings()
+            
+            # Refresh satellite dropdown with updated data
+            self.refresh_satellite_dropdown()
+            
+            # Refresh web API satellite list cache and notify clients
+            if WEBAPI_ENABLED:
+                try:
+                    web_api.broadcast_satellite_list_update()
+                    logging.info("Broadcast satellite list update to web clients")
+                except Exception as e:
+                    logging.error(f"Error broadcasting satellite list update to web clients: {e}")
+            
+            # Reload current satellite data if one is selected
+            if self.my_satellite.name != '':
+                self.sat_changed(self.my_satellite.name)
+                
+            logging.info(f"Doppler.sqf update completed successfully ({update_type}) - satellite data refreshed")
+            
+        except Exception as e:
+            logging.error(f"*** Unable to download doppler.sqf file: {e}")
+            self.dopplerupdate_stat_lbl.setText("Last Update failed ❌")
+            
+            # Show error dialog to user
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Critical)
+            msg.setWindowTitle("Update Failed")
+            msg.setText(f"Failed to update satellite database:\n{str(e)}")
+            msg.exec_()
     
     def update_auto_tle_timer(self):
         """Update the automatic TLE update timer based on current settings"""

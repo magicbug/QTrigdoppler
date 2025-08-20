@@ -38,6 +38,7 @@ rig_type = EU                   # Rig type (EU/US/JP for frequency ranges)
 # Miscellaneous application settings
 display_map = False                    # Show satellite map (True/False)
 last_tle_update = 2025-01-01 00:00:00  # Last TLE update timestamp (auto-managed)
+last_doppler_update = Never            # Last doppler.sqf update timestamp (auto-managed)
 tle_update_interval = 86400            # TLE update interval in seconds (86400 = 24 hours)
 auto_tle_startup = False               # Auto-update TLE on startup
 auto_tle_interval_enabled = False      # Enable periodic TLE updates
