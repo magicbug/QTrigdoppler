@@ -1678,7 +1678,10 @@ class MainWindow(QMainWindow):
             try:
                 self.the_stop_button_was_clicked()
             except:
-                pass
+            try:
+                self.the_stop_button_was_clicked()
+            except Exception as e:
+                logging.error("Failed to stop tracking before doppler update: %s", e, exc_info=True)
             
             dialog.accept()  # Close the dialog
             
