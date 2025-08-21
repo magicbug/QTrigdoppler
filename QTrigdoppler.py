@@ -2631,9 +2631,11 @@ class MainWindow(QMainWindow):
             self.my_satellite.down_doppler = float(format(rx_doppler_raw, '.2f'))
             self.my_satellite.down_doppler_rate = ((self.my_satellite.down_doppler - self.my_satellite.down_doppler_old)/2)/0.2
             # Use higher rate limit for linear satellites (USB, LSB, CW) as they have legitimate high doppler rates at TCA
-            max_doppler_rate = 1000.0 if self.my_satellite.downmode in ["USB", "LSB", "CW"] else 100.0
+            max_doppler_rate = 2000.0 if self.my_satellite.downmode in ["USB", "LSB", "CW"] else 500.0
             if abs(self.my_satellite.down_doppler_rate) > max_doppler_rate:
-                self.my_satellite.down_doppler_rate = 0.0
+                # Cap the rate instead of stopping updates completely
+                self.my_satellite.down_doppler_rate = max_doppler_rate if self.my_satellite.down_doppler_rate > 0 else -max_doppler_rate
+                logging.debug(f"Capped RX doppler rate to {self.my_satellite.down_doppler_rate} Hz/s")
                 
             self.my_satellite.up_doppler_old = self.my_satellite.up_doppler
             # Match original tx_doppler_val_calc format: format(..., '.2f') then convert to float
@@ -2641,9 +2643,11 @@ class MainWindow(QMainWindow):
             self.my_satellite.up_doppler = float(format(tx_doppler_raw, '.2f'))
             self.my_satellite.up_doppler_rate = ((self.my_satellite.up_doppler - self.my_satellite.up_doppler_old)/2)/0.2
             # Use higher rate limit for linear satellites (USB, LSB, CW) as they have legitimate high doppler rates at TCA
-            max_uplink_rate = 1000.0 if self.my_satellite.upmode in ["USB", "LSB", "CW"] else 100.0
+            max_uplink_rate = 2000.0 if self.my_satellite.upmode in ["USB", "LSB", "CW"] else 500.0
             if abs(self.my_satellite.up_doppler_rate) > max_uplink_rate:
-                self.my_satellite.up_doppler_rate = 0.0
+                # Cap the rate instead of stopping updates completely
+                self.my_satellite.up_doppler_rate = max_uplink_rate if self.my_satellite.up_doppler_rate > 0 else -max_uplink_rate
+                logging.debug(f"Capped TX doppler rate to {self.my_satellite.up_doppler_rate} Hz/s")
                 
             self.rxdoppler_val.setText(str('{:,}'.format(self.my_satellite.down_doppler)) + " Hz")
             self.txdoppler_val.setText(str('{:,}'.format(self.my_satellite.up_doppler)) + " Hz")
