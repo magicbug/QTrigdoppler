@@ -99,6 +99,7 @@ DL3JOP modifications:
 - Added support to use USB / Serial GPS units to get location position.
 - Automatic TLE Updating on Startup or based on hourly time period.
 - Satellite Database (doppler.sqf) downloading with merge or replace options from oscarwatch.org.
+- Added frequency pause/resume feature: pause frequency updates while keeping rotator tracking for manual frequency control on newer satellites.
 - Help files
     
     
