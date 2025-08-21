@@ -148,6 +148,9 @@
                 <button id="parkRotatorBtn" onclick="parkRotator()">Park Rotator</button>
                 <button id="stopRotatorBtn" onclick="stopRotator()">Stop Rotation</button>
             </div>
+            <div id="frequency-controls" style="margin-top:10px; display:flex; gap:10px;">
+                <button id="toggleFreqBtn" onclick="toggleFrequencyUpdates()" disabled>Pause Frequency Updates</button>
+            </div>
         </div>
     </div>
     
@@ -259,6 +262,14 @@
                     // Enable/disable tracking buttons
                     document.getElementById('startTrackingBtn').disabled = isTrackingActive;
                     document.getElementById('stopTrackingBtn').disabled = !isTrackingActive;
+                    
+                    // Enable/disable frequency control button based on tracking state and pause state
+                    const toggleBtn = document.getElementById('toggleFreqBtn');
+                    if (toggleBtn) {
+                        const isFreqPaused = data.frequency_updates_paused === true;
+                        toggleBtn.disabled = !isTrackingActive;
+                        toggleBtn.textContent = isFreqPaused ? 'Resume Frequency Updates' : 'Pause Frequency Updates';
+                    }
                     
                     // Update UI with received status if available
                     if (data.satellite) {
@@ -751,6 +762,17 @@
             if (!socket || !socket.connected) return;
             logDebug('Emit: stop_rotator');
             socket.emit('stop_rotator');
+        }
+        function toggleFrequencyUpdates() {
+            if (!socket || !socket.connected) return;
+            const toggleBtn = document.getElementById('toggleFreqBtn');
+            if (toggleBtn.textContent.includes('Pause')) {
+                logDebug('Emit: pause_frequency_updates');
+                socket.emit('pause_frequency_updates');
+            } else {
+                logDebug('Emit: resume_frequency_updates');
+                socket.emit('resume_frequency_updates');
+            }
         }
     </script>
 </body>

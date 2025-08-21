@@ -658,6 +658,18 @@ def handle_stop_rotator():
         main_window.stop_rotators()
         handle_get_status()
 
+@socketio.on('pause_frequency_updates')
+def handle_pause_frequency_updates():
+    if main_window and hasattr(main_window, 'pause_frequency_updates'):
+        main_window.pause_frequency_updates()
+        handle_get_status()
+
+@socketio.on('resume_frequency_updates')
+def handle_resume_frequency_updates():
+    if main_window and hasattr(main_window, 'resume_frequency_updates'):
+        main_window.resume_frequency_updates()
+        handle_get_status()
+
 def run_socketio():
     try:
         # Try to read port from config file
@@ -731,6 +743,19 @@ def broadcast_tracking_state(is_tracking):
         if 'lib.remote_client' in sys.modules:
             from lib import remote_client
             remote_client.broadcast_tracking_state(is_tracking)
+    except ImportError:
+        pass
+
+def broadcast_frequency_pause_state(is_paused):
+    """Broadcast frequency pause state changes to all web clients"""
+    safe_emit('status', {'frequency_updates_paused': is_paused})
+    
+    # Also broadcast to remote if available
+    try:
+        import sys
+        if 'lib.remote_client' in sys.modules:
+            from lib import remote_client
+            remote_client.broadcast_frequency_pause_state(is_paused)
     except ImportError:
         pass
 

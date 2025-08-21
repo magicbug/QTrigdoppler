@@ -238,6 +238,7 @@ myloc.lat = LATITUDE
 myloc.elevation = ALTITUDE
 
 TRACKING_ACTIVE = True # tracking on/off
+FREQUENCY_UPDATES_PAUSED = False # pause frequency updates while keeping rotator tracking
 INTERACTIVE = False # read user vfo/dial input - disable for inband packet
 RX_TPX_ONLY = False
 RIG_CONNECTED = False
@@ -655,6 +656,12 @@ class MainWindow(QMainWindow):
             self.refresh_rotator_button = QPushButton("Refresh Rotator Position")
             self.refresh_rotator_button.clicked.connect(self.update_rotator_position)
             button_layout.addWidget(self.refresh_rotator_button)
+            
+            # Frequency control button (shown when rotator is enabled and tracking)
+            self.toggle_freq_button = QPushButton("Pause Frequency Updates")
+            self.toggle_freq_button.clicked.connect(self.toggle_frequency_updates)
+            self.toggle_freq_button.setEnabled(False)  # Initially disabled
+            button_layout.addWidget(self.toggle_freq_button)
 
         # 1x QPushButton (Exit)
         self.Exitbutton = QPushButton("Exit")
@@ -1677,9 +1684,6 @@ class MainWindow(QMainWindow):
             # Stop tracking if running
             try:
                 self.the_stop_button_was_clicked()
-            except:
-            try:
-                self.the_stop_button_was_clicked()
             except Exception as e:
                 logging.error("Failed to stop tracking before doppler update: %s", e, exc_info=True)
             
@@ -2225,13 +2229,21 @@ class MainWindow(QMainWindow):
     def the_stop_button_was_clicked(self):
         global TRACKING_ACTIVE
         global INTERACTIVE
+        global FREQUENCY_UPDATES_PAUSED
         TRACKING_ACTIVE = False
         INTERACTIVE = False
+        FREQUENCY_UPDATES_PAUSED = False  # Reset frequency pause state when stopping tracking
         self.threadpool.clear()
         self.Stopbutton.setEnabled(False)
         self.Startbutton.setEnabled(True)
         self.combo1.setEnabled(True)
         self.combo2.setEnabled(True)
+        
+        # Disable frequency control button when tracking stops
+        if ROTATOR_ENABLED and hasattr(self, 'toggle_freq_button'):
+            self.toggle_freq_button.setEnabled(False)
+            self.toggle_freq_button.setText("Pause Frequency Updates")
+            
         # Set pass recorder to inactive tracking state
         self.pass_recorder.set_tracking_active(False)
         # Stop rotator thread and park
@@ -2259,6 +2271,11 @@ class MainWindow(QMainWindow):
         self.Startbutton.setEnabled(False)
         self.combo1.setEnabled(False)
         self.combo2.setEnabled(False)
+        
+        # Enable frequency control button when tracking starts (if rotator enabled)
+        if ROTATOR_ENABLED and hasattr(self, 'toggle_freq_button'):
+            self.toggle_freq_button.setEnabled(True)
+            self.toggle_freq_button.setText("Pause Frequency Updates")
         self.doppler_worker = Worker(self.calc_doppler)
         
         # Set high priority for doppler calculations
@@ -2281,6 +2298,7 @@ class MainWindow(QMainWindow):
     def calc_doppler(self, progress_callback):
         global CVIADDR
         global TRACKING_ACTIVE
+        global FREQUENCY_UPDATES_PAUSED
         global INTERACTIVE
         global myloc
         global f_cal
@@ -2453,7 +2471,7 @@ class MainWindow(QMainWindow):
                                 # Use standard calculation for FM satellites or when predictive doppler is disabled
                                 new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc))
                                 
-                            if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres and DOPPLER_UPDATE_LOCK == False:
+                            if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres and DOPPLER_UPDATE_LOCK == False and FREQUENCY_UPDATES_PAUSED == False:
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("Main")
@@ -2480,7 +2498,7 @@ class MainWindow(QMainWindow):
                                 # Use standard calculation for FM satellites
                                 new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc))
                                 
-                            if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres and DOPPLER_UPDATE_LOCK == False:
+                            if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres and DOPPLER_UPDATE_LOCK == False and FREQUENCY_UPDATES_PAUSED == False:
                                 tx_doppler = new_tx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("SUB")
@@ -2497,13 +2515,13 @@ class MainWindow(QMainWindow):
                     elif self.my_satellite.rig_satmode == 1:
                         new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
-                        if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres or tracking_init == 1 and DOPPLER_UPDATE_LOCK == False:
+                        if (abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres or tracking_init == 1) and DOPPLER_UPDATE_LOCK == False and FREQUENCY_UPDATES_PAUSED == False:
                                 tracking_init = 0
                                 rx_doppler = new_rx_doppler
                                 icomTrx.setVFO("MAIN")
                                 icomTrx.setFrequency(str(rx_doppler))
                                 self.my_satellite.F_RIG = rx_doppler
-                        if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres or tracking_init == 1 and DOPPLER_UPDATE_LOCK == False:
+                        if (abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres or tracking_init == 1) and DOPPLER_UPDATE_LOCK == False and FREQUENCY_UPDATES_PAUSED == False:
                                 tracking_init = 0
                                 tx_doppler = new_tx_doppler
                                 icomTrx.setVFO("SUB")
@@ -2538,13 +2556,13 @@ class MainWindow(QMainWindow):
                         ptt_state_old = ptt_state
                         ptt_state = icomTrx.isPttOff()
                         # Check for RX -> TX transition
-                        if  ptt_state_old and ptt_state == 0 and abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres:
+                        if  ptt_state_old and ptt_state == 0 and abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
                             #icomTrx.setVFO("VFOB")
                             logging.debug("TX inititated")
                             tx_doppler = new_tx_doppler
                             self.my_satellite.I_RIG = tx_doppler
                             icomTrx.setFrequency(str(tx_doppler))
-                        if  ptt_state and abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres:
+                        if  ptt_state and abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
                             rx_doppler = new_rx_doppler
                             self.my_satellite.F_RIG = rx_doppler
                             icomTrx.setVFO("VFOA")
@@ -2782,7 +2800,44 @@ class MainWindow(QMainWindow):
 
     def park_rotators(self):
         self.rotator_park(ROTATOR_AZ_PARK, ROTATOR_EL_PARK)
-        logging.info("Rotator parked.")
+
+    def pause_frequency_updates(self):
+        """Pause frequency updates while keeping rotator tracking active"""
+        global FREQUENCY_UPDATES_PAUSED
+        FREQUENCY_UPDATES_PAUSED = True
+        logging.info("Frequency updates paused - rotator tracking continues")
+        # Update button state
+        if hasattr(self, 'toggle_freq_button'):
+            self.toggle_freq_button.setText("Resume Frequency Updates")
+        # Notify web clients
+        if WEBAPI_ENABLED:
+            try:
+                web_api.broadcast_frequency_pause_state(True)
+            except Exception as e:
+                logging.error(f"Error broadcasting frequency pause state to web clients: {e}")
+
+    def resume_frequency_updates(self):
+        """Resume frequency updates"""
+        global FREQUENCY_UPDATES_PAUSED
+        FREQUENCY_UPDATES_PAUSED = False
+        logging.info("Frequency updates resumed")
+        # Update button state
+        if hasattr(self, 'toggle_freq_button'):
+            self.toggle_freq_button.setText("Pause Frequency Updates")
+        # Notify web clients
+        if WEBAPI_ENABLED:
+            try:
+                web_api.broadcast_frequency_pause_state(False)
+            except Exception as e:
+                logging.error(f"Error broadcasting frequency pause state to web clients: {e}")
+
+    def toggle_frequency_updates(self):
+        """Toggle frequency updates pause/resume"""
+        global FREQUENCY_UPDATES_PAUSED
+        if FREQUENCY_UPDATES_PAUSED:
+            self.resume_frequency_updates()
+        else:
+            self.pause_frequency_updates()
 
     def stop_rotators(self):
         self.rotator_stop()
@@ -3283,6 +3338,20 @@ class MainWindow(QMainWindow):
                 else:
                     logging.info("Keyboard shortcut: P - Parking rotators")
                     self.park_rotators()
+                return
+            
+            # F - Toggle frequency updates pause/resume (if rotator enabled and tracking)
+            elif key == Qt.Key_F:
+                if not ROTATOR_ENABLED:
+                    logging.warning("Keyboard shortcut: F - Rotator not enabled, frequency pause requires rotator")
+                elif not TRACKING_ACTIVE:
+                    logging.warning("Keyboard shortcut: F - Not tracking, cannot pause frequency updates")
+                else:
+                    if FREQUENCY_UPDATES_PAUSED:
+                        logging.info("Keyboard shortcut: F - Resuming frequency updates")
+                    else:
+                        logging.info("Keyboard shortcut: F - Pausing frequency updates")
+                    self.toggle_frequency_updates()
                 return
                 
         except Exception as e:

@@ -24,6 +24,7 @@ This document describes all available keyboard shortcuts in QTRigdoppler for imp
 | Key | Action | Description | Requirements |
 |-----|--------|-------------|--------------|
 | **P** | Park Rotators | Parks antenna rotators safely | • Rotator system enabled |
+| **F** | Toggle Frequency Pause | Pause/resume frequency updates while keeping rotator tracking | • Rotator system enabled<br>• Currently tracking |
 
 ## ⚙️ Configuration
 
@@ -76,6 +77,7 @@ All shortcuts include intelligent validation and will only work when appropriate
 
 - **Safe Parking**: **P** parks rotators when satellite goes below horizon
 - **Manual Control**: Use **P** to park rotators manually when needed
+- **Frequency Pause**: **F** pauses frequency updates while keeping rotator tracking for manual frequency control on newer satellites
 
 ### Memory Management
 

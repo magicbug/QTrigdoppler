@@ -10,6 +10,7 @@ QTRigdoppler supports automatic antenna rotator control to track satellites in r
 - **Automatic Tracking**: Real-time antenna positioning during satellite passes
 - **Smart Parking**: Automatic park position when satellite is below minimum elevation
 - **Manual Control**: Park, stop, and refresh rotator position commands
+- **Frequency Control**: Pause frequency updates while maintaining rotator tracking for manual frequency control
 - **Web API Integration**: Remote rotator control via web interface
 - **Position Monitoring**: Real-time azimuth and elevation display
 - **Safety Limits**: Configurable azimuth and elevation range limits
@@ -127,7 +128,19 @@ When tracking is active:
 |--------|--------|-------|
 | **Park** | Click "Park Rotators" | Moves to configured park position |
 | **Stop** | Click "Stop Rotation" | Emergency stop - halts all movement |
-| **Refresh** | Click "Refresh Position" | Updates position display |
+| **Toggle Frequency** | Click "Pause/Resume Frequency Updates" or press **F** | Toggles between paused and active frequency updates while keeping rotator tracking |
+
+### 🎛️ Manual Frequency Control
+
+For newer satellites that require manual frequency tuning, you can use the frequency pause feature:
+
+1. **Start Normal Tracking**: Begin tracking as usual with both frequency and rotator control
+2. **Pause Frequency Updates**: Click the frequency toggle button or press **F**
+3. **Manual Tuning**: Manually adjust your radio frequency as needed
+4. **Rotator Continues**: The rotator continues to track the satellite automatically
+5. **Resume When Needed**: Press **F** or click the toggle button again to return to automatic frequency control
+
+This is particularly useful for satellites with complex frequency patterns or when you need fine manual control while maintaining accurate antenna pointing.
 
 ### Web API Control
 If Web API is enabled, rotators can be controlled remotely:

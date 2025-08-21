@@ -39,7 +39,8 @@ const appState = {
     satellite_position: {},
     doppler: {},
     rotator_enabled: false,
-    rotator: {}
+    rotator: {},
+    frequency_updates_paused: false
 };
 
 // Track satellite and transponder data
@@ -157,6 +158,18 @@ io.on('connection', (socket) => {
     socket.on('stop_rotator', () => {
         if (qtrigClientId) {
             io.to(qtrigClientId).emit('cmd_stop_rotator');
+        }
+    });
+    
+    socket.on('pause_frequency_updates', () => {
+        if (qtrigClientId) {
+            io.to(qtrigClientId).emit('cmd_pause_frequency_updates');
+        }
+    });
+    
+    socket.on('resume_frequency_updates', () => {
+        if (qtrigClientId) {
+            io.to(qtrigClientId).emit('cmd_resume_frequency_updates');
         }
     });
     
