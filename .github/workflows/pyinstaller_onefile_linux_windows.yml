@@ -64,4 +64,4 @@ jobs:
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: package/*
+          files: QTrigdoppler-singlefile-${{ matrix.name }}.zip
