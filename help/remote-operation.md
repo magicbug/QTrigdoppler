@@ -398,6 +398,8 @@ Use a reverse proxy (nginx, Apache) for load balancing multiple instances.
 - `set_rx_offset` - Set frequency offset: `{offset: 1000}`
 - `park_rotator` - Park antenna rotator
 - `stop_rotator` - Stop rotator movement
+- `pause_frequency_updates` - Pause automatic frequency correction while keeping rotator tracking
+- `resume_frequency_updates` - Resume automatic frequency correction
 - `get_satellite_list` - Request satellite list
 - `get_transponder_list` - Request transponder list: `{satellite: "name"}`
 

@@ -116,6 +116,7 @@ DL3JOP modifications:
 For detailed setup and usage instructions, see the [help documentation](help/):
 
 - **[Configuration Guide](help/configuration.md)** - Complete config.ini reference and setup
+- **[Frequency Control](help/frequency-control.md)** - Doppler correction, manual control, and advanced frequency features
 - **[Remote Operation](help/remote-operation.md)** - Web-based remote control systems  
 - **[Cloudlog Integration](help/cloudlog-integration.md)** - Automatic logbook integration with Cloudlog/Wavelog
 - **[Pass Recording](help/pass-recording.md)** - Automatic audio recording during satellite passes

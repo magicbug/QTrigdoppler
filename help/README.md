@@ -6,6 +6,7 @@ Welcome to the QTRigdoppler help system! This directory contains comprehensive d
 
 ### 🎯 Quick Start
 - **[Configuration Guide](configuration.md)** - Complete config.ini reference and setup guide
+- **[Frequency Control](frequency-control.md)** - Complete guide to doppler correction, manual control, and advanced frequency features
 - **[Remote Operation](remote-operation.md)** - Complete guide to web-based remote control systems
 - **[Cloudlog Integration](cloudlog-integration.md)** - Automatic logbook integration with Cloudlog/Wavelog
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Complete guide to keyboard shortcuts and accessibility features
@@ -33,6 +34,7 @@ The following help documents are planned for future releases:
 
 ### Quick Links
 - **[Configuration Guide](configuration.md)** - Complete config.ini reference and setup
+- **[Frequency Control](frequency-control.md)** - Doppler correction, manual control, and advanced frequency features
 - **[Remote Operation](remote-operation.md)** - Web-based remote control systems
 - **[Cloudlog Integration](cloudlog-integration.md)** - Automatic logbook integration
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Current accessibility features
