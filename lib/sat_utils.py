@@ -22,8 +22,27 @@ def tx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=
     ephemdata.compute(myloc)
     current_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
     
-    # Calculate doppler rate by computing velocity at a small time offset
-    future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)  # Convert seconds to days
+    # Adaptive prediction time based on doppler rate - addresses the core timing issue
+    # Calculate initial rate to determine optimal prediction time
+    temp_future = ephem.Date(myloc.date + 0.1 / 86400.0)  # 100ms test
+    temp_loc = myloc.copy()
+    temp_loc.date = temp_future
+    ephemdata.compute(temp_loc)
+    temp_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
+    initial_rate = abs((temp_doppler - current_doppler) / 0.1)
+    
+    # Adaptive prediction time - key fix for northern latitude steep passes
+    if initial_rate > 1000:  # Very rapid change (steep passes, northern latitudes)
+        prediction_seconds = 0.5  # 500ms - longer prediction for steep passes
+    elif initial_rate > 500:   # Moderate rapid change
+        prediction_seconds = 0.35  # 350ms
+    elif initial_rate > 200:   # Normal rapid change
+        prediction_seconds = 0.25  # 250ms (original)
+    else:                      # Slow change
+        prediction_seconds = 0.15  # 150ms
+    
+    # Calculate doppler rate using the adaptive prediction time
+    future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)
     myloc_future = myloc.copy()
     myloc_future.date = future_time
     ephemdata.compute(myloc_future)
@@ -40,8 +59,27 @@ def rx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=
     ephemdata.compute(myloc)
     current_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
     
-    # Calculate doppler rate by computing velocity at a small time offset
-    future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)  # Convert seconds to days
+    # Adaptive prediction time based on doppler rate - same logic as TX
+    # Calculate initial rate to determine optimal prediction time
+    temp_future = ephem.Date(myloc.date + 0.1 / 86400.0)  # 100ms test
+    temp_loc = myloc.copy()
+    temp_loc.date = temp_future
+    ephemdata.compute(temp_loc)
+    temp_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
+    initial_rate = abs((temp_doppler - current_doppler) / 0.1)
+    
+    # Adaptive prediction time - key fix for northern latitude steep passes
+    if initial_rate > 1000:  # Very rapid change (steep passes, northern latitudes)
+        prediction_seconds = 0.5  # 500ms - longer prediction for steep passes
+    elif initial_rate > 500:   # Moderate rapid change
+        prediction_seconds = 0.35  # 350ms
+    elif initial_rate > 200:   # Normal rapid change
+        prediction_seconds = 0.25  # 250ms (original)
+    else:                      # Slow change
+        prediction_seconds = 0.15  # 150ms
+    
+    # Calculate doppler rate using the adaptive prediction time
+    future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)
     myloc_future = myloc.copy()
     myloc_future.date = future_time
     ephemdata.compute(myloc_future)
