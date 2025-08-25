@@ -32,11 +32,11 @@ def tx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=
     initial_rate = abs((temp_doppler - current_doppler) / 0.1)
     
     # Adaptive prediction time - key fix for northern latitude steep passes
-    if initial_rate > 1000:  # Very rapid change (steep passes, northern latitudes)
+    if initial_rate > 60:  # Very rapid change (steep passes, northern latitudes)
         prediction_seconds = 0.5  # 500ms - longer prediction for steep passes
-    elif initial_rate > 500:   # Moderate rapid change
+    elif initial_rate > 30:   # Moderate rapid change
         prediction_seconds = 0.35  # 350ms
-    elif initial_rate > 200:   # Normal rapid change
+    elif initial_rate > 10:   # Normal rapid change
         prediction_seconds = 0.25  # 250ms (original)
     else:                      # Slow change
         prediction_seconds = 0.15  # 150ms
@@ -50,7 +50,9 @@ def tx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=
     
     # Calculate rate and predict
     doppler_rate = (future_doppler - current_doppler) / prediction_seconds
-    predicted_doppler = current_doppler + (doppler_rate * prediction_seconds)
+
+    # Simplified prediction: the predicted doppler IS the future doppler
+    predicted_doppler = future_doppler
     
     return round(predicted_doppler)
 
@@ -69,11 +71,11 @@ def rx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=
     initial_rate = abs((temp_doppler - current_doppler) / 0.1)
     
     # Adaptive prediction time - key fix for northern latitude steep passes
-    if initial_rate > 1000:  # Very rapid change (steep passes, northern latitudes)
+    if initial_rate > 60:  # Very rapid change (steep passes, northern latitudes)
         prediction_seconds = 0.5  # 500ms - longer prediction for steep passes
-    elif initial_rate > 500:   # Moderate rapid change
+    elif initial_rate > 30:   # Moderate rapid change
         prediction_seconds = 0.35  # 350ms
-    elif initial_rate > 200:   # Normal rapid change
+    elif initial_rate > 10:   # Normal rapid change
         prediction_seconds = 0.25  # 250ms (original)
     else:                      # Slow change
         prediction_seconds = 0.15  # 150ms
@@ -87,7 +89,7 @@ def rx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=
     
     # Calculate rate and predict
     doppler_rate = (future_doppler - current_doppler) / prediction_seconds
-    predicted_doppler = current_doppler + (doppler_rate * prediction_seconds)
+    predicted_doppler = future_doppler
     
     return round(predicted_doppler)
 ## Calculates the tx doppler error   
