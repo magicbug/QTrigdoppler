@@ -139,41 +139,73 @@ def footprint_radius_km(alt_km):
     
 ## Calculates next sat pass at observer
 def sat_next_event_calc(ephemdata, myloc):
-    event_loc = myloc
-    event_ephemdata = ephemdata
-    event_epoch_time = datetime.now(timezone.utc)
-    event_date_val = event_epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
-    event_loc.date = ephem.Date(event_date_val)
-    event_ephemdata.compute(event_loc)
-    rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = event_loc.next_pass(event_ephemdata)
-    rise_time = rise_time.datetime().replace(tzinfo=timezone.utc)
-    tca_time = tca_time.datetime().replace(tzinfo=timezone.utc)
-    los_time = los_time.datetime().replace(tzinfo=timezone.utc)
-    ele = format(event_ephemdata.alt/ math.pi * 180.0,'.2f' )
-    if float(ele) <= 0.0:
-        #Display next rise
-        aos_cnt_dwn = rise_time - event_epoch_time
-        return "AOS in " + str(time.strftime('%H:%M:%S', time.gmtime(aos_cnt_dwn.total_seconds())))
-    else:
-        # Display TCA and LOS, as the sat is already on the horion next_pass() ignores the current pass. Therefore we shift the time back by half a orbit period :D
-        orbital_period = int(86400/(event_ephemdata.n))
-        event_epoch_time = datetime.now(timezone.utc) - timedelta(seconds=int(orbital_period/2))
-        event_date_val = event_epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
-        event_loc.date = ephem.Date(event_date_val)
-        event_ephemdata.compute(event_loc)
-        ephemdata.compute(myloc) # This is a workaround. Investigation needed
-        rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = event_loc.next_pass(event_ephemdata)
-        # Got right TCA and LOS, switch back to current epoch time
+    try:
+        event_loc = myloc
+        event_ephemdata = ephemdata
         event_epoch_time = datetime.now(timezone.utc)
         event_date_val = event_epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
         event_loc.date = ephem.Date(event_date_val)
+        event_ephemdata.compute(event_loc)
+        
+        # Try to get next pass - this can fail with bad TLE data
+        try:
+            rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = event_loc.next_pass(event_ephemdata)
+        except ValueError as e:
+            if "trouble with those satellite parameters" in str(e):
+                return "TLE Error"
+            else:
+                return "Pass Calc Error"
+        
+        # Check if any of the returned values are None
+        if rise_time is None or tca_time is None or los_time is None:
+            return "No Pass Data"
+            
+        rise_time = rise_time.datetime().replace(tzinfo=timezone.utc)
         tca_time = tca_time.datetime().replace(tzinfo=timezone.utc)
         los_time = los_time.datetime().replace(tzinfo=timezone.utc)
-        tca_cnt_dwn = tca_time - event_epoch_time
-        los_cnt_dwn = los_time - event_epoch_time
-        if tca_cnt_dwn.days >= 0:
-            return "TCA in " + str(time.strftime('%H:%M:%S', time.gmtime(tca_cnt_dwn.total_seconds())))
+        ele = format(event_ephemdata.alt/ math.pi * 180.0,'.2f' )
+        
+        if float(ele) <= 0.0:
+            #Display next rise
+            aos_cnt_dwn = rise_time - event_epoch_time
+            return "AOS in " + str(time.strftime('%H:%M:%S', time.gmtime(aos_cnt_dwn.total_seconds())))
         else:
-            return "LOS in " + str(time.strftime('%H:%M:%S', time.gmtime(los_cnt_dwn.total_seconds())))
+            # Display TCA and LOS, as the sat is already on the horion next_pass() ignores the current pass. Therefore we shift the time back by half a orbit period :D
+            orbital_period = int(86400/(event_ephemdata.n))
+            event_epoch_time = datetime.now(timezone.utc) - timedelta(seconds=int(orbital_period/2))
+            event_date_val = event_epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+            event_loc.date = ephem.Date(event_date_val)
+            event_ephemdata.compute(event_loc)
+            ephemdata.compute(myloc) # This is a workaround. Investigation needed
+            
+            # Try second next_pass call with error handling
+            try:
+                rise_time,rise_azi,tca_time,tca_alt,los_time,los_azi = event_loc.next_pass(event_ephemdata)
+            except ValueError as e:
+                if "trouble with those satellite parameters" in str(e):
+                    return "TLE Error"
+                else:
+                    return "Pass Calc Error"
+            
+            # Check if any of the returned values are None  
+            if tca_time is None or los_time is None:
+                return "No Pass Data"
+                
+            # Got right TCA and LOS, switch back to current epoch time
+            event_epoch_time = datetime.now(timezone.utc)
+            event_date_val = event_epoch_time.strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
+            event_loc.date = ephem.Date(event_date_val)
+            tca_time = tca_time.datetime().replace(tzinfo=timezone.utc)
+            los_time = los_time.datetime().replace(tzinfo=timezone.utc)
+            tca_cnt_dwn = tca_time - event_epoch_time
+            los_cnt_dwn = los_time - event_epoch_time
+            if tca_cnt_dwn.days >= 0:
+                return "TCA in " + str(time.strftime('%H:%M:%S', time.gmtime(tca_cnt_dwn.total_seconds())))
+            else:
+                return "LOS in " + str(time.strftime('%H:%M:%S', time.gmtime(los_cnt_dwn.total_seconds())))
+    
+    except Exception as e:
+        # Catch any other unexpected errors
+        return "Calc Error"
             
     return "Error"
