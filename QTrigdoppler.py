@@ -1490,7 +1490,7 @@ class MainWindow(QMainWindow):
                 offset_stored = True
                 if int(parts[2].strip()) != int(self.rxoffsetbox.value()):
                     configur['offset_profiles'][each_key] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
-        if offset_stored == False and int(self.rxoffsetbox.value()) != 0 and self.combo1.currentIndex() != 0:
+        if offset_stored == False and int(self.rxoffsetbox.value()) != 0:
             configur['offset_profiles']["satoffset"+str(num_offsets+1)] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
             offset_stored = True
         
