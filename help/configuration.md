@@ -120,6 +120,8 @@ Miscellaneous application behavior settings.
 | `auto_tle_interval_enabled` | bool | No | Enable periodic TLE updates | `True`/`False` |
 | `auto_tle_interval_hours` | int | No | Hours between auto TLE updates | `24` |
 | `voice_announcement` | bool | No | Voice announcements ⚠️ *Not used* | `True`/`False` |
+| `stylesheet` | string | No | Name of selected UI stylesheet | `dark_blue.xml` |
+| `ui_scale` | float | No | Scale for the UI | `1.5` |
 
 **Example:**
 ```ini

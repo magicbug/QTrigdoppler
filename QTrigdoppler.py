@@ -166,6 +166,7 @@ TLE_UPDATE_STARTUP = configur.getboolean('misc', 'tle_update_startup', fallback=
 AUTO_TLE_INTERVAL_ENABLED = configur.getboolean('misc', 'auto_tle_interval_enabled', fallback=False)
 AUTO_TLE_INTERVAL_HOURS = configur.getint('misc', 'auto_tle_interval_hours', fallback=24)
 STYLESHEET = configur.get('misc', 'stylesheet',fallback="dark_lightgreen.xml")
+UI_SCALLING = configur.get('misc','ui_scale', fallback=1.0)
 
 # Rotator config
 ROTATOR_ENABLED = configur.getboolean('rotator', 'enabled', fallback=False)
@@ -1035,10 +1036,21 @@ class MainWindow(QMainWindow):
         stylesheet_layout.addWidget(self.stylesheet_layout_combo)
         self.stylesheet_layout_combo.currentTextChanged.connect(self.change_theme)
         
+        self.application_scale_label = QLabel("Application UI scale:")
+        self.application_scale_box = QDoubleSpinBox()
+        self.application_scale_box.setMinimum(0.5)
+        self.application_scale_box.setMaximum(4.0)
+        self.application_scale_box.setSingleStep(0.1)
+        self.application_scale_box.setValue(float(UI_SCALLING))
+        self.application_scale_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
+        stylesheet_layout.addWidget(self.application_scale_label)
+        stylesheet_layout.addWidget(self.application_scale_box)
+        
         # Settings store layout
         settings_store_layout = QVBoxLayout()
         
-        self.SafeSettingsButton = QPushButton("Store Settings - location changes require restart")
+        self.SafeSettingsButton = QPushButton("Store Settings - location and UI scale changes require restart")
         self.SafeSettingsButton.clicked.connect(self.save_settings)
         settings_store_layout.addWidget(self.SafeSettingsButton)
         self.SafeSettingsButton.setEnabled(True)
@@ -1426,6 +1438,7 @@ class MainWindow(QMainWindow):
         global ROTATOR_EL_MAX
         global ROTATOR_MIN_ELEVATION
         global STYLESHEET
+        global UI_SCALLING
 
         LATITUDE = self.qth_settings_lat_edit.displayText()
         configur['qth']['latitude'] = str(float(LATITUDE))
@@ -1477,7 +1490,7 @@ class MainWindow(QMainWindow):
                 offset_stored = True
                 if int(parts[2].strip()) != int(self.rxoffsetbox.value()):
                     configur['offset_profiles'][each_key] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
-        if offset_stored == False and int(self.rxoffsetbox.value()) != 0 and self.combo1.currentIndex() != 0:
+        if offset_stored == False and int(self.rxoffsetbox.value()) != 0:
             configur['offset_profiles']["satoffset"+str(num_offsets+1)] = self.my_satellite.name + "," + self.my_transponder_name + ","+str(self.rxoffsetbox.value()) + ",0"
             offset_stored = True
         
@@ -1548,6 +1561,8 @@ class MainWindow(QMainWindow):
         configur['qth']['gps_port'] = self.gps_serialport_val.currentText()
         
         configur['misc']['stylesheet'] = STYLESHEET
+        UI_SCALLING = self.application_scale_box.value()
+        configur['misc']['ui_scale'] = str(UI_SCALLING)
 
         with open('config.ini', 'w') as configfile:
             configur.write(configfile)
@@ -1567,6 +1582,9 @@ class MainWindow(QMainWindow):
                     color: palette(highlighted-text);
                 }
                 QSpinBox {
+                    color: palette(highlighted-text);
+                }
+                QDoubleSpinBox {
                     color: palette(highlighted-text);
                 }
                 QComboBox QAbstractItemView {
@@ -3513,6 +3531,7 @@ if RADIO != "9700" and RADIO != "705" and RADIO != "818" and RADIO != "910":
 # Disable Qt accessibility warnings that are just normal system events
 import os
 os.environ["QT_LOGGING_RULES"] = "qt.accessibility.atspi.warning=false"
+os.environ["QT_SCALE_FACTOR"] = str(UI_SCALLING)
 
 app = QApplication(sys.argv)
 
