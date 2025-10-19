@@ -59,6 +59,7 @@ class icom:
             self.last_set_frequency_a = 0 # per VFO
             self.last_set_frequency_b = 0
             self.current_vfo = "A"
+    
             
     # gives a empty bytearray when data crc is not valid
     def __readFromIcom(self):
@@ -169,6 +170,8 @@ class icom:
                 return False
                 
             # Simple frequency query - safe, read-only operation
+            # Add small delay to avoid interfering with rapid frequency updates
+            time.sleep(0.01)
             freq = self.getFrequency()
             if freq and str(freq).isdigit() and len(str(freq)) > 0:
                 logging.debug(f"Radio health check passed - frequency: {freq}")

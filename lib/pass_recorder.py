@@ -46,6 +46,7 @@ class PassRecorder:
         self.sample_rate = config.getint('passrecording', 'sample_rate', fallback=44100)
         self.channels = config.getint('passrecording', 'channels', fallback=1)
         self.bit_depth = config.getint('passrecording', 'bit_depth', fallback=16)
+        self.log_audio_levels = config.getboolean('passrecording', 'log_audio_levels', fallback=True)
 
     def update_config(self, config):
         self.load_config(config)
@@ -311,9 +312,9 @@ class PassRecorder:
                     level = np.linalg.norm(indata)
                     total_frames += frames
                     
-                    # Log audio level every second to verify we're getting input
-                    if total_frames % 10000 < frames:
-                        logging.info(f"Audio level: {level:.4f}, total frames: {total_frames}")
+                    # Log audio level every 10 seconds to verify we're getting input (reduced from every second)
+                    if self.log_audio_levels and total_frames % 100000 < frames:  # Changed from 10000 to 100000 (10 seconds at 48kHz)
+                        logging.info(f"Recording audio level: {level:.4f}, total frames: {total_frames}")
                     
                     # Apply gain to make sure the audio is audible
                     gain = 2.0  # Reduced from 5.0 to 2.0 to prevent over-amplification

@@ -2415,7 +2415,11 @@ class MainWindow(QMainWindow):
                 # Ensure that initial frequencies are always written 
                 tracking_init = 1
                 last_health_check = time.time()
-                health_check_interval = 60  # Check every 60 seconds
+                health_check_interval = 300  # Check every 5 minutes (reduced from 60 seconds)
+                consecutive_failures = 0
+                max_consecutive_failures = 3
+                last_freq_update = 0  # Track last frequency update time
+                min_freq_update_interval = 0.05  # Minimum 50ms between frequency updates
 
                 while TRACKING_ACTIVE == True:
                     a = datetime.now()
@@ -2423,15 +2427,23 @@ class MainWindow(QMainWindow):
                     date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
                     myloc.date = ephem.Date(date_val)
 
-                    # Periodic health check during tracking
+                    # Periodic health check during tracking (less frequent and smarter)
                     current_time = time.time()
                     if current_time - last_health_check > health_check_interval:
                         if not icomTrx.periodic_health_check():
-                            logging.warning("Radio health check failed during tracking, attempting reconnection...")
-                            reconnected = self.attempt_icom_reconnection()
-                            if not reconnected:
-                                logging.error("Failed to reconnect after health check failure")
-                                # Continue tracking in offline mode rather than stopping completely
+                            consecutive_failures += 1
+                            logging.warning(f"Radio health check failed during tracking (failure {consecutive_failures}/{max_consecutive_failures})")
+                            
+                            if consecutive_failures >= max_consecutive_failures:
+                                logging.warning("Multiple consecutive health check failures, attempting reconnection...")
+                                reconnected = self.attempt_icom_reconnection()
+                                if reconnected:
+                                    consecutive_failures = 0  # Reset on successful reconnection
+                                else:
+                                    logging.error("Failed to reconnect after multiple health check failures")
+                                    # Continue tracking in offline mode rather than stopping completely
+                        else:
+                            consecutive_failures = 0  # Reset on successful health check
                         last_health_check = current_time
 
                     if INTERACTIVE == True:
@@ -2529,8 +2541,10 @@ class MainWindow(QMainWindow):
                                 else:
                                     icomTrx.setVFO("VFOB")
                                     # Don't switch VFO when PTT is pushed, to avoid switching VFO while TX 
-                                    while icomTrx.isPttOff() == 0:
-                                        time.sleep(0.1)
+                                    # Only check PTT status for radios that support it (not IC-910)
+                                    if icomTrx.radio_model != '910':
+                                        while icomTrx.isPttOff() == 0:
+                                            time.sleep(0.1)
                                         
                                 icomTrx.setFrequency(str(tx_doppler))
                                 self.my_satellite.I_RIG = tx_doppler
@@ -2577,7 +2591,7 @@ class MainWindow(QMainWindow):
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
                             new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
                         # PTT checking only supported on radios other than IC-910
-                        if RADIO != '910':
+                        if icomTrx.radio_model != '910':
                             # 0 = PTT is pressed
                             # 1 = PTT is released
                             ptt_state_old = ptt_state
@@ -2596,27 +2610,49 @@ class MainWindow(QMainWindow):
                                 icomTrx.setFrequency(str(rx_doppler))
                         else:
                             # IC-910: Simple frequency updates without PTT checking
-                            if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
-                                # Quick health check before frequency update
-                                if not icomTrx.check_radio_health():
-                                    logging.warning("Radio not responsive, skipping IC-910 RX frequency update")
-                                    continue
-                                    
-                                rx_doppler = new_rx_doppler
-                                self.my_satellite.F_RIG = rx_doppler
-                                icomTrx.setVFO("VFOA")
-                                icomTrx.setFrequency(str(rx_doppler))
-                            if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
-                                # Quick health check before frequency update
-                                if not icomTrx.check_radio_health():
-                                    logging.warning("Radio not responsive, skipping IC-910 TX frequency update")
-                                    continue
-                                    
-                                tx_doppler = new_tx_doppler
-                                self.my_satellite.I_RIG = tx_doppler
-                                icomTrx.setVFO("VFOB")
-                                icomTrx.setFrequency(str(tx_doppler))
-                        time.sleep(0.025)
+                            # Skip health checks during rapid updates to avoid interference
+                            
+                            # Use adaptive threshold based on doppler rate - conservative approach
+                            current_doppler_rate = abs(self.my_satellite.down_doppler_rate) + abs(self.my_satellite.up_doppler_rate)
+                            if current_doppler_rate > 1500:  # Very high doppler rate - slightly smaller threshold
+                                adaptive_thres = max(100, doppler_thres * 3 // 4)  # 3/4 threshold, minimum 100Hz
+                            elif current_doppler_rate > 800:  # High doppler rate
+                                adaptive_thres = max(125, doppler_thres * 7 // 8)  # 7/8 threshold, minimum 125Hz
+                            else:
+                                adaptive_thres = doppler_thres  # Normal threshold
+                            
+                            # Check minimum time between frequency updates to avoid overwhelming radio
+                            current_time = time.time()
+                            time_since_last_update = current_time - last_freq_update
+                            
+                            if time_since_last_update >= min_freq_update_interval:
+                                if abs(new_rx_doppler-self.my_satellite.F_RIG) > adaptive_thres and FREQUENCY_UPDATES_PAUSED == False:
+                                    rx_doppler = new_rx_doppler
+                                    self.my_satellite.F_RIG = rx_doppler
+                                    icomTrx.setVFO("VFOA")
+                                    icomTrx.setFrequency(str(rx_doppler))
+                                    last_freq_update = current_time
+                                        
+                                if abs(new_tx_doppler-self.my_satellite.I_RIG) > adaptive_thres and FREQUENCY_UPDATES_PAUSED == False:
+                                    tx_doppler = new_tx_doppler
+                                    self.my_satellite.I_RIG = tx_doppler
+                                    icomTrx.setVFO("VFOB")
+                                    icomTrx.setFrequency(str(tx_doppler))
+                                    # Small delay after TX frequency update to let radio process
+                                    time.sleep(0.01)
+                                    last_freq_update = current_time
+                        # Adaptive sleep based on doppler rate - balanced for radio capabilities
+                        doppler_rate = abs(self.my_satellite.down_doppler_rate) + abs(self.my_satellite.up_doppler_rate)
+                        if doppler_rate > 2000:  # Very high doppler rate (near TCA)
+                            time.sleep(0.015)  # 15ms - fast but safe for radio
+                        elif doppler_rate > 1000:  # High doppler rate (approaching TCA)
+                            time.sleep(0.020)  # 20ms for rapid changes
+                        elif doppler_rate > 500:  # Medium-high doppler rate
+                            time.sleep(0.025)  # 25ms for moderate-rapid changes
+                        elif doppler_rate > 100:  # Medium doppler rate
+                            time.sleep(0.030)  # 30ms for moderate changes
+                        else:
+                            time.sleep(0.035)  # 35ms for slow changes
                         
                     self.my_satellite.new_cal = 0
                     time.sleep(0.01)
@@ -3128,8 +3164,8 @@ class MainWindow(QMainWindow):
                     # Calculate RMS amplitude (volume level)
                     level = np.linalg.norm(indata)
                     
-                    # Log levels occasionally to help debug
-                    if frames % 100 == 0 and logging.getLogger().isEnabledFor(logging.DEBUG):
+                    # Log levels occasionally to help debug (reduced frequency)
+                    if frames % 1000 == 0 and logging.getLogger().isEnabledFor(logging.DEBUG):
                         logging.debug(f"Monitor audio level: {level:.4f}")
                     
                     # Scale to percentage (0-100)
