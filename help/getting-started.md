@@ -248,6 +248,13 @@ Control how sensitive frequency tracking is:
 3. Check system clock accuracy
 4. Consider enabling predictive doppler correction
 
+### Minor Frequency Adjustments at TCA
+**Symptoms**: Need to adjust frequency offset around TCA (Time of Closest Approach)
+
+**Explanation**: This is normal behavior - small calibration adjustments are often needed around TCA
+
+**Solution**: Use the RX Offset controls (±100-500 Hz) to fine-tune as needed
+
 ## 📚 Next Steps
 
 ### Essential Documentation

@@ -137,6 +137,16 @@ Around TCA, doppler changes can be very rapid:
 - **Voice quality** may be affected on SSB satellites near TCA
 - **Manual control** allows fine-tuning during critical periods
 
+#### TCA Calibration Adjustment
+
+**Normal Behavior**: You may need to make minor frequency adjustments around TCA:
+
+- **Why**: Doppler rate changes sign at TCA, causing small prediction errors to accumulate
+- **Solution**: Use the RX Offset controls to fine-tune (±100-500 Hz adjustment)
+- **When**: Typically needed ±2-3 minutes around TCA
+- **Best Practice**: Make small adjustments as needed rather than fighting the system
+- **Expected**: This is normal behavior for most satellite tracking systems
+
 ## 🔧 Advanced Settings
 
 ### Rate Limiting

@@ -208,6 +208,13 @@ QTrigdoppler supports the following modes on the IC-910H:
 2. Check cable connections
 3. Verify CI-V address configuration
 
+#### CI-V Command Failures During Transmission
+**Symptoms**: "CI-V command failed after 3 attempts" warnings during TX
+
+**Explanation**: This is normal behavior - the radio prioritizes transmission over responding to commands
+
+**Action**: No action needed - these warnings don't affect operation and are expected during active transmission
+
 ### Testing Connection
 
 #### Manual Test

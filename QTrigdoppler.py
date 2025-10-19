@@ -2414,10 +2414,6 @@ class MainWindow(QMainWindow):
         
                 # Ensure that initial frequencies are always written 
                 tracking_init = 1
-                last_health_check = time.time()
-                health_check_interval = 300  # Check every 5 minutes (reduced from 60 seconds)
-                consecutive_failures = 0
-                max_consecutive_failures = 3
                 last_freq_update = 0  # Track last frequency update time
                 min_freq_update_interval = 0.030  # Minimum 30ms between frequency updates (optimized for high latitude)
 
@@ -2427,24 +2423,6 @@ class MainWindow(QMainWindow):
                     date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
                     myloc.date = ephem.Date(date_val)
 
-                    # Periodic health check during tracking (less frequent and smarter)
-                    current_time = time.time()
-                    if current_time - last_health_check > health_check_interval:
-                        if not icomTrx.periodic_health_check():
-                            consecutive_failures += 1
-                            logging.warning(f"Radio health check failed during tracking (failure {consecutive_failures}/{max_consecutive_failures})")
-                            
-                            if consecutive_failures >= max_consecutive_failures:
-                                logging.warning("Multiple consecutive health check failures, attempting reconnection...")
-                                reconnected = self.attempt_icom_reconnection()
-                                if reconnected:
-                                    consecutive_failures = 0  # Reset on successful reconnection
-                                else:
-                                    logging.error("Failed to reconnect after multiple health check failures")
-                                    # Continue tracking in offline mode rather than stopping completely
-                        else:
-                            consecutive_failures = 0  # Reset on successful health check
-                        last_health_check = current_time
 
                     if INTERACTIVE == True:
                         
@@ -2506,11 +2484,6 @@ class MainWindow(QMainWindow):
                                 new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata, self.my_satellite.F + self.my_satellite.F_cal, myloc))
                                 
                             if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres and DOPPLER_UPDATE_LOCK == False and FREQUENCY_UPDATES_PAUSED == False:
-                                # Quick health check before frequency update
-                                if not icomTrx.check_radio_health():
-                                    logging.warning("Radio not responsive, skipping RX frequency update")
-                                    continue
-                                    
                                 rx_doppler = new_rx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("Main")
@@ -2530,11 +2503,6 @@ class MainWindow(QMainWindow):
                                 new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata, self.my_satellite.I, myloc))
                                 
                             if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres and DOPPLER_UPDATE_LOCK == False and FREQUENCY_UPDATES_PAUSED == False:
-                                # Quick health check before frequency update
-                                if not icomTrx.check_radio_health():
-                                    logging.warning("Radio not responsive, skipping TX frequency update")
-                                    continue
-                                    
                                 tx_doppler = new_tx_doppler
                                 if self.my_satellite.rig_satmode == 1:
                                     icomTrx.setVFO("SUB")
@@ -2554,22 +2522,12 @@ class MainWindow(QMainWindow):
                         new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
                         new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
                         if (abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres or tracking_init == 1) and DOPPLER_UPDATE_LOCK == False and FREQUENCY_UPDATES_PAUSED == False:
-                                # Quick health check before frequency update
-                                if not icomTrx.check_radio_health():
-                                    logging.warning("Radio not responsive, skipping FM RX frequency update")
-                                    continue
-                                    
                                 tracking_init = 0
                                 rx_doppler = new_rx_doppler
                                 icomTrx.setVFO("MAIN")
                                 icomTrx.setFrequency(str(rx_doppler))
                                 self.my_satellite.F_RIG = rx_doppler
                         if (abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres or tracking_init == 1) and DOPPLER_UPDATE_LOCK == False and FREQUENCY_UPDATES_PAUSED == False:
-                                # Quick health check before frequency update
-                                if not icomTrx.check_radio_health():
-                                    logging.warning("Radio not responsive, skipping FM TX frequency update")
-                                    continue
-                                    
                                 tracking_init = 0
                                 tx_doppler = new_tx_doppler
                                 icomTrx.setVFO("SUB")
@@ -3345,14 +3303,8 @@ class MainWindow(QMainWindow):
             RIG_CONNECTED = icomTrx.is_connected()
             
             if RIG_CONNECTED:
-                # Verify the reconnection actually works with a health check
-                if icomTrx.check_radio_health():
-                    logging.info("Successfully reconnected to ICOM rig and verified communication")
-                    return True
-                else:
-                    logging.warning("Reconnection succeeded but radio not responsive to commands")
-                    RIG_CONNECTED = False
-                    return False
+                logging.info("Successfully reconnected to ICOM rig")
+                return True
             else:
                 logging.warning("Failed to reconnect to ICOM rig")
                 return False
