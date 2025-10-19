@@ -85,7 +85,7 @@ class icom:
             if len(b) > 0:
                 # valid message
                 validMsg = bytes([254, 254, 0, self.icomTrxCivAdress, 251, 253])
-                if len(b) >= 5 and b[0:5] == validMsg:
+                if len(b) >= 6 and b[0:6] == validMsg:
                     b = b[6:len(b)]
                     if len(b) > 0:  # read answer from icom trx
                         if len(b) >= 2 and b[0] == 254 and b[1] == 254 and b[-1] == 253:  # check for valid data CRC
@@ -227,7 +227,6 @@ class icom:
         mode = mode.upper()
         if mode == 'FM':
             self.__writeToIcomWithRetry(b'\x06\x04')
-        if mode == 'FM':
             self.__writeToIcomWithRetry(b'\x06\x05')
         if mode == 'USB':
             self.__writeToIcomWithRetry(b'\x06\x01')
