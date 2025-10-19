@@ -36,13 +36,25 @@ class icom:
         self.ser = serial.Serial()
         self.ser.baudrate = serialBaud
         self.ser.port = serialDevice
+        self.ser.timeout = 1.0  # 1 second timeout for read operations
+        self.ser.write_timeout = 1.0  # 1 second timeout for write operations
+        self.ser.inter_byte_timeout = 0.1  # 100ms timeout between bytes
         self.ser.setDTR(0)
         self.ser.setRTS(0)
         try:
             self.ser.open()
             self.connected = True
-        except:
+            logging.info(f"Successfully connected to ICOM {radio_model} on {serialDevice} at {serialBaud} baud")
+        except serial.SerialException as e:
             self.connected = False
+            logging.error(f"Failed to connect to ICOM radio on {serialDevice}: {e}")
+            print("Rig not connected, switching to dummy mode")
+            self.last_set_frequency_a = 0 # per VFO
+            self.last_set_frequency_b = 0
+            self.current_vfo = "A"
+        except Exception as e:
+            self.connected = False
+            logging.error(f"Unexpected error connecting to ICOM radio: {e}")
             print("Rig not connected, switching to dummy mode")
             self.last_set_frequency_a = 0 # per VFO
             self.last_set_frequency_b = 0
@@ -53,9 +65,19 @@ class icom:
         if self.connected == True:
             time.sleep(0.05)
             b = bytearray()
-            b = b + self.ser.read(1)
-            while self.ser.in_waiting:
-                b = b + self.ser.read(1)
+            try:
+                data = self.ser.read(1)
+                if data:  # Only process if we got data
+                    b = b + data
+                    while self.ser.in_waiting:
+                        b = b + self.ser.read(1)
+            except serial.SerialTimeoutException:
+                # Timeout occurred, return empty bytearray
+                return bytearray()
+            except serial.SerialException as e:
+                logging.warning(f"Serial read error: {e}")
+                self.connected = False
+                return bytearray()
             # drop all but the last frame
             while b.count(b'\xfd') > 1:
                 del b[0:b.find(b'\xfd') + 1]
@@ -83,62 +105,167 @@ class icom:
         
     # gives a empty bytearray when data crc is not valid
     def __writeToIcom(self, b):
+        """Single-attempt write - no retry. Used for frequency updates."""
         if self.connected == True:
-            s = self.ser.write(bytes([254, 254, self.icomTrxCivAdress, 0]) + b + bytes([253]))
-            self.ser.reset_input_buffer()
-            #print('   * writeToIcom value: ', b)
-            return self.__readFromIcom()
+            try:
+                s = self.ser.write(bytes([254, 254, self.icomTrxCivAdress, 0]) + b + bytes([253]))
+                self.ser.reset_input_buffer()
+                #print('   * writeToIcom value: ', b)
+                return self.__readFromIcom()
+            except serial.SerialTimeoutException:
+                logging.warning("Serial write timeout - radio may not be responding")
+                return bytearray()
+            except serial.SerialException as e:
+                logging.warning(f"Serial write error: {e}")
+                self.connected = False
+                return bytearray()
         else:
             return bytearray()
+
+    def __writeToIcomWithRetry(self, b, max_retries=2, retry_delay=0.1):
+        """Write with retry logic. Used for setup commands that are less frequent."""
+        if not self.connected:
+            return bytearray()
+            
+        for attempt in range(max_retries + 1):
+            try:
+                s = self.ser.write(bytes([254, 254, self.icomTrxCivAdress, 0]) + b + bytes([253]))
+                self.ser.reset_input_buffer()
+                response = self.__readFromIcom()
+                
+                # Check if we got a valid response
+                if len(response) > 0:
+                    return response
+                    
+                # If no response and this isn't the last attempt, retry
+                if attempt < max_retries:
+                    logging.debug(f"CI-V command failed, retrying ({attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                else:
+                    logging.warning(f"CI-V command failed after {max_retries + 1} attempts")
+                    return bytearray()
+                    
+            except serial.SerialTimeoutException:
+                if attempt < max_retries:
+                    logging.debug(f"CI-V command timeout, retrying ({attempt + 1}/{max_retries})")
+                    time.sleep(retry_delay)
+                else:
+                    logging.warning(f"CI-V command timeout after {max_retries + 1} attempts")
+                    return bytearray()
+            except serial.SerialException as e:
+                logging.warning(f"Serial write error: {e}")
+                self.connected = False
+                return bytearray()
+        
+        return bytearray()
 
     def is_connected(self):
         return self.connected
     
     def close(self):
-        self.ser.close()
+        try:
+            if hasattr(self, 'ser') and self.ser.is_open:
+                self.ser.close()
+                logging.info("ICOM connection closed")
+        except Exception as e:
+            logging.warning(f"Error closing ICOM connection: {e}")
+
+    def _validateFrequency(self, freq):
+        """Validate frequency before sending to radio."""
+        try:
+            # Convert to integer, handling both string and numeric inputs
+            freq_int = int(float(str(freq)))
+            
+            # Check if positive
+            if freq_int <= 0:
+                logging.warning(f"Invalid frequency: {freq} (must be positive)")
+                return False
+                
+            # Check IC-910H frequency ranges for satellite operation
+            # VHF: 144-148 MHz (amateur satellite band)
+            # UHF: 430-450 MHz (amateur satellite band)  
+            # SHF: 1.2-1.3 GHz (amateur satellite band)
+            valid_ranges = [
+                (144_000_000, 148_000_000),    # VHF amateur satellite
+                (430_000_000, 450_000_000),    # UHF amateur satellite
+                (1_200_000_000, 1_300_000_000) # SHF amateur satellite
+            ]
+            
+            for min_freq, max_freq in valid_ranges:
+                if min_freq <= freq_int <= max_freq:
+                    return True
+                    
+            logging.warning(f"Frequency {freq} Hz ({freq_int/1_000_000:.3f} MHz) outside IC-910H satellite bands")
+            return False
+            
+        except (ValueError, TypeError) as e:
+            logging.warning(f"Invalid frequency format '{freq}': {e}")
+            return False
+
+    def _validateFrequencyString(self, freq_str):
+        """Validate that frequency string can be converted to proper CI-V format."""
+        try:
+            # Test conversion to CI-V format
+            freq = '0000000000' + str(freq_str)
+            freq = freq[-10:]
+            
+            # Test each byte conversion
+            int(freq[8:10], 16)  # Test last 2 digits
+            int(freq[6:8], 16)   # Test next 2 digits
+            int(freq[4:6], 16)   # Test next 2 digits
+            int(freq[2:4], 16)   # Test next 2 digits
+            int(freq[0:2], 16)   # Test first 2 digits
+            
+            return True
+        except (ValueError, TypeError):
+            return False
 
     def setMode(self, mode):
+        """Set radio mode with retry logic - this is a setup command."""
         mode = mode.upper()
         if mode == 'FM':
-            self.__writeToIcom(b'\x06\x04')
+            self.__writeToIcomWithRetry(b'\x06\x04')
         if mode == 'FM':
-            self.__writeToIcom(b'\x06\x05')
+            self.__writeToIcomWithRetry(b'\x06\x05')
         if mode == 'USB':
-            self.__writeToIcom(b'\x06\x01')
+            self.__writeToIcomWithRetry(b'\x06\x01')
         if mode == 'LSB':
-            self.__writeToIcom(b'\x06\x00')
+            self.__writeToIcomWithRetry(b'\x06\x00')
         if mode == 'CW':
-            self.__writeToIcom(b'\x06\x03')
+            self.__writeToIcomWithRetry(b'\x06\x03')
 
     def setVFO(self, vfo):
+        """Set VFO with retry logic - this is a setup command."""
         vfo = vfo.upper()
         if vfo == 'VFOA':
             self.current_vfo = "A"
-            self.__writeToIcom(b'\x07\x00')
+            self.__writeToIcomWithRetry(b'\x07\x00')
         if vfo == 'VFOB':
             self.current_vfo = "B"
-            self.__writeToIcom(b'\x07\x01')
+            self.__writeToIcomWithRetry(b'\x07\x01')
         if vfo == 'MAIN':
             self.current_vfo = "A"
-            self.__writeToIcom(b'\x07\xd0')  # select MAIN
+            self.__writeToIcomWithRetry(b'\x07\xd0')  # select MAIN
         if vfo == 'SUB':
             self.current_vfo = "B"
-            self.__writeToIcom(b'\x07\xd1')  # select SUB
+            self.__writeToIcomWithRetry(b'\x07\xd1')  # select SUB
 
     # change main and sub
     def setExchange(self):
+        """Exchange VFOs with retry logic - this is a setup command."""
         if self.current_vfo == "A":
             self.current_vfo = "B"
         else:
             self.current_vfo = "A"
-        self.__writeToIcom(b'\x07\xB0')
+        self.__writeToIcomWithRetry(b'\x07\xB0')
 
     # change main and sub
     def setSatelliteMode(self, on):
+        """Set satellite mode with retry logic - this is a setup command."""
         if on:
-            self.__writeToIcom(b'\x1A\x07\x01')
+            self.__writeToIcomWithRetry(b'\x1A\x07\x01')
         else:
-            self.__writeToIcom(b'\x1A\x07\x00')
+            self.__writeToIcomWithRetry(b'\x1A\x07\x00')
 
 
     # Parameter: hertz string with 3 numbers
@@ -167,20 +294,37 @@ class icom:
 
     # Parameter as string in hertz
     def setFrequency(self, freq):
-        if self.current_vfo == "A":
-            self.last_set_frequency_a = freq
-        else:
-            self.last_set_frequency_b = freq
-        freq = '0000000000' + freq
-        freq = freq[-10:]
-        b = bytes([5, int(freq[8:10], 16), int(freq[6:8], 16), int(freq[4:6], 16),
-                   int(freq[2:4], 16), int(freq[0:2], 16)])
-        returnMsg = self.__writeToIcom(b)
-        back = False
-        if len(returnMsg) > 0:
-            if returnMsg.count(b'\xfb') > 0:
-                back = True
-        return back
+        """Set frequency - NO RETRY to avoid doppler update feedback loops."""
+        try:
+            # Validate frequency before processing
+            if not self._validateFrequency(freq):
+                logging.warning(f"Invalid frequency '{freq}' - skipping frequency update")
+                return False
+                
+            if not self._validateFrequencyString(freq):
+                logging.warning(f"Frequency '{freq}' cannot be converted to CI-V format - skipping")
+                return False
+            
+            if self.current_vfo == "A":
+                self.last_set_frequency_a = freq
+            else:
+                self.last_set_frequency_b = freq
+            freq = '0000000000' + str(freq)
+            freq = freq[-10:]
+            b = bytes([5, int(freq[8:10], 16), int(freq[6:8], 16), int(freq[4:6], 16),
+                       int(freq[2:4], 16), int(freq[0:2], 16)])
+            returnMsg = self.__writeToIcom(b)  # Single attempt only
+            back = False
+            if len(returnMsg) > 0:
+                if returnMsg.count(b'\xfb') > 0:
+                    back = True
+            return back
+        except ValueError as e:
+            logging.error(f"Invalid frequency format '{freq}': {e}")
+            return False
+        except Exception as e:
+            logging.error(f"Error setting frequency {freq}: {e}")
+            return False
 
 
     def setToneSquelchOn(self, on):
@@ -242,16 +386,33 @@ class icom:
                 return self.last_set_frequency_b
 
     def setFrequencyOffUnselectVFO(self, freq):
-        freq = '0000000000' + freq
-        freq = freq[-10:]
-        b = b'\x25\x01' + bytes([int(freq[8:10], 16), int(freq[6:8], 16), int(freq[4:6], 16),
-                   int(freq[2:4], 16), int(freq[0:2], 16)])
-        returnMsg = self.__writeToIcom(b)
-        back = False
-        if len(returnMsg) > 0:
-            if returnMsg.count(b'\xfb') > 0:
-                back = True
-        return back
+        """Set frequency without selecting VFO - with validation."""
+        try:
+            # Validate frequency before processing
+            if not self._validateFrequency(freq):
+                logging.warning(f"Invalid frequency '{freq}' - skipping frequency update")
+                return False
+                
+            if not self._validateFrequencyString(freq):
+                logging.warning(f"Frequency '{freq}' cannot be converted to CI-V format - skipping")
+                return False
+                
+            freq = '0000000000' + str(freq)
+            freq = freq[-10:]
+            b = b'\x25\x01' + bytes([int(freq[8:10], 16), int(freq[6:8], 16), int(freq[4:6], 16),
+                       int(freq[2:4], 16), int(freq[0:2], 16)])
+            returnMsg = self.__writeToIcom(b)
+            back = False
+            if len(returnMsg) > 0:
+                if returnMsg.count(b'\xfb') > 0:
+                    back = True
+            return back
+        except ValueError as e:
+            logging.error(f"Invalid frequency format '{freq}': {e}")
+            return False
+        except Exception as e:
+            logging.error(f"Error setting frequency {freq}: {e}")
+            return False
 
     # CI-V TRANSCEIVE have to be ON
     # function extract last frequency which is send to us when a user is dailing

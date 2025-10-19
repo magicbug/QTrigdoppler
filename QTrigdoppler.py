@@ -2593,8 +2593,17 @@ class MainWindow(QMainWindow):
             if not reconnected:
                 logging.warning("Reconnection failed, continuing in offline mode")
             
-            # Don't call sys.exit() - let the GUI continue and allow reconnection
-            return
+            # Wait a moment for reconnection to stabilize
+            time.sleep(1.0)
+            
+            # Check if tracking should continue and restart the worker
+            if TRACKING_ACTIVE and hasattr(self, 'my_satellite') and self.my_satellite:
+                logging.info("Resuming doppler tracking after reconnection...")
+                # Restart the doppler worker to continue tracking
+                self.restart_doppler_tracking()
+            else:
+                logging.warning("Tracking not active or no satellite selected, stopping doppler calculations")
+                return
     
     def recurring_utc_clock_timer(self):
         date_val = datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
@@ -3239,7 +3248,8 @@ class MainWindow(QMainWindow):
             if hasattr(icomTrx, 'close'):
                 try:
                     icomTrx.close()
-                except:
+                except Exception as e:
+                    logging.debug(f"Error closing ICOM connection during cleanup: {e}")
                     pass  # Ignore errors during cleanup
             
             # Create new connection
@@ -3261,6 +3271,22 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logging.error(f"Error during ICOM reconnection attempt: {e}")
             RIG_CONNECTED = False
+            return False
+
+    def restart_doppler_tracking(self):
+        """Restart doppler tracking worker after communication failure"""
+        try:
+            if TRACKING_ACTIVE and hasattr(self, 'my_satellite') and self.my_satellite:
+                logging.info("Restarting doppler tracking worker...")
+                self.doppler_worker = Worker(self.calc_doppler)
+                self.threadpool.start(self.doppler_worker, QThread.HighestPriority.value)
+                logging.info("Doppler tracking worker restarted successfully")
+                return True
+            else:
+                logging.warning("Cannot restart tracking - not active or no satellite selected")
+                return False
+        except Exception as e:
+            logging.error(f"Failed to restart doppler tracking worker: {e}")
             return False
 
     def keyPressEvent(self, event):
