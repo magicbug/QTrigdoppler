@@ -263,10 +263,24 @@ class icom:
     # change main and sub
     def setSatelliteMode(self, on):
         """Set satellite mode with retry logic - this is a setup command."""
+        if self.radio_model == '910':
+            self.setSatelliteMode910(on)
+        else:
+            self.setSatelliteMode9700(on)
+            
+    def setSatelliteMode910(self, on):
+        """Set satellite mode for IC-910H."""
         if on:
             self.__writeToIcomWithRetry(b'\x1A\x07\x01')
         else:
             self.__writeToIcomWithRetry(b'\x1A\x07\x00')
+            
+    def setSatelliteMode9700(self, on):
+        """Set satellite mode for IC-9700."""
+        if on:
+            self.__writeToIcomWithRetry(b'\x16\x5A\x01')
+        else:
+            self.__writeToIcomWithRetry(b'\x16\x5A\x00')
 
 
     # Parameter: hertz string with 3 numbers
