@@ -2419,7 +2419,7 @@ class MainWindow(QMainWindow):
                 consecutive_failures = 0
                 max_consecutive_failures = 3
                 last_freq_update = 0  # Track last frequency update time
-                min_freq_update_interval = 0.05  # Minimum 50ms between frequency updates
+                min_freq_update_interval = 0.030  # Minimum 30ms between frequency updates (optimized for high latitude)
 
                 while TRACKING_ACTIVE == True:
                     a = datetime.now()
@@ -2612,12 +2612,14 @@ class MainWindow(QMainWindow):
                             # IC-910: Simple frequency updates without PTT checking
                             # Skip health checks during rapid updates to avoid interference
                             
-                            # Use adaptive threshold based on doppler rate - conservative approach
+                            # Use adaptive threshold based on doppler rate - optimized for high latitude (57.63°N)
                             current_doppler_rate = abs(self.my_satellite.down_doppler_rate) + abs(self.my_satellite.up_doppler_rate)
-                            if current_doppler_rate > 1500:  # Very high doppler rate - slightly smaller threshold
-                                adaptive_thres = max(100, doppler_thres * 3 // 4)  # 3/4 threshold, minimum 100Hz
+                            if current_doppler_rate > 2500:  # Extreme doppler rate - much smaller threshold
+                                adaptive_thres = max(50, doppler_thres // 2)  # Half threshold, minimum 50Hz
+                            elif current_doppler_rate > 1500:  # Very high doppler rate - smaller threshold
+                                adaptive_thres = max(75, doppler_thres * 2 // 3)  # 2/3 threshold, minimum 75Hz
                             elif current_doppler_rate > 800:  # High doppler rate
-                                adaptive_thres = max(125, doppler_thres * 7 // 8)  # 7/8 threshold, minimum 125Hz
+                                adaptive_thres = max(100, doppler_thres * 3 // 4)  # 3/4 threshold, minimum 100Hz
                             else:
                                 adaptive_thres = doppler_thres  # Normal threshold
                             
@@ -2641,18 +2643,20 @@ class MainWindow(QMainWindow):
                                     # Small delay after TX frequency update to let radio process
                                     time.sleep(0.01)
                                     last_freq_update = current_time
-                        # Adaptive sleep based on doppler rate - balanced for radio capabilities
+                        # Adaptive sleep based on doppler rate - optimized for high latitude (57.63°N)
                         doppler_rate = abs(self.my_satellite.down_doppler_rate) + abs(self.my_satellite.up_doppler_rate)
-                        if doppler_rate > 2000:  # Very high doppler rate (near TCA)
-                            time.sleep(0.015)  # 15ms - fast but safe for radio
+                        if doppler_rate > 3000:  # Extreme doppler rate (very high latitude near TCA)
+                            time.sleep(0.010)  # 10ms - maximum safe speed for radio
+                        elif doppler_rate > 2000:  # Very high doppler rate (high latitude near TCA)
+                            time.sleep(0.012)  # 12ms - very fast but safe
                         elif doppler_rate > 1000:  # High doppler rate (approaching TCA)
-                            time.sleep(0.020)  # 20ms for rapid changes
+                            time.sleep(0.015)  # 15ms for rapid changes
                         elif doppler_rate > 500:  # Medium-high doppler rate
-                            time.sleep(0.025)  # 25ms for moderate-rapid changes
+                            time.sleep(0.020)  # 20ms for moderate-rapid changes
                         elif doppler_rate > 100:  # Medium doppler rate
-                            time.sleep(0.030)  # 30ms for moderate changes
+                            time.sleep(0.025)  # 25ms for moderate changes
                         else:
-                            time.sleep(0.035)  # 35ms for slow changes
+                            time.sleep(0.030)  # 30ms for slow changes
                         
                     self.my_satellite.new_cal = 0
                     time.sleep(0.01)
