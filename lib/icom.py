@@ -54,7 +54,7 @@ class icom:
             time.sleep(0.05)
             b = bytearray()
             b = b + self.ser.read(1)
-            while self.ser.inWaiting():
+            while self.ser.in_waiting:
                 b = b + self.ser.read(1)
             # drop all but the last frame
             while b.count(b'\xfd') > 1:
@@ -85,7 +85,7 @@ class icom:
     def __writeToIcom(self, b):
         if self.connected == True:
             s = self.ser.write(bytes([254, 254, self.icomTrxCivAdress, 0]) + b + bytes([253]))
-            self.ser.flushInput()
+            self.ser.reset_input_buffer()
             #print('   * writeToIcom value: ', b)
             return self.__readFromIcom()
         else:
