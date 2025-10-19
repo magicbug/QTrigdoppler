@@ -5,103 +5,158 @@ import math
 import numpy as np
 from datetime import datetime, timedelta, timezone
 import time
+import logging
 C = 299792458.
 
 def tx_dopplercalc(ephemdata, freq_at_sat, myloc):
-    ephemdata.compute(myloc)
-    doppler = round(freq_at_sat + ephemdata.range_velocity * freq_at_sat / C)
-    return doppler
+    try:
+        ephemdata.compute(myloc)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None, using last known frequency")
+            return freq_at_sat
+        doppler = round(freq_at_sat + ephemdata.range_velocity * freq_at_sat / C)
+        return doppler
+    except Exception as e:
+        logging.error(f"Error in tx_dopplercalc: {e}, using last known frequency")
+        return freq_at_sat
 ## Calculates the rx doppler frequency
 def rx_dopplercalc(ephemdata, freq_at_sat, myloc):
-    ephemdata.compute(myloc)
-    doppler = round(freq_at_sat - ephemdata.range_velocity * freq_at_sat / C)
-    return doppler
+    try:
+        ephemdata.compute(myloc)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None, using last known frequency")
+            return freq_at_sat
+        doppler = round(freq_at_sat - ephemdata.range_velocity * freq_at_sat / C)
+        return doppler
+    except Exception as e:
+        logging.error(f"Error in rx_dopplercalc: {e}, using last known frequency")
+        return freq_at_sat
 
 ## Predictive tx doppler calculation - predicts future doppler based on rate
 def tx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=0.25):
-    ephemdata.compute(myloc)
-    current_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
-    
-    # Adaptive prediction time based on doppler rate - addresses the core timing issue
-    # Calculate initial rate to determine optimal prediction time
-    temp_future = ephem.Date(myloc.date + 0.1 / 86400.0)  # 100ms test
-    temp_loc = myloc.copy()
-    temp_loc.date = temp_future
-    ephemdata.compute(temp_loc)
-    temp_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
-    initial_rate = abs((temp_doppler - current_doppler) / 0.1)
-    
-    # Adaptive prediction time - key fix for northern latitude steep passes
-    if initial_rate > 60:  # Very rapid change (steep passes, northern latitudes)
-        prediction_seconds = 0.5  # 500ms - longer prediction for steep passes
-    elif initial_rate > 30:   # Moderate rapid change
-        prediction_seconds = 0.35  # 350ms
-    elif initial_rate > 10:   # Normal rapid change
-        prediction_seconds = 0.25  # 250ms (original)
-    else:                      # Slow change
-        prediction_seconds = 0.15  # 150ms
-    
-    # Calculate doppler rate using the adaptive prediction time
-    future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)
-    myloc_future = myloc.copy()
-    myloc_future.date = future_time
-    ephemdata.compute(myloc_future)
-    future_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
-    
-    # Calculate rate and predict
-    doppler_rate = (future_doppler - current_doppler) / prediction_seconds
+    try:
+        ephemdata.compute(myloc)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None in predictive TX, using last known frequency")
+            return freq_at_sat
+        current_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
+        
+        # Adaptive prediction time based on doppler rate - addresses the core timing issue
+        # Calculate initial rate to determine optimal prediction time
+        temp_future = ephem.Date(myloc.date + 0.1 / 86400.0)  # 100ms test
+        temp_loc = myloc.copy()
+        temp_loc.date = temp_future
+        ephemdata.compute(temp_loc)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None in predictive TX temp calc, using current doppler")
+            return round(current_doppler)
+        temp_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
+        initial_rate = abs((temp_doppler - current_doppler) / 0.1)
+        
+        # Adaptive prediction time - key fix for northern latitude steep passes
+        if initial_rate > 60:  # Very rapid change (steep passes, northern latitudes)
+            prediction_seconds = 0.5  # 500ms - longer prediction for steep passes
+        elif initial_rate > 30:   # Moderate rapid change
+            prediction_seconds = 0.35  # 350ms
+        elif initial_rate > 10:   # Normal rapid change
+            prediction_seconds = 0.25  # 250ms (original)
+        else:                      # Slow change
+            prediction_seconds = 0.15  # 150ms
+        
+        # Calculate doppler rate using the adaptive prediction time
+        future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)
+        myloc_future = myloc.copy()
+        myloc_future.date = future_time
+        ephemdata.compute(myloc_future)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None in predictive TX future calc, using current doppler")
+            return round(current_doppler)
+        future_doppler = freq_at_sat + ephemdata.range_velocity * freq_at_sat / C
+        
+        # Calculate rate and predict
+        doppler_rate = (future_doppler - current_doppler) / prediction_seconds
 
-    # Simplified prediction: the predicted doppler IS the future doppler
-    predicted_doppler = future_doppler
-    
-    return round(predicted_doppler)
+        # Simplified prediction: the predicted doppler IS the future doppler
+        predicted_doppler = future_doppler
+        
+        return round(predicted_doppler)
+    except Exception as e:
+        logging.error(f"Error in tx_dopplercalc_predictive: {e}, using last known frequency")
+        return freq_at_sat
 
 ## Predictive rx doppler calculation - predicts future doppler based on rate  
 def rx_dopplercalc_predictive(ephemdata, freq_at_sat, myloc, prediction_seconds=0.25):
-    ephemdata.compute(myloc)
-    current_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
-    
-    # Adaptive prediction time based on doppler rate - same logic as TX
-    # Calculate initial rate to determine optimal prediction time
-    temp_future = ephem.Date(myloc.date + 0.1 / 86400.0)  # 100ms test
-    temp_loc = myloc.copy()
-    temp_loc.date = temp_future
-    ephemdata.compute(temp_loc)
-    temp_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
-    initial_rate = abs((temp_doppler - current_doppler) / 0.1)
-    
-    # Adaptive prediction time - key fix for northern latitude steep passes
-    if initial_rate > 60:  # Very rapid change (steep passes, northern latitudes)
-        prediction_seconds = 0.5  # 500ms - longer prediction for steep passes
-    elif initial_rate > 30:   # Moderate rapid change
-        prediction_seconds = 0.35  # 350ms
-    elif initial_rate > 10:   # Normal rapid change
-        prediction_seconds = 0.25  # 250ms (original)
-    else:                      # Slow change
-        prediction_seconds = 0.15  # 150ms
-    
-    # Calculate doppler rate using the adaptive prediction time
-    future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)
-    myloc_future = myloc.copy()
-    myloc_future.date = future_time
-    ephemdata.compute(myloc_future)
-    future_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
-    
-    # Calculate rate and predict
-    doppler_rate = (future_doppler - current_doppler) / prediction_seconds
-    predicted_doppler = future_doppler
-    
-    return round(predicted_doppler)
+    try:
+        ephemdata.compute(myloc)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None in predictive RX, using last known frequency")
+            return freq_at_sat
+        current_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
+        
+        # Adaptive prediction time based on doppler rate - same logic as TX
+        # Calculate initial rate to determine optimal prediction time
+        temp_future = ephem.Date(myloc.date + 0.1 / 86400.0)  # 100ms test
+        temp_loc = myloc.copy()
+        temp_loc.date = temp_future
+        ephemdata.compute(temp_loc)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None in predictive RX temp calc, using current doppler")
+            return round(current_doppler)
+        temp_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
+        initial_rate = abs((temp_doppler - current_doppler) / 0.1)
+        
+        # Adaptive prediction time - key fix for northern latitude steep passes
+        if initial_rate > 60:  # Very rapid change (steep passes, northern latitudes)
+            prediction_seconds = 0.5  # 500ms - longer prediction for steep passes
+        elif initial_rate > 30:   # Moderate rapid change
+            prediction_seconds = 0.35  # 350ms
+        elif initial_rate > 10:   # Normal rapid change
+            prediction_seconds = 0.25  # 250ms (original)
+        else:                      # Slow change
+            prediction_seconds = 0.15  # 150ms
+        
+        # Calculate doppler rate using the adaptive prediction time
+        future_time = ephem.Date(myloc.date + prediction_seconds / 86400.0)
+        myloc_future = myloc.copy()
+        myloc_future.date = future_time
+        ephemdata.compute(myloc_future)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None in predictive RX future calc, using current doppler")
+            return round(current_doppler)
+        future_doppler = freq_at_sat - ephemdata.range_velocity * freq_at_sat / C
+        
+        # Calculate rate and predict
+        doppler_rate = (future_doppler - current_doppler) / prediction_seconds
+        predicted_doppler = future_doppler
+        
+        return round(predicted_doppler)
+    except Exception as e:
+        logging.error(f"Error in rx_dopplercalc_predictive: {e}, using last known frequency")
+        return freq_at_sat
 ## Calculates the tx doppler error   
 def tx_doppler_val_calc(ephemdata, freq_at_sat, myloc):
-    ephemdata.compute(myloc)
-    doppler = format(float(ephemdata.range_velocity * freq_at_sat / C), '.2f')
-    return doppler
+    try:
+        ephemdata.compute(myloc)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None in tx_doppler_val_calc, returning 0")
+            return "0.00"
+        doppler = format(float(ephemdata.range_velocity * freq_at_sat / C), '.2f')
+        return doppler
+    except Exception as e:
+        logging.error(f"Error in tx_doppler_val_calc: {e}, returning 0")
+        return "0.00"
 ## Calculates the rx doppler error   
 def rx_doppler_val_calc(ephemdata, freq_at_sat, myloc):
-    ephemdata.compute(myloc)
-    doppler = format(float(-ephemdata.range_velocity * freq_at_sat / C),'.2f')
-    return doppler
+    try:
+        ephemdata.compute(myloc)
+        if ephemdata.range_velocity is None:
+            logging.warning("Satellite range_velocity is None in rx_doppler_val_calc, returning 0")
+            return "0.00"
+        doppler = format(float(-ephemdata.range_velocity * freq_at_sat / C),'.2f')
+        return doppler
+    except Exception as e:
+        logging.error(f"Error in rx_doppler_val_calc: {e}, returning 0")
+        return "0.00"
 ## Calculates sat elevation at observer
 def sat_ele_calc(ephemdata, myloc):
     ephemdata.compute(myloc)
