@@ -161,6 +161,33 @@ class icom:
 
     def is_connected(self):
         return self.connected
+
+    def check_radio_health(self):
+        """Check if radio is still responsive with a simple query"""
+        try:
+            if not self.connected:
+                return False
+                
+            # Simple frequency query - safe, read-only operation
+            freq = self.getFrequency()
+            if freq and str(freq).isdigit() and len(str(freq)) > 0:
+                logging.debug(f"Radio health check passed - frequency: {freq}")
+                return True
+            else:
+                logging.warning(f"Radio health check failed - invalid frequency response: {freq}")
+                return False
+                
+        except Exception as e:
+            logging.warning(f"Radio health check failed: {e}")
+            return False
+
+    def periodic_health_check(self):
+        """Periodic health check during tracking - returns True if healthy"""
+        if not self.check_radio_health():
+            logging.warning("Radio health check failed, marking as disconnected")
+            self.connected = False
+            return False
+        return True
     
     def close(self):
         try:
