@@ -245,9 +245,9 @@ RIG_CONNECTED = False
 DOPPLER_UPDATE_LOCK = False
 
 if configur['icom']['radio'] == '9700':
-    icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
+    icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96, '9700')
 elif configur['icom']['radio'] == '910':
-    icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
+    icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96, '910')
 RIG_CONNECTED = icomTrx.is_connected()    
 
 class Satellite:
@@ -2488,7 +2488,7 @@ class MainWindow(QMainWindow):
                                 else:
                                     icomTrx.setVFO("VFOB")
                                     # Don't switch VFO when PTT is pushed, to avoid switching VFO while TX 
-                                    while icomTrx.isPttOff == 0:
+                                    while icomTrx.isPttOff() == 0:
                                         time.sleep(0.1)
                                         
                                 icomTrx.setFrequency(str(tx_doppler))
@@ -2525,22 +2525,36 @@ class MainWindow(QMainWindow):
                             # Standard calculation for FM or other modes, or when predictive doppler is disabled
                             new_rx_doppler = round(rx_dopplercalc(self.my_satellite.tledata,self.my_satellite.F + self.my_satellite.F_cal, myloc))
                             new_tx_doppler = round(tx_dopplercalc(self.my_satellite.tledata,self.my_satellite.I, myloc))
-                        # 0 = PTT is pressed
-                        # 1 = PTT is released
-                        ptt_state_old = ptt_state
-                        ptt_state = icomTrx.isPttOff()
-                        # Check for RX -> TX transition
-                        if  ptt_state_old and ptt_state == 0 and abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
-                            #icomTrx.setVFO("VFOB")
-                            logging.debug("TX inititated")
-                            tx_doppler = new_tx_doppler
-                            self.my_satellite.I_RIG = tx_doppler
-                            icomTrx.setFrequency(str(tx_doppler))
-                        if  ptt_state and abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
-                            rx_doppler = new_rx_doppler
-                            self.my_satellite.F_RIG = rx_doppler
-                            icomTrx.setVFO("VFOA")
-                            icomTrx.setFrequency(str(rx_doppler))
+                        # PTT checking only supported on radios other than IC-910
+                        if RADIO != '910':
+                            # 0 = PTT is pressed
+                            # 1 = PTT is released
+                            ptt_state_old = ptt_state
+                            ptt_state = icomTrx.isPttOff()
+                            # Check for RX -> TX transition
+                            if  ptt_state_old and ptt_state == 0 and abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
+                                #icomTrx.setVFO("VFOB")
+                                logging.debug("TX inititated")
+                                tx_doppler = new_tx_doppler
+                                self.my_satellite.I_RIG = tx_doppler
+                                icomTrx.setFrequency(str(tx_doppler))
+                            if  ptt_state and abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
+                                rx_doppler = new_rx_doppler
+                                self.my_satellite.F_RIG = rx_doppler
+                                icomTrx.setVFO("VFOA")
+                                icomTrx.setFrequency(str(rx_doppler))
+                        else:
+                            # IC-910: Simple frequency updates without PTT checking
+                            if abs(new_rx_doppler-self.my_satellite.F_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
+                                rx_doppler = new_rx_doppler
+                                self.my_satellite.F_RIG = rx_doppler
+                                icomTrx.setVFO("VFOA")
+                                icomTrx.setFrequency(str(rx_doppler))
+                            if abs(new_tx_doppler-self.my_satellite.I_RIG) > doppler_thres and FREQUENCY_UPDATES_PAUSED == False:
+                                tx_doppler = new_tx_doppler
+                                self.my_satellite.I_RIG = tx_doppler
+                                icomTrx.setVFO("VFOB")
+                                icomTrx.setFrequency(str(tx_doppler))
                         time.sleep(0.025)
                         
                     self.my_satellite.new_cal = 0
@@ -3212,9 +3226,9 @@ class MainWindow(QMainWindow):
             
             # Create new connection
             if configur['icom']['radio'] == '9700':
-                icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
+                icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96, '9700')
             elif configur['icom']['radio'] == '910':
-                icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96)
+                icomTrx = icom.icom(RIG_SERIAL_PORT, '19200', 96, '910')
             
             # Update connection status
             RIG_CONNECTED = icomTrx.is_connected()

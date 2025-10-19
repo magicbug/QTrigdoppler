@@ -27,11 +27,12 @@ import logging
 
 class icom:
 
-    def __init__(self, serialDevice, serialBaud, icomTrxCivAdress):
+    def __init__(self, serialDevice, serialBaud, icomTrxCivAdress, radio_model='9700'):
         self.connected = False
         self.icomTrxCivAdress = icomTrxCivAdress
         self.serialDevice = serialDevice
         self.serialBaud = serialBaud
+        self.radio_model = radio_model
         self.ser = serial.Serial()
         self.ser.baudrate = serialBaud
         self.ser.port = serialDevice
@@ -61,17 +62,17 @@ class icom:
             if len(b) > 0:
                 # valid message
                 validMsg = bytes([254, 254, 0, self.icomTrxCivAdress, 251, 253])
-                if b[0:5] == validMsg:
+                if len(b) >= 5 and b[0:5] == validMsg:
                     b = b[6:len(b)]
                     if len(b) > 0:  # read answer from icom trx
-                        if b[0] == 254 and b[1] == 254 and b[-1] == 253:  # check for valid data CRC
+                        if len(b) >= 2 and b[0] == 254 and b[1] == 254 and b[-1] == 253:  # check for valid data CRC
                             return b
                         else:
                             b = bytearray()
                     else:
                         b = bytearray()
                 else:
-                    if b[0] == 254 and b[1] == 254 and b[-1] == 253:  # check for valid data CRC
+                    if len(b) >= 2 and b[0] == 254 and b[1] == 254 and b[-1] == 253:  # check for valid data CRC
                         b = b
                     else:
                         b = bytearray()
@@ -227,7 +228,7 @@ class icom:
         if self.connected == True:
             b = self.__writeToIcom(b'\x03')  # ask for used frequency
             c = ''
-            if len(b) > 0:
+            if len(b) >= 10:
                 for a in reversed(b[5:10]):
                     c = c + '%0.2X' % a
             if len(c) > 0: 
@@ -272,12 +273,16 @@ class icom:
         return c
 
     def isPttOff(self):
+        # IC-910/IC-910H does not support PTT status queries via CAT commands
+        if self.radio_model == '910':
+            return True
+        
         ret = True
         b = self.__writeToIcom(b'\x1C\x00')  # ask for PTT status
-        if len(b) < 3: ## This should be fixed.
+        if len(b) < 3:
             return ret
         #print(b)
-        if b[-2] == 1:
+        if len(b) >= 2 and b[-2] == 1:
             ret = False
         return ret
         
