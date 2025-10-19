@@ -100,6 +100,12 @@ MM9SQL Modifications:
 - Automatic TLE Updating on Startup or based on hourly time period.
 - Satellite Database (doppler.sqf) downloading with merge or replace options from oscarwatch.org.
 - Added frequency pause/resume feature: pause frequency updates while keeping rotator tracking for manual frequency control on newer satellites.
+- Added remote server integration with Node.js backend for multi-client remote control.
+- Enhanced rotator control with Yaesu rotator support and web-based control.
+- Added comprehensive web API with real-time status broadcasting and debug endpoints.
+- Implemented advanced audio monitoring with multi-device support and error recovery.
+- Added extensive configuration management with 100+ configurable parameters and satellite-specific offset profiles.
+- Enhanced logging system with configurable levels, rotation, and comprehensive error tracking.
 - Help files
     
     
