@@ -15,7 +15,7 @@
 
 Contributions in this repo by:
 - Joshua, DL3JOP
-- Peter, 2M0SQL
+- Peter, MM9SQL
  
 ## 🧠 What QTRigdoppler does
 
@@ -91,7 +91,7 @@ DL3JOP modifications:
 - Various smaller changes and additions
 - Added binaries
 
-2M0SQL Modifications:
+MM9SQL Modifications:
 - Changed to PySide
 - Implemented Websocket features using Flask and SocketIO
 - Added Cloudlog/Wavelog integration: automatic logging of frequency and satellite info via Cloudlog API, configurable in config.ini.
