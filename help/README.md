@@ -9,7 +9,7 @@ Welcome to the QTRigdoppler help system! This directory contains comprehensive d
 - **[Configuration Guide](configuration.md)** - Complete config.ini reference and setup guide
 - **[Radio Configuration](radio-configuration.md)** - Complete guide to ICOM IC-910H setup and operation
 - **[Frequency Control](frequency-control.md)** - Complete guide to doppler correction, manual control, and advanced frequency features
-- **[Remote Operation](remote-operation.md)** - Complete guide to web-based remote control systems
+- **[Remote Operation](remote-operation.md)** - Complete guide to web-based remote control systems and remote audio transmission
 - **[Cloudlog Integration](cloudlog-integration.md)** - Automatic logbook integration with Cloudlog/Wavelog
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Complete guide to keyboard shortcuts and accessibility features
 - **[Pass Recording](pass-recording.md)** - Comprehensive guide to automatic audio recording
@@ -39,7 +39,7 @@ The following help documents are planned for future releases:
 - **[Configuration Guide](configuration.md)** - Complete config.ini reference and setup
 - **[Radio Configuration](radio-configuration.md)** - ICOM IC-910H setup and operation
 - **[Frequency Control](frequency-control.md)** - Doppler correction, manual control, and advanced frequency features
-- **[Remote Operation](remote-operation.md)** - Web-based remote control systems
+- **[Remote Operation](remote-operation.md)** - Web-based remote control systems and remote audio transmission
 - **[Cloudlog Integration](cloudlog-integration.md)** - Automatic logbook integration
 - **[Keyboard Shortcuts](keyboard-shortcuts.md)** - Current accessibility features
 - **[Pass Recording](pass-recording.md)** - Automatic audio recording setup and usage

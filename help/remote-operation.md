@@ -414,26 +414,311 @@ Use a reverse proxy (nginx, Apache) for load balancing multiple instances.
 - `GET /` - Web interface
 - `GET /status` - Server health check
 
+## 🎤 Remote Audio Transmission
+
+QTRigdoppler includes a powerful two-way audio transmission system that allows remote operators to transmit audio to the radio (TX) and receive audio from the radio (RX) through a web browser.
+
+### Overview
+
+The Remote Audio system provides:
+- **TX Audio (Browser → Radio)**: Transmit audio from your browser microphone to the radio
+- **RX Audio (Radio → Browser)**: Receive audio from the radio and play it in your browser
+- **Two-Way Communication**: Full duplex audio for complete remote operation
+- **Stream Sharing**: RX audio can be simultaneously used by Pass Recorder and remote clients
+
+### Architecture
+
+```
+[Browser Microphone] → [Node.js Server] → [QTRigdoppler] → [TX Soundcard] → [Radio]
+[Radio] → [RX Soundcard] → [QTRigdoppler] → [Node.js Server] → [Browser Speakers]
+```
+
+### Prerequisites
+
+1. **Remote Server System**: Remote Audio requires the Remote Server System (Node.js server)
+2. **Audio Devices**: Configure TX and RX soundcards in QTRigdoppler
+3. **Browser Support**: Modern browser with Web Audio API support (Chrome, Firefox, Edge, Safari)
+
+### Configuration
+
+#### QTRigdoppler Configuration
+
+Add the following section to your `config.ini`:
+
+```ini
+[remote_audio]
+enabled = True                    # Enable remote audio functionality
+tx_soundcard = default           # TX soundcard (output device for radio)
+rx_soundcard = default           # RX soundcard (input device from radio)
+sample_rate = 44100              # Audio sample rate (Hz)
+channels = 1                     # Audio channels (1=mono, 2=stereo)
+```
+
+#### Soundcard Selection
+
+**TX Soundcard** (Output Device):
+- This is the audio output device connected to your radio's microphone input
+- Select the device that routes audio to your radio
+- Common names: "Line Out", "Headphone Out", "Virtual Audio Cable", etc.
+
+**RX Soundcard** (Input Device):
+- This is the audio input device connected to your radio's audio output
+- Select the device that receives audio from your radio
+- Common names: "Line In", "Microphone", "Virtual Audio Cable", etc.
+- **Note**: This same device can be shared with Pass Recorder
+
+#### Audio Format
+
+The system uses:
+- **Format**: PCM, 16-bit signed integer
+- **Sample Rate**: 44100 Hz (configurable: 8000-192000 Hz)
+- **Channels**: Mono (1 channel) recommended for radio use
+- **Streaming**: Real-time binary WebSocket streaming
+
+### Setup Instructions
+
+#### Step 1: Configure Audio Devices
+
+1. Open QTRigdoppler → **Feature Settings** tab → **Remote Audio** section
+2. Enable **"Enable Remote Audio"** checkbox
+3. Select **TX Soundcard** (output device for radio)
+4. Select **RX Soundcard** (input device from radio)
+5. Configure **Sample Rate** and **Channels** as needed
+6. Click **"Store Settings"**
+
+#### Step 2: Verify Server Support
+
+1. Click **"Test Server Connection"** button
+2. Wait for test to complete
+3. Verify status shows:
+   - ✓ Server supports Remote Audio functionality
+   - ✓ TX Audio (Browser → Radio): Supported
+   - ✓ RX Audio (Radio → Browser): Supported
+   - ✓ Two-way Audio: Supported
+
+#### Step 3: Start Remote Server
+
+Ensure the Node.js remote server is running:
+
+```bash
+cd nodejs_server
+node remote_server.js
+```
+
+#### Step 4: Access Web Interface
+
+1. Open browser to your remote server URL (e.g., `http://your-server:5001`)
+2. Navigate to the audio controls section
+3. Grant microphone permissions when prompted (for TX audio)
+4. Grant audio playback permissions (for RX audio)
+
+### Web Interface Usage
+
+#### Transmitting Audio (TX)
+
+1. **Select Microphone**: Choose your microphone device from the dropdown
+2. **Start Transmission**: Click "Start TX" or "Enable Microphone"
+3. **Monitor Levels**: Watch the audio level meter
+4. **Stop Transmission**: Click "Stop TX" or disable microphone
+
+#### Receiving Audio (RX)
+
+1. **Enable Playback**: RX audio starts automatically when remote audio is enabled
+2. **Adjust Volume**: Use browser or system volume controls
+3. **Monitor Status**: Check connection status indicators
+
+### Integration with Pass Recorder
+
+The Remote Audio system intelligently shares the RX audio stream with Pass Recorder:
+
+- **Automatic Sharing**: If both Remote Audio and Pass Recorder use the same RX soundcard, they automatically share the audio stream
+- **No Conflicts**: Both systems can operate simultaneously without device conflicts
+- **Efficient**: Single audio input stream is distributed to multiple consumers
+
+**Configuration Example**:
+```ini
+[passrecording]
+enabled = True
+soundcard = Line In              # Same device as remote_audio rx_soundcard
+
+[remote_audio]
+enabled = True
+rx_soundcard = Line In           # Same device - will be shared automatically
+```
+
+### Troubleshooting
+
+#### No Audio Transmission
+
+**Problem**: TX audio not reaching radio
+
+**Solutions**:
+- Verify TX soundcard is correctly selected
+- Check audio levels in browser (microphone level meter)
+- Verify soundcard is connected to radio microphone input
+- Test soundcard with other applications
+- Check Windows/Mac audio mixer settings
+- Verify remote server is running latest version with audio support
+
+#### No Audio Reception
+
+**Problem**: RX audio not playing in browser
+
+**Solutions**:
+- Verify RX soundcard is correctly selected
+- Check radio audio output is connected to soundcard input
+- Verify browser audio permissions
+- Check browser console for errors (F12)
+- Test soundcard with other applications
+- Verify remote server supports RX audio (`/capabilities` endpoint)
+
+#### Choppy or Delayed Audio
+
+**Problem**: Audio playback is choppy or has delay
+
+**Solutions**:
+- Check network latency and bandwidth
+- Reduce sample rate if network is slow
+- Close unnecessary browser tabs/applications
+- Use wired network connection instead of WiFi
+- Check CPU usage on server and client machines
+- Verify audio buffer sizes are appropriate
+
+#### Server Test Fails
+
+**Problem**: "Test Server Connection" shows errors
+
+**Solutions**:
+- Verify Node.js server is running
+- Check server URL is correct in configuration
+- Ensure server has `/capabilities` endpoint (update server if needed)
+- Check firewall allows connections
+- Review server logs for errors
+- Verify server version supports remote audio
+
+#### Device Conflicts
+
+**Problem**: Pass Recorder and Remote Audio conflict
+
+**Solutions**:
+- Ensure both use the same RX soundcard device name
+- Check that stream sharing is working (check logs)
+- Verify Remote Audio is enabled before starting Pass Recorder
+- Restart QTRigdoppler if conflicts persist
+
+### Audio Format Compatibility
+
+The system supports various audio formats:
+
+| Sample Rate | Channels | Use Case |
+|-------------|----------|----------|
+| 44100 Hz | 1 (Mono) | **Recommended** - Standard quality, low bandwidth |
+| 48000 Hz | 1 (Mono) | High quality, slightly higher bandwidth |
+| 22050 Hz | 1 (Mono) | Lower bandwidth, acceptable quality |
+| 44100 Hz | 2 (Stereo) | Stereo (if needed), higher bandwidth |
+
+**Recommendation**: Use 44100 Hz mono for best balance of quality and bandwidth.
+
+### Security Considerations
+
+⚠️ **Important**: Remote Audio transmits real audio data over the network
+
+- **Network Security**: Use secure networks or VPN
+- **Bandwidth**: Audio streaming uses significant bandwidth
+- **Privacy**: Be aware that audio is transmitted over the network
+- **Access Control**: Consider network-level access restrictions
+
+### Performance Tips
+
+- **Network**: Use wired connection for best performance
+- **Bandwidth**: Ensure adequate upload/download bandwidth
+- **Latency**: Local network provides lowest latency
+- **CPU**: Monitor CPU usage during audio streaming
+- **Browser**: Use modern browsers for best Web Audio API support
+
+### Advanced Configuration
+
+#### Custom Sample Rates
+
+For specialized applications, you can configure custom sample rates:
+
+```ini
+[remote_audio]
+sample_rate = 48000              # Higher quality
+sample_rate = 22050              # Lower bandwidth
+```
+
+#### Multiple Remote Clients
+
+Multiple browsers can connect simultaneously:
+- Each client can transmit independently
+- RX audio is broadcast to all connected clients
+- Server handles audio mixing/routing automatically
+
+### API Reference
+
+#### WebSocket Audio Events
+
+**TX Audio (Client → Server)**:
+- `tx_audio_start` - Begin audio transmission
+- `tx_audio_data` - Audio data chunk (binary)
+- `tx_audio_stop` - Stop audio transmission
+
+**RX Audio (Server → Client)**:
+- `rx_audio_start` - Begin audio reception
+- `rx_audio_data` - Audio data chunk (binary)
+- `rx_audio_stop` - Stop audio reception
+
+#### Server Capabilities Endpoint
+
+Check server capabilities:
+
+```bash
+curl http://your-server:5001/capabilities
+```
+
+Response includes:
+```json
+{
+  "version": "1.0",
+  "features": {
+    "remote_audio": {
+      "enabled": true,
+      "tx_audio": true,
+      "rx_audio": true,
+      "two_way": true
+    }
+  },
+  "audio_formats": {
+    "sample_rate": [8000, 16000, 22050, 44100, 48000],
+    "channels": [1, 2]
+  }
+}
+```
+
 ## 💡 Tips and Best Practices
 
 ### Performance
 - **Regular Restarts**: Restart servers periodically for optimal performance
 - **Resource Monitoring**: Monitor CPU and memory usage
 - **Network Quality**: Ensure stable network connections
+- **Audio Streaming**: Monitor bandwidth usage during audio transmission
 
 ### Reliability  
 - **Backup Configurations**: Keep backup copies of working configurations
 - **Redundant Systems**: Consider multiple access methods
 - **Health Monitoring**: Implement uptime monitoring
+- **Audio Device Testing**: Test audio devices before important operations
 
 ### User Experience
 - **Bookmark URLs**: Save frequently used server addresses
 - **Test Connectivity**: Verify connections before important operations
 - **Document Setup**: Keep notes on your specific configuration
+- **Audio Levels**: Monitor and adjust audio levels for optimal quality
 
 ---
 
-**Remote Operation Guide Version**: 1.0  
+**Remote Operation Guide Version**: 1.1  
 **Compatible with**: QTRigdoppler v1.0+  
 **Last Updated**: January 2025  
-**API Version**: WebSocket v1.0, REST v1.0
+**API Version**: WebSocket v1.0, REST v1.0, Audio v1.0
