@@ -290,6 +290,32 @@ channels = 1
 bit_depth = 16
 ```
 
+**Note**: If both Pass Recording and Remote Audio use the same RX soundcard, they automatically share the audio stream. See [Remote Audio Transmission](remote-operation.md#-remote-audio-transmission) for details.
+
+### [remote_audio] - Remote Audio Transmission
+
+Configuration for browser-based two-way audio transmission. See [Remote Operation Guide](remote-operation.md#-remote-audio-transmission) for detailed setup.
+
+| Setting | Type | Required | Description | Example |
+|---------|------|----------|-------------|---------|
+| `enabled` | bool | No | Enable remote audio transmission | `True`/`False` |
+| `tx_soundcard` | string | No | TX audio output device (to radio) | `default` or device name |
+| `rx_soundcard` | string | No | RX audio input device (from radio) | `default` or device name |
+| `sample_rate` | int | No | Audio sample rate (Hz) | `44100` |
+| `channels` | int | No | Audio channels (1=mono, 2=stereo) | `1` |
+
+**Example:**
+```ini
+[remote_audio]
+enabled = True
+tx_soundcard = Line Out
+rx_soundcard = Line In
+sample_rate = 44100
+channels = 1
+```
+
+**Note**: Requires the Remote Server System (Node.js server) to be enabled. The RX soundcard can be shared with Pass Recording if both use the same device.
+
 ## ⚠️ Unused Configuration Items
 
 The following configuration items are present in older config files but are **not currently used** by the application:
@@ -389,6 +415,13 @@ enabled = True
 soundcard = USB Audio Device
 min_elevation = 10.0
 
+[remote_audio]
+enabled = True
+tx_soundcard = Line Out
+rx_soundcard = Line In
+sample_rate = 44100
+channels = 1
+
 [web_api]
 enabled = True
 port = 5000
@@ -403,6 +436,7 @@ url = https://your.cloudlog.site
 
 - [Rotator Setup Guide](rotator-setup.md) - Detailed rotator configuration
 - [Pass Recording Guide](pass-recording.md) - Audio recording setup
+- [Remote Operation Guide](remote-operation.md) - Remote control and audio transmission
 - [GPS Integration](gps-integration.md) - GPS coordinate updates
 - [Keyboard Shortcuts](keyboard-shortcuts.md) - Application shortcuts
 

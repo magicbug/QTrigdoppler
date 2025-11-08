@@ -9,7 +9,7 @@ import logging  # Add import for logging
 import time
 
 class PassRecorder:
-    def __init__(self, config):
+    def __init__(self, config, audio_streamer=None):
         self.load_config(config)
         self.recording = False
         self.thread = None
@@ -20,6 +20,8 @@ class PassRecorder:
         self.audio_buffer = None  # Buffer to hold audio data
         self.buffer_lock = threading.Lock()
         self.device_info = None  # Store info about the selected device
+        self.audio_streamer = audio_streamer  # Reference to AudioStreamer for stream sharing
+        self.using_shared_stream = False  # Track if we're using shared stream
         
         # Check at startup if any audio devices are available
         try:
@@ -211,6 +213,18 @@ class PassRecorder:
         if self.recording or not self.tracking_active:
             return
         
+        # Check if AudioStreamer is already capturing from the same device
+        # If so, subscribe to that stream instead of creating our own
+        if self.audio_streamer and self.audio_streamer.enabled and self.audio_streamer.is_rx_active():
+            # Check if they're using the same device
+            if self.audio_streamer.is_using_same_device(self.soundcard):
+                logging.info(f"Pass recorder will share RX audio stream with Remote Audio RX (device: {self.soundcard})")
+                self.using_shared_stream = True
+            else:
+                self.using_shared_stream = False
+        else:
+            self.using_shared_stream = False
+        
         # Initialize the buffer
         with self.buffer_lock:
             self.audio_buffer = []
@@ -224,6 +238,11 @@ class PassRecorder:
     def stop_recording(self):
         if not self.recording:
             return
+        
+        # Unsubscribe from shared stream if using it
+        if self.using_shared_stream and self.audio_streamer:
+            self.audio_streamer.remove_rx_subscriber(self._shared_audio_callback)
+            self.using_shared_stream = False
             
         filepath = self.current_filepath  # Save the filepath before it gets reset
         self._stop_event.set()
@@ -274,108 +293,133 @@ class PassRecorder:
             dtype = np.int16
             scale_factor = 32767
         
-        # Find the appropriate audio device
-        device, device_name = self.find_audio_device()
-        if device is None:
-            logging.error("Failed to find a suitable audio device for recording")
-            self.recording = False
-            # Create a short empty file to indicate the attempt
+        # If using shared stream, subscribe to AudioStreamer instead of creating our own
+        if self.using_shared_stream and self.audio_streamer:
+            logging.info("Using shared RX audio stream from Remote Audio RX")
             try:
-                with wave.open(filepath, 'wb') as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)
-                    wf.setframerate(44100)
-                    # Write a brief note (silence)
-                    wf.writeframes(np.zeros(4410, dtype=np.int16).tobytes())
-                logging.warning(f"Created empty WAV file as no input device was available: {filepath}")
+                # Subscribe to the shared stream
+                self.audio_streamer.add_rx_subscriber(self._shared_audio_callback)
+                
+                # Wait for stop event while recording
+                while not self._stop_event.is_set():
+                    time.sleep(0.2)
+                
+                # Unsubscribe when done
+                self.audio_streamer.remove_rx_subscriber(self._shared_audio_callback)
+                
             except Exception as e:
-                logging.error(f"Error creating placeholder file: {e}")
-            return
+                logging.error(f"Error using shared audio stream: {e}", exc_info=True)
+                self.recording = False
+                return
         
-        # Try a direct recording approach
-        total_frames = 0
-        
-        try:
-            # Define callback that stores data in our buffer
-            def audio_callback(indata, frames, time, status):
-                nonlocal total_frames
-                
-                # Only log errors other than overflow
-                if status and status.input_overflow:
-                    # Skip logging for input overflow as it's too verbose
-                    pass
-                elif status:
-                    logging.warning(f"Audio status in callback: {status}")
-                
+        # Otherwise, create our own audio stream (original behavior)
+        else:
+            # Find the appropriate audio device
+            device, device_name = self.find_audio_device()
+            if device is None:
+                logging.error("Failed to find a suitable audio device for recording")
+                self.recording = False
+                # Create a short empty file to indicate the attempt
                 try:
-                    # Get the RMS level to check if we're recording anything
-                    level = np.linalg.norm(indata)
-                    total_frames += frames
-                    
-                    # Log audio level every 10 seconds to verify we're getting input (reduced from every second)
-                    if self.log_audio_levels and total_frames % 100000 < frames:  # Changed from 10000 to 100000 (10 seconds at 48kHz)
-                        logging.info(f"Recording audio level: {level:.4f}, total frames: {total_frames}")
-                    
-                    # Apply gain to make sure the audio is audible
-                    gain = 2.0  # Reduced from 5.0 to 2.0 to prevent over-amplification
-                    amplified_data = indata * gain
-                    
-                    # Clip to valid range for float (-1.0 to 1.0)
-                    amplified_data = np.clip(amplified_data, -1.0, 1.0)
-                    
-                    # Convert to integer format
-                    audio_data = (amplified_data * scale_factor).astype(dtype)
-                    
-                    # Store in buffer
-                    with self.buffer_lock:
-                        self.audio_buffer.append(audio_data.copy())
-                        
+                    with wave.open(filepath, 'wb') as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(44100)
+                        # Write a brief note (silence)
+                        wf.writeframes(np.zeros(4410, dtype=np.int16).tobytes())
+                    logging.warning(f"Created empty WAV file as no input device was available: {filepath}")
                 except Exception as e:
-                    # Catch any errors in the callback to prevent audio stream from crashing
-                    logging.error(f"Error in audio processing callback: {e}")
-                    # Still increment frames to avoid hitting the logging condition too often
-                    total_frames += frames
+                    logging.error(f"Error creating placeholder file: {e}")
+                return
             
-            # Create audio stream with careful error handling
+            # Try a direct recording approach
+            total_frames = 0
+            
             try:
-                logging.info(f"Starting audio stream from device {device} ({device_name})")
-                stream = sd.InputStream(
-                    device=device,
-                    channels=self.channels,
-                    samplerate=self.sample_rate,
-                    dtype='float32',
-                    callback=audio_callback,
-                    blocksize=8192  # Increased block size from 4096 to 8192 for better stability
-                )
-            except Exception as e:
-                logging.error(f"Error creating audio stream: {e}", exc_info=True)
-                # Try one more time with default device
-                logging.info("Trying with 'default' device specifier as fallback")
+                # Define callback that stores data in our buffer
+                def audio_callback(indata, frames, time, status):
+                    nonlocal total_frames
+                    
+                    # Only log errors other than overflow
+                    if status and status.input_overflow:
+                        # Skip logging for input overflow as it's too verbose
+                        pass
+                    elif status:
+                        logging.warning(f"Audio status in callback: {status}")
+                    
+                    try:
+                        # Get the RMS level to check if we're recording anything
+                        level = np.linalg.norm(indata)
+                        total_frames += frames
+                        
+                        # Log audio level every 10 seconds to verify we're getting input (reduced from every second)
+                        if self.log_audio_levels and total_frames % 100000 < frames:  # Changed from 10000 to 100000 (10 seconds at 48kHz)
+                            logging.info(f"Recording audio level: {level:.4f}, total frames: {total_frames}")
+                        
+                        # Apply gain to make sure the audio is audible
+                        gain = 2.0  # Reduced from 5.0 to 2.0 to prevent over-amplification
+                        amplified_data = indata * gain
+                        
+                        # Clip to valid range for float (-1.0 to 1.0)
+                        amplified_data = np.clip(amplified_data, -1.0, 1.0)
+                        
+                        # Convert to integer format
+                        audio_data = (amplified_data * scale_factor).astype(dtype)
+                        
+                        # Store in buffer
+                        with self.buffer_lock:
+                            self.audio_buffer.append(audio_data.copy())
+                            
+                    except Exception as e:
+                        # Catch any errors in the callback to prevent audio stream from crashing
+                        logging.error(f"Error in audio processing callback: {e}")
+                        # Still increment frames to avoid hitting the logging condition too often
+                        total_frames += frames
+                
+                # Create audio stream with careful error handling
                 try:
+                    logging.info(f"Starting audio stream from device {device} ({device_name})")
                     stream = sd.InputStream(
-                        device='default',
+                        device=device,
                         channels=self.channels,
                         samplerate=self.sample_rate,
                         dtype='float32',
                         callback=audio_callback,
-                        blocksize=8192  # Increased block size for better stability
+                        blocksize=8192  # Increased block size from 4096 to 8192 for better stability
                     )
-                except Exception as e2:
-                    logging.error(f"Fallback also failed: {e2}")
-                    raise  # Re-raise to be caught by outer exception handler
-            
-            # Start the stream
-            stream.start()
-            
-            # Wait for stop event
-            while not self._stop_event.is_set():
-                time.sleep(0.2)
-            
-            # Stop the stream
-            stream.stop()
-            stream.close()
-            
-            # Write the recorded data to the WAV file
+                except Exception as e:
+                    logging.error(f"Error creating audio stream: {e}", exc_info=True)
+                    # Try one more time with default device
+                    logging.info("Trying with 'default' device specifier as fallback")
+                    try:
+                        stream = sd.InputStream(
+                            device='default',
+                            channels=self.channels,
+                            samplerate=self.sample_rate,
+                            dtype='float32',
+                            callback=audio_callback,
+                            blocksize=8192  # Increased block size for better stability
+                        )
+                    except Exception as e2:
+                        logging.error(f"Fallback also failed: {e2}")
+                        raise  # Re-raise to be caught by outer exception handler
+                
+                # Start the stream
+                stream.start()
+                
+                # Wait for stop event
+                while not self._stop_event.is_set():
+                    time.sleep(0.2)
+                
+                # Stop the stream
+                stream.stop()
+                stream.close()
+                
+            except Exception as e:
+                logging.error(f"Error in audio recording: {e}", exc_info=True)
+        
+        # Write the recorded data to the WAV file (common for both shared and direct streams)
+        try:
             with wave.open(filepath, 'wb') as wf:
                 wf.setnchannels(self.channels)
                 wf.setsampwidth(sampwidth)
@@ -396,11 +440,54 @@ class PassRecorder:
             
             if file_size < 1000:
                 logging.warning("Warning: Recorded file is very small, may not contain usable audio")
-                
         except Exception as e:
-            logging.error(f"Error in audio recording: {e}", exc_info=True)
+            logging.error(f"Error writing WAV file: {e}", exc_info=True)
         finally:
             # Clean up
             self.recording = False
             with self.buffer_lock:
-                self.audio_buffer = None 
+                self.audio_buffer = None
+    
+    def _shared_audio_callback(self, audio_int16, audio_float32):
+        """
+        Callback for receiving audio from shared AudioStreamer RX stream
+        
+        Args:
+            audio_int16: numpy array of int16 PCM samples
+            audio_float32: numpy array of float32 samples (-1.0 to 1.0)
+        """
+        if not self.recording:
+            return
+        
+        try:
+            # Use float32 version for processing (more accurate)
+            # Apply gain to make sure the audio is audible
+            gain = 2.0
+            amplified_data = audio_float32 * gain
+            
+            # Clip to valid range for float (-1.0 to 1.0)
+            amplified_data = np.clip(amplified_data, -1.0, 1.0)
+            
+            # Convert to integer format based on bit depth
+            if self.bit_depth == 16:
+                scale_factor = 32767
+                dtype = np.int16
+            elif self.bit_depth == 24:
+                scale_factor = 8388607
+                dtype = np.int32
+            elif self.bit_depth == 32:
+                scale_factor = 2147483647
+                dtype = np.int32
+            else:
+                scale_factor = 32767
+                dtype = np.int16
+            
+            audio_data = (amplified_data * scale_factor).astype(dtype)
+            
+            # Store in buffer
+            with self.buffer_lock:
+                if self.audio_buffer is not None:
+                    self.audio_buffer.append(audio_data.copy())
+                    
+        except Exception as e:
+            logging.error(f"Error in shared audio callback: {e}") 

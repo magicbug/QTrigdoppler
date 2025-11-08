@@ -368,6 +368,30 @@ level = DEBUG
 - No impact on recording quality or timing
 - Works with all rotator control features
 
+### Integration with Remote Audio
+
+**Stream Sharing:**
+- If Remote Audio is enabled and uses the same RX soundcard, Pass Recording automatically shares the audio stream
+- Both features can operate simultaneously without conflicts
+- Single audio input stream is distributed to both Pass Recording and Remote Audio clients
+- No additional configuration needed - sharing happens automatically when devices match
+
+**Configuration Example:**
+```ini
+[passrecording]
+enabled = True
+soundcard = Line In              # Same device as remote_audio rx_soundcard
+
+[remote_audio]
+enabled = True
+rx_soundcard = Line In           # Same device - will be shared automatically
+```
+
+**Benefits:**
+- Efficient resource usage - single audio stream serves multiple purposes
+- No device conflicts - automatic stream sharing prevents access issues
+- Seamless operation - both features work together transparently
+
 ### Multi-Pass Recording
 
 **Consecutive Passes:**

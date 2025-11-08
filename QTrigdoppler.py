@@ -28,6 +28,7 @@ from PySide6.QtCore import *
 from qt_material import apply_stylesheet,list_themes
 from serial.tools import list_ports
 from lib.pass_recorder import PassRecorder
+from lib.audio_streamer import AudioStreamer
 import sounddevice as sd
 from lib import rotator
 from lib.sat_utils import *
@@ -1360,6 +1361,120 @@ class MainWindow(QMainWindow):
         adv_settings_value_layout.addWidget(self.passrec_settings_box, 0,3)
         # --- End Pass Recording Settings UI ---
         
+        # --- Remote Audio Settings UI ---
+        self.remote_audio_settings_box = QGroupBox("Remote Audio")
+        self.remote_audio_settings_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
+        remote_audio_settings_layout = QGridLayout()
+        # Enable checkbox
+        self.remote_audio_enable_checkbox = QCheckBox("Enable Remote Audio")
+        self.remote_audio_enable_checkbox.setChecked(configur.getboolean('remote_audio', 'enabled', fallback=False))
+        remote_audio_settings_layout.addWidget(self.remote_audio_enable_checkbox, 0, 0, 1, 2)
+        # TX Soundcard dropdown (output devices)
+        self.remote_audio_tx_soundcard_label = QLabel("TX Soundcard:")
+        remote_audio_settings_layout.addWidget(self.remote_audio_tx_soundcard_label, 1, 0)
+        self.remote_audio_tx_soundcard_dropdown = QComboBox()
+        self.remote_audio_tx_soundcard_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        devices = sd.query_devices()
+        output_devices = [(i, d) for i, d in enumerate(devices) if d.get('max_output_channels', 0) > 0]
+        for idx, dev in output_devices:
+            hostapi = sd.query_hostapis(dev['hostapi'])['name'] if 'hostapi' in dev else ''
+            friendly_name = dev['name'].replace("[", "").replace("]", "").strip()
+            if "Default" in friendly_name or "default" in friendly_name:
+                label = f"Default Device"
+            else:
+                label = f"{friendly_name}"
+            tech_details = f"{dev['name']} [{hostapi}] (index {idx})"
+            self.remote_audio_tx_soundcard_dropdown.addItem(label, idx)
+            self.remote_audio_tx_soundcard_dropdown.setItemData(self.remote_audio_tx_soundcard_dropdown.count()-1, dev['name'], Qt.UserRole + 1)
+            self.remote_audio_tx_soundcard_dropdown.setItemData(self.remote_audio_tx_soundcard_dropdown.count()-1, tech_details, Qt.ToolTipRole)
+        # Set current TX device
+        current_tx_card = configur.get('remote_audio', 'tx_soundcard', fallback='default')
+        if current_tx_card == 'default':
+            self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(0)
+        else:
+            try:
+                found = False
+                for i in range(self.remote_audio_tx_soundcard_dropdown.count()):
+                    if self.remote_audio_tx_soundcard_dropdown.itemData(i, Qt.UserRole + 1) == current_tx_card:
+                        self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(i)
+                        found = True
+                        break
+                if not found:
+                    try:
+                        index = int(current_tx_card)
+                        if 0 <= index < self.remote_audio_tx_soundcard_dropdown.count():
+                            self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(index)
+                    except:
+                        self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(0)
+            except:
+                self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(0)
+        remote_audio_settings_layout.addWidget(self.remote_audio_tx_soundcard_dropdown, 1, 1)
+        # RX Soundcard dropdown (input devices, optional)
+        self.remote_audio_rx_soundcard_label = QLabel("RX Soundcard (optional):")
+        remote_audio_settings_layout.addWidget(self.remote_audio_rx_soundcard_label, 2, 0)
+        self.remote_audio_rx_soundcard_dropdown = QComboBox()
+        self.remote_audio_rx_soundcard_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        input_devices = [(i, d) for i, d in enumerate(devices) if d.get('max_input_channels', 0) > 0]
+        for idx, dev in input_devices:
+            hostapi = sd.query_hostapis(dev['hostapi'])['name'] if 'hostapi' in dev else ''
+            friendly_name = dev['name'].replace("[", "").replace("]", "").strip()
+            if "Default" in friendly_name or "default" in friendly_name:
+                label = f"Default Device"
+            else:
+                label = f"{friendly_name}"
+            tech_details = f"{dev['name']} [{hostapi}] (index {idx})"
+            self.remote_audio_rx_soundcard_dropdown.addItem(label, idx)
+            self.remote_audio_rx_soundcard_dropdown.setItemData(self.remote_audio_rx_soundcard_dropdown.count()-1, dev['name'], Qt.UserRole + 1)
+            self.remote_audio_rx_soundcard_dropdown.setItemData(self.remote_audio_rx_soundcard_dropdown.count()-1, tech_details, Qt.ToolTipRole)
+        # Set current RX device
+        current_rx_card = configur.get('remote_audio', 'rx_soundcard', fallback='default')
+        if current_rx_card == 'default':
+            self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(0)
+        else:
+            try:
+                found = False
+                for i in range(self.remote_audio_rx_soundcard_dropdown.count()):
+                    if self.remote_audio_rx_soundcard_dropdown.itemData(i, Qt.UserRole + 1) == current_rx_card:
+                        self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(i)
+                        found = True
+                        break
+                if not found:
+                    try:
+                        index = int(current_rx_card)
+                        if 0 <= index < self.remote_audio_rx_soundcard_dropdown.count():
+                            self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(index)
+                    except:
+                        self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(0)
+            except:
+                self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(0)
+        remote_audio_settings_layout.addWidget(self.remote_audio_rx_soundcard_dropdown, 2, 1)
+        # Sample rate
+        self.remote_audio_samplerate_label = QLabel("Sample Rate:")
+        remote_audio_settings_layout.addWidget(self.remote_audio_samplerate_label, 3, 0)
+        self.remote_audio_samplerate_spin = QSpinBox()
+        self.remote_audio_samplerate_spin.setRange(8000, 192000)
+        self.remote_audio_samplerate_spin.setValue(configur.getint('remote_audio', 'sample_rate', fallback=44100))
+        remote_audio_settings_layout.addWidget(self.remote_audio_samplerate_spin, 3, 1)
+        # Channels
+        self.remote_audio_channels_label = QLabel("Channels:")
+        remote_audio_settings_layout.addWidget(self.remote_audio_channels_label, 4, 0)
+        self.remote_audio_channels_spin = QSpinBox()
+        self.remote_audio_channels_spin.setRange(1, 2)
+        self.remote_audio_channels_spin.setValue(configur.getint('remote_audio', 'channels', fallback=1))
+        remote_audio_settings_layout.addWidget(self.remote_audio_channels_spin, 4, 1)
+        # Server test button and status
+        self.remote_audio_test_button = QPushButton("Test Server Connection")
+        self.remote_audio_test_button.clicked.connect(self.test_remote_audio_server)
+        remote_audio_settings_layout.addWidget(self.remote_audio_test_button, 5, 0, 1, 2)
+        # Status label
+        self.remote_audio_status_label = QLabel("Server Status: Not tested")
+        self.remote_audio_status_label.setWordWrap(True)
+        self.remote_audio_status_label.setStyleSheet("QLabel{color: gray; font-size: 9pt;}")
+        remote_audio_settings_layout.addWidget(self.remote_audio_status_label, 6, 0, 1, 2)
+        self.remote_audio_settings_box.setLayout(remote_audio_settings_layout)
+        adv_settings_value_layout.addWidget(self.remote_audio_settings_box, 0, 4)
+        # --- End Remote Audio Settings UI ---
+        
         ###  UI Layout / Tab Widget
         self.tab_widget = QTabWidget()
         self.tab_overview = QWidget()
@@ -1391,6 +1506,13 @@ class MainWindow(QMainWindow):
         self._last_cloudlog_F = None
         self._last_cloudlog_I = None
         self.pass_recorder = PassRecorder(configur)
+        # Initialize audio streamer if remote audio is enabled
+        if configur.has_section('remote_audio') and configur.getboolean('remote_audio', 'enabled', fallback=False):
+            self.audio_streamer = AudioStreamer(configur, self.pass_recorder)
+            # Update pass_recorder with audio_streamer reference for stream sharing
+            self.pass_recorder.audio_streamer = self.audio_streamer
+        else:
+            self.audio_streamer = None
         self.gps_enable_checkbox.toggled.connect(self.toggle_gps_qth)
         self.gps_reader = None
         self.gps_last_port = None
@@ -1556,6 +1678,41 @@ class MainWindow(QMainWindow):
         configur['passrecording']['channels'] = str(self.passrec_channels_spin.value())
         configur['passrecording']['bit_depth'] = str(self.passrec_bitdepth_spin.value())
 
+        # Remote Audio settings
+        if not configur.has_section('remote_audio'):
+            configur.add_section('remote_audio')
+        configur['remote_audio']['enabled'] = str(self.remote_audio_enable_checkbox.isChecked())
+        # Store TX device name
+        selected_tx_idx = self.remote_audio_tx_soundcard_dropdown.currentIndex()
+        if selected_tx_idx >= 0:
+            tx_device_name = self.remote_audio_tx_soundcard_dropdown.itemData(selected_tx_idx, Qt.UserRole + 1)
+            if tx_device_name:
+                configur['remote_audio']['tx_soundcard'] = tx_device_name
+            else:
+                tx_device_idx = self.remote_audio_tx_soundcard_dropdown.itemData(selected_tx_idx)
+                if tx_device_idx is not None:
+                    configur['remote_audio']['tx_soundcard'] = str(tx_device_idx)
+                else:
+                    configur['remote_audio']['tx_soundcard'] = 'default'
+        else:
+            configur['remote_audio']['tx_soundcard'] = 'default'
+        # Store RX device name
+        selected_rx_idx = self.remote_audio_rx_soundcard_dropdown.currentIndex()
+        if selected_rx_idx >= 0:
+            rx_device_name = self.remote_audio_rx_soundcard_dropdown.itemData(selected_rx_idx, Qt.UserRole + 1)
+            if rx_device_name:
+                configur['remote_audio']['rx_soundcard'] = rx_device_name
+            else:
+                rx_device_idx = self.remote_audio_rx_soundcard_dropdown.itemData(selected_rx_idx)
+                if rx_device_idx is not None:
+                    configur['remote_audio']['rx_soundcard'] = str(rx_device_idx)
+                else:
+                    configur['remote_audio']['rx_soundcard'] = 'default'
+        else:
+            configur['remote_audio']['rx_soundcard'] = 'default'
+        configur['remote_audio']['sample_rate'] = str(self.remote_audio_samplerate_spin.value())
+        configur['remote_audio']['channels'] = str(self.remote_audio_channels_spin.value())
+
         # GPS QTH settings
         configur['qth']['use_gps'] = str(self.gps_enable_checkbox.isChecked())
         configur['qth']['gps_port'] = self.gps_serialport_val.currentText()
@@ -1567,6 +1724,40 @@ class MainWindow(QMainWindow):
         with open('config.ini', 'w') as configfile:
             configur.write(configfile)
         self.pass_recorder.update_config(configur)
+        # Update audio streamer config if it exists, or initialize if newly enabled
+        if configur.has_section('remote_audio') and configur.getboolean('remote_audio', 'enabled', fallback=False):
+            if self.audio_streamer:
+                self.audio_streamer.update_config(configur)
+                # Ensure pass_recorder has reference to audio_streamer for stream sharing
+                self.pass_recorder.audio_streamer = self.audio_streamer
+                # Ensure RX streaming is active if remote audio is enabled
+                if REMOTE_ENABLED and self.audio_streamer.enabled and not self.audio_streamer.is_rx_active():
+                    from lib import remote_client
+                    if remote_client.remote_client.connected:
+                        self.audio_streamer.start_rx_streaming(rx_callback=remote_client.remote_client.send_rx_audio_data)
+            else:
+                # Initialize audio streamer if it was just enabled
+                self.audio_streamer = AudioStreamer(configur, self.pass_recorder)
+                # Update pass_recorder with audio_streamer reference for stream sharing
+                self.pass_recorder.audio_streamer = self.audio_streamer
+                # Connect to remote_client if available
+                if REMOTE_ENABLED and hasattr(self, 'remote_client'):
+                    from lib import remote_client
+                    remote_client.remote_client.audio_streamer = self.audio_streamer
+                    # Start RX streaming automatically
+                    if remote_client.remote_client.connected:
+                        self.audio_streamer.start_rx_streaming(rx_callback=remote_client.remote_client.send_rx_audio_data)
+        else:
+            # Stop and cleanup if disabled
+            if self.audio_streamer:
+                self.audio_streamer.stop_streaming()
+                self.audio_streamer.stop_rx_streaming()
+                self.audio_streamer = None
+                # Clear pass_recorder reference
+                self.pass_recorder.audio_streamer = None
+                if REMOTE_ENABLED:
+                    from lib import remote_client
+                    remote_client.remote_client.audio_streamer = None
 
 
     def change_theme(self, theme_name):
@@ -3480,6 +3671,195 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             logging.error(f"Error refreshing status displays: {e}")
+
+    def test_remote_audio_server(self):
+        """Test if the Node.js remote server supports remote audio functionality"""
+        # Get server URL from config
+        server_url = configur.get('remote_server', 'url', fallback='http://localhost:5001')
+        
+        # Update status label to show testing
+        self.remote_audio_status_label.setText("Testing server connection...")
+        self.remote_audio_status_label.setStyleSheet("QLabel{color: blue; font-size: 9pt;}")
+        self.remote_audio_test_button.setEnabled(False)
+        
+        # Run test in a worker thread to avoid blocking UI
+        def test_worker(**kwargs):
+            try:
+                from urllib.parse import urlparse
+                
+                # Parse the server URL
+                parsed = urlparse(server_url)
+                base_url = f"{parsed.scheme}://{parsed.netloc}"
+                
+                # Test 1: Check if server is reachable
+                try:
+                    status_response = requests.get(f"{base_url}/status", timeout=5)
+                    if status_response.status_code != 200:
+                        return {
+                            'success': False,
+                            'message': f"Server responded with status code {status_response.status_code}",
+                            'details': []
+                        }
+                except requests.exceptions.ConnectionError:
+                    return {
+                        'success': False,
+                        'message': f"Could not connect to server at {base_url}",
+                        'details': ["• Check if the Node.js server is running", 
+                                   "• Verify the server URL in Remote Server settings",
+                                   "• Check firewall/network settings"]
+                    }
+                except requests.exceptions.Timeout:
+                    return {
+                        'success': False,
+                        'message': f"Connection timeout to server at {base_url}",
+                        'details': ["• Server may be overloaded or unreachable",
+                                   "• Check network connectivity"]
+                    }
+                except Exception as e:
+                    return {
+                        'success': False,
+                        'message': f"Error connecting to server: {str(e)}",
+                        'details': []
+                    }
+                
+                # Test 2: Check capabilities endpoint
+                try:
+                    capabilities_response = requests.get(f"{base_url}/capabilities", timeout=5)
+                    if capabilities_response.status_code == 404:
+                        return {
+                            'success': False,
+                            'message': f"Server does not support Remote Audio capabilities endpoint",
+                            'details': ["• The /capabilities endpoint is not available on this server",
+                                       "• This server version does not support Remote Audio features",
+                                       "• Update the Node.js server (remote_server.js) to the latest version",
+                                       "• The server needs the /capabilities endpoint added"]
+                        }
+                    elif capabilities_response.status_code != 200:
+                        return {
+                            'success': False,
+                            'message': f"Server returned error for capabilities endpoint (status {capabilities_response.status_code})",
+                            'details': ["• Server may be running an older version",
+                                       "• Update the Node.js server to latest version"]
+                        }
+                    
+                    capabilities = capabilities_response.json()
+                    
+                    # Check if remote audio is supported
+                    details = []
+                    if 'features' in capabilities and 'remote_audio' in capabilities['features']:
+                        audio_features = capabilities['features']['remote_audio']
+                        if audio_features.get('enabled', False):
+                            details.append("✓ Remote Audio: Enabled")
+                            if audio_features.get('tx_audio', False):
+                                details.append("✓ TX Audio (Browser → Radio): Supported")
+                            else:
+                                details.append("✗ TX Audio: Not supported")
+                            if audio_features.get('rx_audio', False):
+                                details.append("✓ RX Audio (Radio → Browser): Supported")
+                            else:
+                                details.append("✗ RX Audio: Not supported")
+                            if audio_features.get('two_way', False):
+                                details.append("✓ Two-way Audio: Supported")
+                            else:
+                                details.append("✗ Two-way Audio: Not supported")
+                        else:
+                            return {
+                                'success': False,
+                                'message': "Server does not support Remote Audio feature",
+                                'details': ["• Remote audio is disabled on the server",
+                                           "• Check server configuration"]
+                            }
+                    else:
+                        return {
+                            'success': False,
+                            'message': "Server does not report Remote Audio capabilities",
+                            'details': ["• Server may be running an older version",
+                                       "• Update the Node.js server to latest version"]
+                        }
+                    
+                    # Check audio format compatibility
+                    if 'audio_formats' in capabilities:
+                        audio_formats = capabilities['audio_formats']
+                        configured_rate = self.remote_audio_samplerate_spin.value()
+                        configured_channels = self.remote_audio_channels_spin.value()
+                        
+                        if 'sample_rate' in audio_formats:
+                            supported_rates = audio_formats['sample_rate']
+                            if configured_rate in supported_rates:
+                                details.append(f"✓ Sample Rate {configured_rate} Hz: Supported")
+                            else:
+                                details.append(f"⚠ Sample Rate {configured_rate} Hz: Not in supported list {supported_rates}")
+                        
+                        if 'channels' in audio_formats:
+                            supported_channels = audio_formats['channels']
+                            if configured_channels in supported_channels:
+                                details.append(f"✓ Channels ({configured_channels}): Supported")
+                            else:
+                                details.append(f"⚠ Channels ({configured_channels}): Not in supported list {supported_channels}")
+                    
+                    # Check server version
+                    version = capabilities.get('version', 'Unknown')
+                    details.insert(0, f"Server Version: {version}")
+                    
+                    return {
+                        'success': True,
+                        'message': f"Server supports Remote Audio functionality",
+                        'details': details
+                    }
+                    
+                except requests.exceptions.Timeout:
+                    return {
+                        'success': False,
+                        'message': f"Timeout checking server capabilities",
+                        'details': ["• Server may be overloaded"]
+                    }
+                except ValueError as e:
+                    return {
+                        'success': False,
+                        'message': f"Invalid response from server: {str(e)}",
+                        'details': ["• Server may be running an incompatible version"]
+                    }
+                except Exception as e:
+                    return {
+                        'success': False,
+                        'message': f"Error checking capabilities: {str(e)}",
+                        'details': []
+                    }
+                    
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': f"Unexpected error: {str(e)}",
+                    'details': []
+                }
+        
+        def on_test_complete(result):
+            """Handle test completion and update UI"""
+            self.remote_audio_test_button.setEnabled(True)
+            
+            if result['success']:
+                self.remote_audio_status_label.setStyleSheet("QLabel{color: green; font-size: 9pt;}")
+                status_text = f"✓ {result['message']}\n"
+                if result['details']:
+                    status_text += "\n".join(result['details'])
+            else:
+                self.remote_audio_status_label.setStyleSheet("QLabel{color: red; font-size: 9pt;}")
+                status_text = f"✗ {result['message']}\n"
+                if result['details']:
+                    status_text += "\n".join(result['details'])
+            
+            self.remote_audio_status_label.setText(status_text)
+            logging.info(f"Remote audio server test completed: {result['message']}")
+        
+        # Run test in background thread
+        test_worker_obj = Worker(test_worker)
+        test_worker_obj.signals.result.connect(on_test_complete)
+        test_worker_obj.signals.error.connect(lambda error: on_test_complete({
+            'success': False,
+            'message': f"Test error: {error[1] if len(error) > 1 else 'Unknown error'}",
+            'details': []
+        }))
+        self.threadpool.start(test_worker_obj)
 
 class WorkerSignals(QObject):
     finished = Signal()
