@@ -211,6 +211,10 @@ class PassRecorder:
         if self.recording or not self.tracking_active:
             return
         
+        # Check for conflict with remote audio RX if it's using the same device
+        # Note: This requires checking the main window's audio_streamer if available
+        # For now, we'll attempt to start and let the audio system handle conflicts
+        
         # Initialize the buffer
         with self.buffer_lock:
             self.audio_buffer = []

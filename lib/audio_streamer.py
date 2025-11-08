@@ -413,6 +413,22 @@ class AudioStreamer:
         if self.rx_active or not self.enabled:
             return False
         
+        # Check for conflict with pass recorder if it's using the same device
+        if self.pass_recorder and self.pass_recorder.enabled:
+            pass_recorder_device = self.pass_recorder.soundcard
+            if pass_recorder_device != 'default' and self.rx_soundcard != 'default':
+                # Check if they're using the same device
+                if pass_recorder_device == self.rx_soundcard:
+                    logging.warning(f"Conflict detected: Pass recorder and Remote Audio RX are both configured to use '{pass_recorder_device}'. "
+                                  f"Only one can use the device at a time. Remote Audio RX will not start while pass recorder is active.")
+                    return False
+            elif pass_recorder_device == 'default' and self.rx_soundcard == 'default':
+                # Both using default - check if pass recorder is currently recording
+                if self.pass_recorder.is_recording():
+                    logging.warning("Conflict detected: Pass recorder is recording on default device and Remote Audio RX also wants default device. "
+                                  "Remote Audio RX will not start while pass recorder is recording.")
+                    return False
+        
         device, device_name = self.find_rx_device()
         if device is None:
             logging.warning("Cannot start RX audio streaming: no RX device available")
