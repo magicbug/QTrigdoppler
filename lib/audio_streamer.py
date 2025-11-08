@@ -37,7 +37,8 @@ class AudioStreamer:
         self.rx_active = False
         self.device_info = None
         self.rx_device_info = None
-        self.rx_callback = None  # Callback function for RX audio data
+        self.rx_callback = None  # Primary callback function for RX audio data (remote audio)
+        self.rx_callbacks = []  # List of additional callbacks for RX audio (e.g., pass recorder)
         
         # Check audio devices at startup
         try:
@@ -413,22 +414,6 @@ class AudioStreamer:
         if self.rx_active or not self.enabled:
             return False
         
-        # Check for conflict with pass recorder if it's using the same device
-        if self.pass_recorder and self.pass_recorder.enabled:
-            pass_recorder_device = self.pass_recorder.soundcard
-            if pass_recorder_device != 'default' and self.rx_soundcard != 'default':
-                # Check if they're using the same device
-                if pass_recorder_device == self.rx_soundcard:
-                    logging.warning(f"Conflict detected: Pass recorder and Remote Audio RX are both configured to use '{pass_recorder_device}'. "
-                                  f"Only one can use the device at a time. Remote Audio RX will not start while pass recorder is active.")
-                    return False
-            elif pass_recorder_device == 'default' and self.rx_soundcard == 'default':
-                # Both using default - check if pass recorder is currently recording
-                if self.pass_recorder.is_recording():
-                    logging.warning("Conflict detected: Pass recorder is recording on default device and Remote Audio RX also wants default device. "
-                                  "Remote Audio RX will not start while pass recorder is recording.")
-                    return False
-        
         device, device_name = self.find_rx_device()
         if device is None:
             logging.warning("Cannot start RX audio streaming: no RX device available")
@@ -439,7 +424,7 @@ class AudioStreamer:
         
         try:
             def rx_audio_callback(indata, frames, time_info, status):
-                """Callback for RX audio input stream"""
+                """Callback for RX audio input stream - distributes to all subscribers"""
                 if status:
                     if status.input_overflow:
                         logging.debug("RX audio input overflow")
@@ -459,12 +444,20 @@ class AudioStreamer:
                     if len(audio_int16.shape) > 1:
                         audio_int16 = audio_int16.flatten()
                     
-                    # Call the callback if registered
+                    # Call primary callback (remote audio RX)
                     if self.rx_callback:
                         try:
                             self.rx_callback(audio_int16)
                         except Exception as e:
-                            logging.error(f"Error in RX audio callback: {e}")
+                            logging.error(f"Error in primary RX audio callback: {e}")
+                    
+                    # Call additional callbacks (e.g., pass recorder)
+                    for callback in self.rx_callbacks:
+                        try:
+                            # Pass both int16 PCM and float32 versions for flexibility
+                            callback(audio_int16.copy(), indata.copy())
+                        except Exception as e:
+                            logging.error(f"Error in RX audio subscriber callback: {e}")
                             
                 except Exception as e:
                     logging.error(f"Error processing RX audio: {e}")
@@ -487,6 +480,25 @@ class AudioStreamer:
             self.rx_active = False
             return False
     
+    def add_rx_subscriber(self, callback):
+        """
+        Add a subscriber callback to receive RX audio data
+        
+        Args:
+            callback: Function that receives (audio_int16, audio_float32) tuples
+                     - audio_int16: numpy array of int16 PCM samples
+                     - audio_float32: numpy array of float32 samples (-1.0 to 1.0)
+        """
+        if callback not in self.rx_callbacks:
+            self.rx_callbacks.append(callback)
+            logging.info(f"Added RX audio subscriber (total: {len(self.rx_callbacks)})")
+    
+    def remove_rx_subscriber(self, callback):
+        """Remove a subscriber callback"""
+        if callback in self.rx_callbacks:
+            self.rx_callbacks.remove(callback)
+            logging.info(f"Removed RX audio subscriber (remaining: {len(self.rx_callbacks)})")
+    
     def stop_rx_streaming(self):
         """Stop RX audio streaming"""
         if not self.rx_active:
@@ -494,6 +506,7 @@ class AudioStreamer:
         
         self.rx_active = False
         self.rx_callback = None
+        self.rx_callbacks.clear()  # Clear all subscribers
         
         if self.rx_stream:
             try:
@@ -505,6 +518,36 @@ class AudioStreamer:
                 self.rx_stream = None
         
         logging.info("RX audio streaming stopped")
+    
+    def get_rx_device_name(self):
+        """Get the name of the currently configured RX device"""
+        if self.rx_device_info:
+            return self.rx_device_info.get('name', 'unknown')
+        return None
+    
+    def is_using_same_device(self, device_name):
+        """
+        Check if this streamer is using the same device as the given device name
+        
+        Args:
+            device_name: Device name or 'default' to check against
+            
+        Returns:
+            True if using the same device, False otherwise
+        """
+        if not self.rx_active:
+            return False
+        
+        # If both are 'default', they're the same
+        if device_name == 'default' and self.rx_soundcard == 'default':
+            return True
+        
+        # Check if device names match
+        current_device_name = self.get_rx_device_name()
+        if current_device_name and device_name:
+            return current_device_name == device_name or device_name in current_device_name or current_device_name in device_name
+        
+        return False
     
     def is_rx_active(self):
         """Check if RX streaming is active"""

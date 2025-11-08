@@ -1500,6 +1500,8 @@ class MainWindow(QMainWindow):
         # Initialize audio streamer if remote audio is enabled
         if configur.has_section('remote_audio') and configur.getboolean('remote_audio', 'enabled', fallback=False):
             self.audio_streamer = AudioStreamer(configur, self.pass_recorder)
+            # Update pass_recorder with audio_streamer reference for stream sharing
+            self.pass_recorder.audio_streamer = self.audio_streamer
         else:
             self.audio_streamer = None
         self.gps_enable_checkbox.toggled.connect(self.toggle_gps_qth)
@@ -1717,6 +1719,8 @@ class MainWindow(QMainWindow):
         if configur.has_section('remote_audio') and configur.getboolean('remote_audio', 'enabled', fallback=False):
             if self.audio_streamer:
                 self.audio_streamer.update_config(configur)
+                # Ensure pass_recorder has reference to audio_streamer for stream sharing
+                self.pass_recorder.audio_streamer = self.audio_streamer
                 # Ensure RX streaming is active if remote audio is enabled
                 if REMOTE_ENABLED and self.audio_streamer.enabled and not self.audio_streamer.is_rx_active():
                     from lib import remote_client
@@ -1725,6 +1729,8 @@ class MainWindow(QMainWindow):
             else:
                 # Initialize audio streamer if it was just enabled
                 self.audio_streamer = AudioStreamer(configur, self.pass_recorder)
+                # Update pass_recorder with audio_streamer reference for stream sharing
+                self.pass_recorder.audio_streamer = self.audio_streamer
                 # Connect to remote_client if available
                 if REMOTE_ENABLED and hasattr(self, 'remote_client'):
                     from lib import remote_client
@@ -1738,6 +1744,8 @@ class MainWindow(QMainWindow):
                 self.audio_streamer.stop_streaming()
                 self.audio_streamer.stop_rx_streaming()
                 self.audio_streamer = None
+                # Clear pass_recorder reference
+                self.pass_recorder.audio_streamer = None
                 if REMOTE_ENABLED:
                     from lib import remote_client
                     remote_client.remote_client.audio_streamer = None
