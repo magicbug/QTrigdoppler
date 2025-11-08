@@ -12,6 +12,7 @@ QTrigdoppler is a powerful satellite tracking application that automates frequen
 - **Transponder Management**: Smart selection of satellite transponders
 - **Rotator Control**: Automated antenna pointing
 - **Remote Operation**: Web-based control from anywhere
+- **Remote Audio Transmission**: Two-way audio transmission via web browser
 - **Pass Recording**: Automatic audio recording of satellite contacts
 - **GPS Integration**: Automatic location determination
 - **Cloudlog Integration**: Automatic logging to your online logbook
@@ -202,6 +203,7 @@ Control how sensitive frequency tracking is:
 ### Feature Enablement
 - **GPS Integration**: Automatic location determination
 - **Remote Access**: Web-based control interface
+- **Remote Audio**: Two-way audio transmission via browser
 - **Pass Recording**: Automatic audio recording
 - **Cloudlog Integration**: Automatic contact logging
 
@@ -263,7 +265,7 @@ Once you have the basics working, explore these guides for enhanced functionalit
 - **[Radio Configuration](radio-configuration.md)** - Detailed IC-910H setup and advanced features
 - **[Frequency Control](frequency-control.md)** - Advanced doppler correction and manual control
 - **[Rotator Setup](rotator-setup.md)** - Automated antenna pointing
-- **[Remote Operation](remote-operation.md)** - Control your station from anywhere
+- **[Remote Operation](remote-operation.md)** - Control your station from anywhere, including remote audio transmission
 - **[Pass Recording](pass-recording.md)** - Automatic audio recording setup
 - **[GPS Integration](gps-integration.md)** - Automatic location determination
 - **[Cloudlog Integration](cloudlog-integration.md)** - Automatic logging to online logbooks
@@ -274,9 +276,10 @@ As you become comfortable with basic operation, consider exploring:
 
 1. **Rotator Control**: Automate antenna pointing for improved signal strength
 2. **Remote Operation**: Access your station from anywhere via web interface
-3. **Pass Recording**: Automatically record interesting passes for later analysis
-4. **GPS Integration**: Perfect for portable/mobile operations
-5. **Multi-Transponder Operation**: Advanced strategies for busy satellites
+3. **Remote Audio**: Transmit and receive audio remotely through your browser
+4. **Pass Recording**: Automatically record interesting passes for later analysis
+5. **GPS Integration**: Perfect for portable/mobile operations
+6. **Multi-Transponder Operation**: Advanced strategies for busy satellites
 
 ### Best Practices
 - **Regular Updates**: Keep TLE and frequency data current
