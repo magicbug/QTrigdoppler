@@ -181,6 +181,21 @@
             <button id="startStopAudioBtn" onclick="toggleAudioTransmission()" style="width: 100%; padding: 15px; margin-top: 10px; font-size: 18px; border-radius: 5px; background-color: #2196F3; color: white; border: none; cursor: pointer;">
                 Start Audio TX
             </button>
+            
+            <hr style="margin: 20px 0; border: 1px solid #ddd;">
+            
+            <h4>RX Audio (Receive)</h4>
+            <label for="rxVolume">RX Volume:</label>
+            <input type="range" id="rxVolume" min="0" max="100" value="100" oninput="setRxVolume(this.value)" style="width: 100%; margin-bottom: 10px;">
+            <div style="text-align: center; margin-bottom: 10px;">
+                <span id="rxVolumeDisplay">100%</span>
+            </div>
+            <button id="rxMuteBtn" onclick="toggleRxMute()" style="width: 100%; padding: 15px; font-size: 18px; font-weight: bold; border-radius: 5px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
+                MUTE RX
+            </button>
+            <div id="rx-audio-status" style="margin: 10px 0; padding: 10px; background-color: #e3f2fd; border-radius: 5px; text-align: center;">
+                RX Audio: Ready
+            </div>
         </div>
     </div>
     
@@ -218,6 +233,15 @@
         var isAudioTransmitting = false;
         var isMuted = false;
         var audioChunkSize = 4096; // Samples per chunk
+        
+        // RX audio playback variables
+        var rxAudioContext = null;
+        var rxAudioBuffer = null;
+        var rxAudioSource = null;
+        var rxAudioQueue = [];
+        var rxAudioPlaying = false;
+        var rxVolume = 1.0;
+        var rxMuted = false;
 
         // Display the current server
         serverDisplay.textContent = "Server: " + serverUrl;
@@ -269,6 +293,20 @@
                     // Clean up audio transmission on disconnect
                     if (isAudioTransmitting) {
                         stopAudioTransmission();
+                    }
+                    
+                    // Clean up RX audio on disconnect
+                    if (rxAudioContext) {
+                        rxAudioContext.close().catch(function(err) {
+                            logDebug('Error closing RX audio context: ' + err);
+                        });
+                        rxAudioContext = null;
+                    }
+                    
+                    var rxStatus = document.getElementById('rx-audio-status');
+                    if (rxStatus) {
+                        rxStatus.textContent = 'RX Audio: Disconnected';
+                        rxStatus.style.backgroundColor = '#ffcdd2';
                     }
                     
                     // Disable buttons on disconnect
@@ -415,6 +453,18 @@
                     updateAudioStatus('Error: ' + data.error);
                     if (isAudioTransmitting) {
                         stopAudioTransmission();
+                    }
+                });
+                
+                // RX audio data handler (receive audio from radio)
+                socket.on('rx_audio_data', function(data) {
+                    // data is binary PCM 16-bit signed integer
+                    playRxAudio(data);
+                    // Update RX audio status
+                    var rxStatus = document.getElementById('rx-audio-status');
+                    if (rxStatus) {
+                        rxStatus.textContent = 'RX Audio: Receiving';
+                        rxStatus.style.backgroundColor = '#c8e6c9';
                     }
                 });
             } catch (e) {
@@ -1067,6 +1117,81 @@
         function updateAudioStatus(message) {
             var audioStatus = document.getElementById('audio-status');
             audioStatus.textContent = message;
+        }
+        
+        // RX Audio Playback Functions
+        function playRxAudio(audioData) {
+            if (!rxAudioContext) {
+                // Initialize RX audio context
+                rxAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 44100
+                });
+            }
+            
+            // Resume audio context if suspended (required by some browsers)
+            if (rxAudioContext.state === 'suspended') {
+                rxAudioContext.resume();
+            }
+            
+            try {
+                // Convert binary PCM data to Float32Array
+                var int16Array = new Int16Array(audioData);
+                var float32Array = new Float32Array(int16Array.length);
+                
+                // Convert int16 to float32 (-1.0 to 1.0)
+                for (var i = 0; i < int16Array.length; i++) {
+                    float32Array[i] = int16Array[i] / 32768.0;
+                }
+                
+                // Create audio buffer
+                var buffer = rxAudioContext.createBuffer(1, float32Array.length, 44100);
+                buffer.getChannelData(0).set(float32Array);
+                
+                // Create source and play
+                var source = rxAudioContext.createBufferSource();
+                var gainNode = rxAudioContext.createGain();
+                
+                source.buffer = buffer;
+                source.connect(gainNode);
+                gainNode.connect(rxAudioContext.destination);
+                
+                // Apply volume and mute
+                gainNode.gain.value = rxMuted ? 0 : rxVolume;
+                
+                // Play the buffer immediately
+                var currentTime = rxAudioContext.currentTime;
+                source.start(currentTime);
+                
+                // Schedule next chunk to play immediately after this one ends
+                var duration = buffer.duration;
+                
+                // Clean up when finished
+                source.onended = function() {
+                    // Source will be garbage collected
+                };
+                
+            } catch (err) {
+                logDebug('Error playing RX audio: ' + err);
+            }
+        }
+        
+        function toggleRxMute() {
+            rxMuted = !rxMuted;
+            var rxMuteBtn = document.getElementById('rxMuteBtn');
+            if (rxMuteBtn) {
+                rxMuteBtn.textContent = rxMuted ? 'UNMUTE RX' : 'MUTE RX';
+                rxMuteBtn.style.backgroundColor = rxMuted ? '#f44336' : '#4CAF50';
+            }
+            logDebug('RX audio ' + (rxMuted ? 'muted' : 'unmuted'));
+        }
+        
+        function setRxVolume(value) {
+            rxVolume = value / 100.0;
+            var rxVolumeDisplay = document.getElementById('rxVolumeDisplay');
+            if (rxVolumeDisplay) {
+                rxVolumeDisplay.textContent = value + '%';
+            }
+            logDebug('RX volume set to: ' + value + '%');
         }
         
         // Enumerate audio devices on page load

@@ -55,6 +55,13 @@ class RemoteClient:
         # Set audio_streamer reference if available
         if hasattr(window, 'audio_streamer'):
             self.audio_streamer = window.audio_streamer
+            # Start RX streaming if remote audio is enabled
+            if self.audio_streamer and self.audio_streamer.enabled:
+                try:
+                    self.audio_streamer.start_rx_streaming(rx_callback=self.send_rx_audio_data)
+                    logging.info("RX audio streaming started automatically")
+                except Exception as e:
+                    logging.warning(f"Failed to start RX audio streaming: {e}")
         # Send initial data if already connected
         if self.connected:
             self.send_satellite_list()
@@ -456,6 +463,9 @@ class RemoteClient:
         
         try:
             if self.audio_streamer.start_streaming():
+                # Ensure RX streaming is also active (start if not already)
+                if self.audio_streamer.enabled and not self.audio_streamer.is_rx_active():
+                    self.audio_streamer.start_rx_streaming(rx_callback=self.send_rx_audio_data)
                 self.send_audio_tx_status(active=True, muted=self.audio_streamer.is_muted())
             else:
                 self.send_audio_error("Failed to start audio streaming")
@@ -470,6 +480,9 @@ class RemoteClient:
         
         try:
             self.audio_streamer.stop_streaming()
+            # Note: We keep RX streaming active even when TX stops
+            # This allows users to continue listening to the radio
+            # RX streaming will stop when remote audio is disabled
             self.send_audio_tx_status(active=False, muted=False)
         except Exception as e:
             logging.error(f"Error stopping audio TX: {e}")
@@ -548,6 +561,21 @@ class RemoteClient:
                 })
             except Exception as e:
                 logging.error(f"Error sending audio error: {e}")
+    
+    def send_rx_audio_data(self, audio_data):
+        """Send RX audio data to server"""
+        if self.connected:
+            try:
+                # Convert numpy array to bytes (PCM 16-bit signed integer)
+                if hasattr(audio_data, 'tobytes'):
+                    audio_bytes = audio_data.tobytes()
+                else:
+                    audio_bytes = bytes(audio_data)
+                
+                # Send to server
+                self.sio.emit('rx_audio_data', audio_bytes)
+            except Exception as e:
+                logging.error(f"Error sending RX audio data: {e}")
 
 # Create a singleton instance
 remote_client = RemoteClient()

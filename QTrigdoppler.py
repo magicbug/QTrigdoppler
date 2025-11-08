@@ -1717,6 +1717,11 @@ class MainWindow(QMainWindow):
         if configur.has_section('remote_audio') and configur.getboolean('remote_audio', 'enabled', fallback=False):
             if self.audio_streamer:
                 self.audio_streamer.update_config(configur)
+                # Ensure RX streaming is active if remote audio is enabled
+                if REMOTE_ENABLED and self.audio_streamer.enabled and not self.audio_streamer.is_rx_active():
+                    from lib import remote_client
+                    if remote_client.remote_client.connected:
+                        self.audio_streamer.start_rx_streaming(rx_callback=remote_client.remote_client.send_rx_audio_data)
             else:
                 # Initialize audio streamer if it was just enabled
                 self.audio_streamer = AudioStreamer(configur, self.pass_recorder)
@@ -1724,10 +1729,14 @@ class MainWindow(QMainWindow):
                 if REMOTE_ENABLED and hasattr(self, 'remote_client'):
                     from lib import remote_client
                     remote_client.remote_client.audio_streamer = self.audio_streamer
+                    # Start RX streaming automatically
+                    if remote_client.remote_client.connected:
+                        self.audio_streamer.start_rx_streaming(rx_callback=remote_client.remote_client.send_rx_audio_data)
         else:
             # Stop and cleanup if disabled
             if self.audio_streamer:
                 self.audio_streamer.stop_streaming()
+                self.audio_streamer.stop_rx_streaming()
                 self.audio_streamer = None
                 if REMOTE_ENABLED:
                     from lib import remote_client

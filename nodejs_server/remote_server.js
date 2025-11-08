@@ -298,6 +298,13 @@ io.on('connection', (socket) => {
         // Also broadcast to all clients
         io.emit('audio_error', data);
     });
+    
+    // RX audio data from QTrigdoppler client (receive audio from radio)
+    socket.on('rx_audio_data', (data) => {
+        // Broadcast RX audio to all connected browser clients
+        // This allows multiple clients to listen to the radio simultaneously
+        io.emit('rx_audio_data', data);
+    });
 });
 
 // Update application state and broadcast to all clients
