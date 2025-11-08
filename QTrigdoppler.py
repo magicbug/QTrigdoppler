@@ -3683,7 +3683,7 @@ class MainWindow(QMainWindow):
         self.remote_audio_test_button.setEnabled(False)
         
         # Run test in a worker thread to avoid blocking UI
-        def test_worker():
+        def test_worker(**kwargs):
             try:
                 from urllib.parse import urlparse
                 
