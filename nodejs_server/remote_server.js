@@ -76,6 +76,30 @@ app.get('/status', (req, res) => {
     });
 });
 
+// Capabilities endpoint - returns what features the server supports
+app.get('/capabilities', (req, res) => {
+    res.json({
+        version: '1.0.0',
+        features: {
+            remote_audio: {
+                enabled: true,
+                tx_audio: true,  // Browser to radio transmission
+                rx_audio: true,  // Radio to browser reception
+                two_way: true    // Full bidirectional audio
+            },
+            satellite_tracking: true,
+            rotator_control: true,
+            frequency_control: true
+        },
+        audio_formats: {
+            sample_rate: [8000, 16000, 22050, 44100, 48000],
+            channels: [1, 2],
+            bit_depth: 16,
+            format: 'PCM'
+        }
+    });
+});
+
 // Socket.IO connection handling
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id} (Total: ${connectedClients.size + 1})`);

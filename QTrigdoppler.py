@@ -1462,6 +1462,15 @@ class MainWindow(QMainWindow):
         self.remote_audio_channels_spin.setRange(1, 2)
         self.remote_audio_channels_spin.setValue(configur.getint('remote_audio', 'channels', fallback=1))
         remote_audio_settings_layout.addWidget(self.remote_audio_channels_spin, 4, 1)
+        # Server test button and status
+        self.remote_audio_test_button = QPushButton("Test Server Connection")
+        self.remote_audio_test_button.clicked.connect(self.test_remote_audio_server)
+        remote_audio_settings_layout.addWidget(self.remote_audio_test_button, 5, 0, 1, 2)
+        # Status label
+        self.remote_audio_status_label = QLabel("Server Status: Not tested")
+        self.remote_audio_status_label.setWordWrap(True)
+        self.remote_audio_status_label.setStyleSheet("QLabel{color: gray; font-size: 9pt;}")
+        remote_audio_settings_layout.addWidget(self.remote_audio_status_label, 6, 0, 1, 2)
         self.remote_audio_settings_box.setLayout(remote_audio_settings_layout)
         adv_settings_value_layout.addWidget(self.remote_audio_settings_box, 0, 4)
         # --- End Remote Audio Settings UI ---
@@ -3662,6 +3671,186 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             logging.error(f"Error refreshing status displays: {e}")
+
+    def test_remote_audio_server(self):
+        """Test if the Node.js remote server supports remote audio functionality"""
+        # Get server URL from config
+        server_url = configur.get('remote_server', 'url', fallback='http://localhost:5001')
+        
+        # Update status label to show testing
+        self.remote_audio_status_label.setText("Testing server connection...")
+        self.remote_audio_status_label.setStyleSheet("QLabel{color: blue; font-size: 9pt;}")
+        self.remote_audio_test_button.setEnabled(False)
+        
+        # Run test in a worker thread to avoid blocking UI
+        def test_worker():
+            try:
+                from urllib.parse import urlparse
+                
+                # Parse the server URL
+                parsed = urlparse(server_url)
+                base_url = f"{parsed.scheme}://{parsed.netloc}"
+                
+                # Test 1: Check if server is reachable
+                try:
+                    status_response = requests.get(f"{base_url}/status", timeout=5)
+                    if status_response.status_code != 200:
+                        return {
+                            'success': False,
+                            'message': f"Server responded with status code {status_response.status_code}",
+                            'details': []
+                        }
+                except requests.exceptions.ConnectionError:
+                    return {
+                        'success': False,
+                        'message': f"Could not connect to server at {base_url}",
+                        'details': ["• Check if the Node.js server is running", 
+                                   "• Verify the server URL in Remote Server settings",
+                                   "• Check firewall/network settings"]
+                    }
+                except requests.exceptions.Timeout:
+                    return {
+                        'success': False,
+                        'message': f"Connection timeout to server at {base_url}",
+                        'details': ["• Server may be overloaded or unreachable",
+                                   "• Check network connectivity"]
+                    }
+                except Exception as e:
+                    return {
+                        'success': False,
+                        'message': f"Error connecting to server: {str(e)}",
+                        'details': []
+                    }
+                
+                # Test 2: Check capabilities endpoint
+                try:
+                    capabilities_response = requests.get(f"{base_url}/capabilities", timeout=5)
+                    if capabilities_response.status_code != 200:
+                        return {
+                            'success': False,
+                            'message': f"Server does not support capabilities endpoint (status {capabilities_response.status_code})",
+                            'details': ["• Server may be running an older version",
+                                       "• Update the Node.js server to latest version"]
+                        }
+                    
+                    capabilities = capabilities_response.json()
+                    
+                    # Check if remote audio is supported
+                    details = []
+                    if 'features' in capabilities and 'remote_audio' in capabilities['features']:
+                        audio_features = capabilities['features']['remote_audio']
+                        if audio_features.get('enabled', False):
+                            details.append("✓ Remote Audio: Enabled")
+                            if audio_features.get('tx_audio', False):
+                                details.append("✓ TX Audio (Browser → Radio): Supported")
+                            else:
+                                details.append("✗ TX Audio: Not supported")
+                            if audio_features.get('rx_audio', False):
+                                details.append("✓ RX Audio (Radio → Browser): Supported")
+                            else:
+                                details.append("✗ RX Audio: Not supported")
+                            if audio_features.get('two_way', False):
+                                details.append("✓ Two-way Audio: Supported")
+                            else:
+                                details.append("✗ Two-way Audio: Not supported")
+                        else:
+                            return {
+                                'success': False,
+                                'message': "Server does not support Remote Audio feature",
+                                'details': ["• Remote audio is disabled on the server",
+                                           "• Check server configuration"]
+                            }
+                    else:
+                        return {
+                            'success': False,
+                            'message': "Server does not report Remote Audio capabilities",
+                            'details': ["• Server may be running an older version",
+                                       "• Update the Node.js server to latest version"]
+                        }
+                    
+                    # Check audio format compatibility
+                    if 'audio_formats' in capabilities:
+                        audio_formats = capabilities['audio_formats']
+                        configured_rate = self.remote_audio_samplerate_spin.value()
+                        configured_channels = self.remote_audio_channels_spin.value()
+                        
+                        if 'sample_rate' in audio_formats:
+                            supported_rates = audio_formats['sample_rate']
+                            if configured_rate in supported_rates:
+                                details.append(f"✓ Sample Rate {configured_rate} Hz: Supported")
+                            else:
+                                details.append(f"⚠ Sample Rate {configured_rate} Hz: Not in supported list {supported_rates}")
+                        
+                        if 'channels' in audio_formats:
+                            supported_channels = audio_formats['channels']
+                            if configured_channels in supported_channels:
+                                details.append(f"✓ Channels ({configured_channels}): Supported")
+                            else:
+                                details.append(f"⚠ Channels ({configured_channels}): Not in supported list {supported_channels}")
+                    
+                    # Check server version
+                    version = capabilities.get('version', 'Unknown')
+                    details.insert(0, f"Server Version: {version}")
+                    
+                    return {
+                        'success': True,
+                        'message': f"Server supports Remote Audio functionality",
+                        'details': details
+                    }
+                    
+                except requests.exceptions.Timeout:
+                    return {
+                        'success': False,
+                        'message': f"Timeout checking server capabilities",
+                        'details': ["• Server may be overloaded"]
+                    }
+                except ValueError as e:
+                    return {
+                        'success': False,
+                        'message': f"Invalid response from server: {str(e)}",
+                        'details': ["• Server may be running an incompatible version"]
+                    }
+                except Exception as e:
+                    return {
+                        'success': False,
+                        'message': f"Error checking capabilities: {str(e)}",
+                        'details': []
+                    }
+                    
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': f"Unexpected error: {str(e)}",
+                    'details': []
+                }
+        
+        def on_test_complete(result):
+            """Handle test completion and update UI"""
+            self.remote_audio_test_button.setEnabled(True)
+            
+            if result['success']:
+                self.remote_audio_status_label.setStyleSheet("QLabel{color: green; font-size: 9pt;}")
+                status_text = f"✓ {result['message']}\n"
+                if result['details']:
+                    status_text += "\n".join(result['details'])
+            else:
+                self.remote_audio_status_label.setStyleSheet("QLabel{color: red; font-size: 9pt;}")
+                status_text = f"✗ {result['message']}\n"
+                if result['details']:
+                    status_text += "\n".join(result['details'])
+            
+            self.remote_audio_status_label.setText(status_text)
+            logging.info(f"Remote audio server test completed: {result['message']}")
+        
+        # Run test in background thread
+        test_worker_obj = Worker(test_worker)
+        test_worker_obj.signals.result.connect(on_test_complete)
+        test_worker_obj.signals.error.connect(lambda error: on_test_complete({
+            'success': False,
+            'message': f"Test error: {error[1] if len(error) > 1 else 'Unknown error'}",
+            'details': []
+        }))
+        self.threadpool.start(test_worker_obj)
 
 class WorkerSignals(QObject):
     finished = Signal()
