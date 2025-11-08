@@ -28,6 +28,7 @@ from PySide6.QtCore import *
 from qt_material import apply_stylesheet,list_themes
 from serial.tools import list_ports
 from lib.pass_recorder import PassRecorder
+from lib.audio_streamer import AudioStreamer
 import sounddevice as sd
 from lib import rotator
 from lib.sat_utils import *
@@ -1360,6 +1361,111 @@ class MainWindow(QMainWindow):
         adv_settings_value_layout.addWidget(self.passrec_settings_box, 0,3)
         # --- End Pass Recording Settings UI ---
         
+        # --- Remote Audio Settings UI ---
+        self.remote_audio_settings_box = QGroupBox("Remote Audio")
+        self.remote_audio_settings_box.setStyleSheet("QGroupBox{padding-top:15px;padding-bottom:5px; margin-top:5px}")
+        remote_audio_settings_layout = QGridLayout()
+        # Enable checkbox
+        self.remote_audio_enable_checkbox = QCheckBox("Enable Remote Audio")
+        self.remote_audio_enable_checkbox.setChecked(configur.getboolean('remote_audio', 'enabled', fallback=False))
+        remote_audio_settings_layout.addWidget(self.remote_audio_enable_checkbox, 0, 0, 1, 2)
+        # TX Soundcard dropdown (output devices)
+        self.remote_audio_tx_soundcard_label = QLabel("TX Soundcard:")
+        remote_audio_settings_layout.addWidget(self.remote_audio_tx_soundcard_label, 1, 0)
+        self.remote_audio_tx_soundcard_dropdown = QComboBox()
+        self.remote_audio_tx_soundcard_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        devices = sd.query_devices()
+        output_devices = [(i, d) for i, d in enumerate(devices) if d.get('max_output_channels', 0) > 0]
+        for idx, dev in output_devices:
+            hostapi = sd.query_hostapis(dev['hostapi'])['name'] if 'hostapi' in dev else ''
+            friendly_name = dev['name'].replace("[", "").replace("]", "").strip()
+            if "Default" in friendly_name or "default" in friendly_name:
+                label = f"Default Device"
+            else:
+                label = f"{friendly_name}"
+            tech_details = f"{dev['name']} [{hostapi}] (index {idx})"
+            self.remote_audio_tx_soundcard_dropdown.addItem(label, idx)
+            self.remote_audio_tx_soundcard_dropdown.setItemData(self.remote_audio_tx_soundcard_dropdown.count()-1, dev['name'], Qt.UserRole + 1)
+            self.remote_audio_tx_soundcard_dropdown.setItemData(self.remote_audio_tx_soundcard_dropdown.count()-1, tech_details, Qt.ToolTipRole)
+        # Set current TX device
+        current_tx_card = configur.get('remote_audio', 'tx_soundcard', fallback='default')
+        if current_tx_card == 'default':
+            self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(0)
+        else:
+            try:
+                found = False
+                for i in range(self.remote_audio_tx_soundcard_dropdown.count()):
+                    if self.remote_audio_tx_soundcard_dropdown.itemData(i, Qt.UserRole + 1) == current_tx_card:
+                        self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(i)
+                        found = True
+                        break
+                if not found:
+                    try:
+                        index = int(current_tx_card)
+                        if 0 <= index < self.remote_audio_tx_soundcard_dropdown.count():
+                            self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(index)
+                    except:
+                        self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(0)
+            except:
+                self.remote_audio_tx_soundcard_dropdown.setCurrentIndex(0)
+        remote_audio_settings_layout.addWidget(self.remote_audio_tx_soundcard_dropdown, 1, 1)
+        # RX Soundcard dropdown (input devices, optional)
+        self.remote_audio_rx_soundcard_label = QLabel("RX Soundcard (optional):")
+        remote_audio_settings_layout.addWidget(self.remote_audio_rx_soundcard_label, 2, 0)
+        self.remote_audio_rx_soundcard_dropdown = QComboBox()
+        self.remote_audio_rx_soundcard_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        input_devices = [(i, d) for i, d in enumerate(devices) if d.get('max_input_channels', 0) > 0]
+        for idx, dev in input_devices:
+            hostapi = sd.query_hostapis(dev['hostapi'])['name'] if 'hostapi' in dev else ''
+            friendly_name = dev['name'].replace("[", "").replace("]", "").strip()
+            if "Default" in friendly_name or "default" in friendly_name:
+                label = f"Default Device"
+            else:
+                label = f"{friendly_name}"
+            tech_details = f"{dev['name']} [{hostapi}] (index {idx})"
+            self.remote_audio_rx_soundcard_dropdown.addItem(label, idx)
+            self.remote_audio_rx_soundcard_dropdown.setItemData(self.remote_audio_rx_soundcard_dropdown.count()-1, dev['name'], Qt.UserRole + 1)
+            self.remote_audio_rx_soundcard_dropdown.setItemData(self.remote_audio_rx_soundcard_dropdown.count()-1, tech_details, Qt.ToolTipRole)
+        # Set current RX device
+        current_rx_card = configur.get('remote_audio', 'rx_soundcard', fallback='default')
+        if current_rx_card == 'default':
+            self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(0)
+        else:
+            try:
+                found = False
+                for i in range(self.remote_audio_rx_soundcard_dropdown.count()):
+                    if self.remote_audio_rx_soundcard_dropdown.itemData(i, Qt.UserRole + 1) == current_rx_card:
+                        self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(i)
+                        found = True
+                        break
+                if not found:
+                    try:
+                        index = int(current_rx_card)
+                        if 0 <= index < self.remote_audio_rx_soundcard_dropdown.count():
+                            self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(index)
+                    except:
+                        self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(0)
+            except:
+                self.remote_audio_rx_soundcard_dropdown.setCurrentIndex(0)
+        remote_audio_settings_layout.addWidget(self.remote_audio_rx_soundcard_dropdown, 2, 1)
+        # Sample rate
+        self.remote_audio_samplerate_label = QLabel("Sample Rate:")
+        remote_audio_settings_layout.addWidget(self.remote_audio_samplerate_label, 3, 0)
+        self.remote_audio_samplerate_spin = QSpinBox()
+        self.remote_audio_samplerate_spin.setRange(8000, 192000)
+        self.remote_audio_samplerate_spin.setValue(configur.getint('remote_audio', 'sample_rate', fallback=44100))
+        remote_audio_settings_layout.addWidget(self.remote_audio_samplerate_spin, 3, 1)
+        # Channels
+        self.remote_audio_channels_label = QLabel("Channels:")
+        remote_audio_settings_layout.addWidget(self.remote_audio_channels_label, 4, 0)
+        self.remote_audio_channels_spin = QSpinBox()
+        self.remote_audio_channels_spin.setRange(1, 2)
+        self.remote_audio_channels_spin.setValue(configur.getint('remote_audio', 'channels', fallback=1))
+        remote_audio_settings_layout.addWidget(self.remote_audio_channels_spin, 4, 1)
+        self.remote_audio_settings_box.setLayout(remote_audio_settings_layout)
+        adv_settings_value_layout.addWidget(self.remote_audio_settings_box, 0, 4)
+        # --- End Remote Audio Settings UI ---
+        
         ###  UI Layout / Tab Widget
         self.tab_widget = QTabWidget()
         self.tab_overview = QWidget()
@@ -1391,6 +1497,11 @@ class MainWindow(QMainWindow):
         self._last_cloudlog_F = None
         self._last_cloudlog_I = None
         self.pass_recorder = PassRecorder(configur)
+        # Initialize audio streamer if remote audio is enabled
+        if configur.has_section('remote_audio') and configur.getboolean('remote_audio', 'enabled', fallback=False):
+            self.audio_streamer = AudioStreamer(configur, self.pass_recorder)
+        else:
+            self.audio_streamer = None
         self.gps_enable_checkbox.toggled.connect(self.toggle_gps_qth)
         self.gps_reader = None
         self.gps_last_port = None
@@ -1556,6 +1667,41 @@ class MainWindow(QMainWindow):
         configur['passrecording']['channels'] = str(self.passrec_channels_spin.value())
         configur['passrecording']['bit_depth'] = str(self.passrec_bitdepth_spin.value())
 
+        # Remote Audio settings
+        if not configur.has_section('remote_audio'):
+            configur.add_section('remote_audio')
+        configur['remote_audio']['enabled'] = str(self.remote_audio_enable_checkbox.isChecked())
+        # Store TX device name
+        selected_tx_idx = self.remote_audio_tx_soundcard_dropdown.currentIndex()
+        if selected_tx_idx >= 0:
+            tx_device_name = self.remote_audio_tx_soundcard_dropdown.itemData(selected_tx_idx, Qt.UserRole + 1)
+            if tx_device_name:
+                configur['remote_audio']['tx_soundcard'] = tx_device_name
+            else:
+                tx_device_idx = self.remote_audio_tx_soundcard_dropdown.itemData(selected_tx_idx)
+                if tx_device_idx is not None:
+                    configur['remote_audio']['tx_soundcard'] = str(tx_device_idx)
+                else:
+                    configur['remote_audio']['tx_soundcard'] = 'default'
+        else:
+            configur['remote_audio']['tx_soundcard'] = 'default'
+        # Store RX device name
+        selected_rx_idx = self.remote_audio_rx_soundcard_dropdown.currentIndex()
+        if selected_rx_idx >= 0:
+            rx_device_name = self.remote_audio_rx_soundcard_dropdown.itemData(selected_rx_idx, Qt.UserRole + 1)
+            if rx_device_name:
+                configur['remote_audio']['rx_soundcard'] = rx_device_name
+            else:
+                rx_device_idx = self.remote_audio_rx_soundcard_dropdown.itemData(selected_rx_idx)
+                if rx_device_idx is not None:
+                    configur['remote_audio']['rx_soundcard'] = str(rx_device_idx)
+                else:
+                    configur['remote_audio']['rx_soundcard'] = 'default'
+        else:
+            configur['remote_audio']['rx_soundcard'] = 'default'
+        configur['remote_audio']['sample_rate'] = str(self.remote_audio_samplerate_spin.value())
+        configur['remote_audio']['channels'] = str(self.remote_audio_channels_spin.value())
+
         # GPS QTH settings
         configur['qth']['use_gps'] = str(self.gps_enable_checkbox.isChecked())
         configur['qth']['gps_port'] = self.gps_serialport_val.currentText()
@@ -1567,6 +1713,25 @@ class MainWindow(QMainWindow):
         with open('config.ini', 'w') as configfile:
             configur.write(configfile)
         self.pass_recorder.update_config(configur)
+        # Update audio streamer config if it exists, or initialize if newly enabled
+        if configur.has_section('remote_audio') and configur.getboolean('remote_audio', 'enabled', fallback=False):
+            if self.audio_streamer:
+                self.audio_streamer.update_config(configur)
+            else:
+                # Initialize audio streamer if it was just enabled
+                self.audio_streamer = AudioStreamer(configur, self.pass_recorder)
+                # Connect to remote_client if available
+                if REMOTE_ENABLED and hasattr(self, 'remote_client'):
+                    from lib import remote_client
+                    remote_client.remote_client.audio_streamer = self.audio_streamer
+        else:
+            # Stop and cleanup if disabled
+            if self.audio_streamer:
+                self.audio_streamer.stop_streaming()
+                self.audio_streamer = None
+                if REMOTE_ENABLED:
+                    from lib import remote_client
+                    remote_client.remote_client.audio_streamer = None
 
 
     def change_theme(self, theme_name):

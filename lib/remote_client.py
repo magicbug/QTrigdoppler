@@ -21,6 +21,7 @@ class RemoteClient:
                                   reconnection_delay=1, reconnection_delay_max=5)
         self.connected = False
         self.main_window = None
+        self.audio_streamer = None  # Reference to AudioStreamer instance
         self.heartbeat_thread = None
         self.should_run_heartbeat = False
         self.reconnecting = False
@@ -40,10 +41,20 @@ class RemoteClient:
         self.sio.on('cmd_park_rotator', self.on_cmd_park_rotator)
         self.sio.on('cmd_stop_rotator', self.on_cmd_stop_rotator)
         self.sio.on('cmd_get_transponder_list', self.on_cmd_get_transponder_list)
+        
+        # Audio stream handlers
+        self.sio.on('cmd_start_audio_tx', self.on_cmd_start_audio_tx)
+        self.sio.on('cmd_stop_audio_tx', self.on_cmd_stop_audio_tx)
+        self.sio.on('cmd_audio_data', self.on_cmd_audio_data)
+        self.sio.on('cmd_mute_tx', self.on_cmd_mute_tx)
+        self.sio.on('cmd_unmute_tx', self.on_cmd_unmute_tx)
     
     def register_window(self, window):
         """Register the main application window"""
         self.main_window = window
+        # Set audio_streamer reference if available
+        if hasattr(window, 'audio_streamer'):
+            self.audio_streamer = window.audio_streamer
         # Send initial data if already connected
         if self.connected:
             self.send_satellite_list()
@@ -434,6 +445,109 @@ class RemoteClient:
         satellite_name = data.get('satellite')
         if satellite_name:
             self.send_transponder_list(satellite_name)
+    
+    # Audio stream handlers
+    def on_cmd_start_audio_tx(self, data=None):
+        """Handle start audio transmission command from server"""
+        if not self.audio_streamer:
+            logging.warning("Audio streamer not available")
+            self.send_audio_error("Audio streamer not initialized")
+            return
+        
+        try:
+            if self.audio_streamer.start_streaming():
+                self.send_audio_tx_status(active=True, muted=self.audio_streamer.is_muted())
+            else:
+                self.send_audio_error("Failed to start audio streaming")
+        except Exception as e:
+            logging.error(f"Error starting audio TX: {e}")
+            self.send_audio_error(f"Error starting audio TX: {str(e)}")
+    
+    def on_cmd_stop_audio_tx(self, data=None):
+        """Handle stop audio transmission command from server"""
+        if not self.audio_streamer:
+            return
+        
+        try:
+            self.audio_streamer.stop_streaming()
+            self.send_audio_tx_status(active=False, muted=False)
+        except Exception as e:
+            logging.error(f"Error stopping audio TX: {e}")
+            self.send_audio_error(f"Error stopping audio TX: {str(e)}")
+    
+    def on_cmd_audio_data(self, data):
+        """Handle audio data from server"""
+        if not self.audio_streamer or not self.audio_streamer.is_active():
+            return
+        
+        try:
+            import numpy as np
+            # Data should be binary PCM 16-bit signed integer
+            # Socket.IO may send it as bytes, list, or array
+            if isinstance(data, bytes):
+                # Convert bytes to numpy array
+                audio_array = np.frombuffer(data, dtype=np.int16)
+            elif isinstance(data, bytearray):
+                # Convert bytearray to numpy array
+                audio_array = np.frombuffer(bytes(data), dtype=np.int16)
+            elif isinstance(data, (list, tuple)):
+                # Convert list/tuple to numpy array
+                audio_array = np.array(data, dtype=np.int16)
+            elif hasattr(data, '__array__'):
+                # Handle numpy arrays or array-like objects
+                audio_array = np.asarray(data, dtype=np.int16)
+            else:
+                logging.warning(f"Unexpected audio data type: {type(data)}")
+                return
+            
+            self.audio_streamer.add_audio_data(audio_array)
+        except Exception as e:
+            logging.error(f"Error processing audio data: {e}")
+    
+    def on_cmd_mute_tx(self, data=None):
+        """Handle mute TX command from server"""
+        if not self.audio_streamer:
+            return
+        
+        try:
+            self.audio_streamer.mute()
+            self.send_audio_tx_status(active=self.audio_streamer.is_active(), muted=True)
+        except Exception as e:
+            logging.error(f"Error muting audio TX: {e}")
+            self.send_audio_error(f"Error muting audio TX: {str(e)}")
+    
+    def on_cmd_unmute_tx(self, data=None):
+        """Handle unmute TX command from server"""
+        if not self.audio_streamer:
+            return
+        
+        try:
+            self.audio_streamer.unmute()
+            self.send_audio_tx_status(active=self.audio_streamer.is_active(), muted=False)
+        except Exception as e:
+            logging.error(f"Error unmuting audio TX: {e}")
+            self.send_audio_error(f"Error unmuting audio TX: {str(e)}")
+    
+    def send_audio_tx_status(self, active=False, muted=False):
+        """Send audio TX status update to server"""
+        if self.connected:
+            try:
+                self.sio.emit('audio_tx_status', {
+                    'active': active,
+                    'muted': muted
+                })
+            except Exception as e:
+                logging.error(f"Error sending audio TX status: {e}")
+    
+    def send_audio_error(self, error_message):
+        """Send audio error notification to server"""
+        if self.connected:
+            try:
+                self.sio.emit('audio_error', {
+                    'error': error_message
+                })
+            except Exception as e:
+                logging.error(f"Error sending audio error: {e}")
 
 # Create a singleton instance
 remote_client = RemoteClient()

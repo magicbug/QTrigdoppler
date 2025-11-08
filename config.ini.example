@@ -103,3 +103,11 @@ min_elevation = 10.0                       # Minimum elevation to start recordin
 sample_rate = 44100                        # Audio sample rate (Hz)
 channels = 1                               # Number of audio channels (1=mono, 2=stereo)
 bit_depth = 16                             # Audio bit depth (8, 16, 24, 32)
+
+[remote_audio]
+# Browser-based remote audio transmission configuration
+enabled = False                            # Enable remote audio transmission (True/False)
+tx_soundcard = default                     # TX audio output device (to radio, name or 'default')
+rx_soundcard = default                     # RX audio input device (from radio, optional, name or 'default')
+sample_rate = 44100                        # Audio sample rate (Hz)
+channels = 1                               # Number of audio channels (1=mono, 2=stereo)

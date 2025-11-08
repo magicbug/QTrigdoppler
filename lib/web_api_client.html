@@ -41,6 +41,19 @@
             border-radius: 5px;
             border: 1px solid #ddd;
         }
+        /* Mobile-responsive styles */
+        @media (max-width: 768px) {
+            .control-panel {
+                flex-direction: column;
+            }
+            .control-section {
+                min-width: 100%;
+            }
+            #muteUnmuteBtn {
+                min-height: 100px !important;
+                font-size: 28px !important;
+            }
+        }
         .info-table {
             width: 100%;
             border-collapse: collapse;
@@ -152,6 +165,23 @@
                 <button id="toggleFreqBtn" onclick="toggleFrequencyUpdates()" disabled>Pause Frequency Updates</button>
             </div>
         </div>
+        
+        <div class="control-section" id="audio-control-section">
+            <h3>Remote Audio Transmission</h3>
+            <label for="micDevice">Microphone:</label>
+            <select id="micDevice" style="width: 100%; margin-bottom: 10px;">
+                <option value="">Loading devices...</option>
+            </select>
+            <div id="audio-status" style="margin: 10px 0; padding: 10px; background-color: #f0f0f0; border-radius: 5px; text-align: center;">
+                Ready
+            </div>
+            <button id="muteUnmuteBtn" onclick="toggleMute()" style="width: 100%; padding: 20px; font-size: 24px; font-weight: bold; border-radius: 10px; background-color: #4CAF50; color: white; border: none; cursor: pointer; min-height: 80px;">
+                MUTE
+            </button>
+            <button id="startStopAudioBtn" onclick="toggleAudioTransmission()" style="width: 100%; padding: 15px; margin-top: 10px; font-size: 18px; border-radius: 5px; background-color: #2196F3; color: white; border: none; cursor: pointer;">
+                Start Audio TX
+            </button>
+        </div>
     </div>
     
     <h3>Status and Log</h3>
@@ -179,6 +209,15 @@
         var subtoneDirty = false; // Track if user is editing subtone
         var rxOffsetDirty = false; // Track if user is editing RX Offset
         var transponderDirty = false; // Track if user is editing transponder
+
+        // Audio capture variables
+        var audioContext = null;
+        var mediaStream = null;
+        var audioSource = null;
+        var processor = null;
+        var isAudioTransmitting = false;
+        var isMuted = false;
+        var audioChunkSize = 4096; // Samples per chunk
 
         // Display the current server
         serverDisplay.textContent = "Server: " + serverUrl;
@@ -226,6 +265,11 @@
                     statusDiv.textContent = 'Status: Disconnected';
                     connectionIndicator.classList.remove('connected');
                     logDebug('Socket disconnected');
+                    
+                    // Clean up audio transmission on disconnect
+                    if (isAudioTransmitting) {
+                        stopAudioTransmission();
+                    }
                     
                     // Disable buttons on disconnect
                     document.getElementById('startTrackingBtn').disabled = true;
@@ -349,6 +393,29 @@
                     logDebug('Has SQFILE: ' + data.has_SQFILE + ' (' + data.SQFILE_value + ')');
                     logDebug('Has configur: ' + data.has_configur + ' (' + data.configur_value + ')');
                     logDebug('Has subtone combo: ' + data.has_subtone_combo + ' (' + data.subtone_value + ')');
+                });
+                
+                // Handle audio status updates from server
+                socket.on('audio_tx_status', function(data) {
+                    logDebug('Audio TX status: ' + JSON.stringify(data));
+                    if (data.active !== undefined) {
+                        if (!data.active && isAudioTransmitting) {
+                            // Server stopped audio, clean up local state
+                            stopAudioTransmission();
+                        }
+                    }
+                    if (data.muted !== undefined) {
+                        isMuted = data.muted;
+                        updateAudioUI();
+                    }
+                });
+                
+                socket.on('audio_error', function(data) {
+                    logDebug('Audio error: ' + data.error);
+                    updateAudioStatus('Error: ' + data.error);
+                    if (isAudioTransmitting) {
+                        stopAudioTransmission();
+                    }
                 });
             } catch (e) {
                 logDebug('Error creating socket: ' + e.message);
@@ -773,6 +840,259 @@
                 logDebug('Emit: resume_frequency_updates');
                 socket.emit('resume_frequency_updates');
             }
+        }
+        
+        // Audio capture and streaming functions
+        function enumerateAudioDevices() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                logDebug('Audio device enumeration not supported');
+                return;
+            }
+            
+            navigator.mediaDevices.enumerateDevices()
+                .then(function(devices) {
+                    var micSelect = document.getElementById('micDevice');
+                    micSelect.innerHTML = '';
+                    
+                    var audioInputs = devices.filter(function(device) {
+                        return device.kind === 'audioinput';
+                    });
+                    
+                    if (audioInputs.length === 0) {
+                        micSelect.innerHTML = '<option value="">No microphones found</option>';
+                        return;
+                    }
+                    
+                    audioInputs.forEach(function(device, index) {
+                        var option = document.createElement('option');
+                        option.value = device.deviceId;
+                        option.text = device.label || 'Microphone ' + (index + 1);
+                        micSelect.appendChild(option);
+                    });
+                    
+                    logDebug('Found ' + audioInputs.length + ' audio input devices');
+                })
+                .catch(function(err) {
+                    logDebug('Error enumerating audio devices: ' + err);
+                });
+        }
+        
+        function toggleAudioTransmission() {
+            if (!socket || !socket.connected) {
+                logDebug('Not connected to server');
+                return;
+            }
+            
+            if (isAudioTransmitting) {
+                stopAudioTransmission();
+            } else {
+                startAudioTransmission();
+            }
+        }
+        
+        function startAudioTransmission() {
+            if (isAudioTransmitting) {
+                return;
+            }
+            
+            var micSelect = document.getElementById('micDevice');
+            var deviceId = micSelect.value;
+            
+            if (!deviceId) {
+                alert('Please select a microphone device');
+                return;
+            }
+            
+            var constraints = {
+                audio: {
+                    deviceId: deviceId ? { exact: deviceId } : undefined,
+                    sampleRate: 44100,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            };
+            
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(function(stream) {
+                    mediaStream = stream;
+                    
+                    // Create audio context
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: 44100
+                    });
+                    
+                    // Create source from stream
+                    audioSource = audioContext.createMediaStreamSource(stream);
+                    
+                    // Create script processor for audio capture
+                    processor = audioContext.createScriptProcessor(audioChunkSize, 1, 1);
+                    
+                    processor.onaudioprocess = function(e) {
+                        if (!isAudioTransmitting || !socket || !socket.connected) {
+                            return;
+                        }
+                        
+                        if (isMuted) {
+                            return; // Don't send audio when muted
+                        }
+                        
+                        var inputData = e.inputBuffer.getChannelData(0);
+                        
+                        // Convert float32 to int16 PCM
+                        var pcmData = new Int16Array(inputData.length);
+                        for (var i = 0; i < inputData.length; i++) {
+                            var s = Math.max(-1, Math.min(1, inputData[i]));
+                            pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                        }
+                        
+                        // Send binary audio data via WebSocket
+                        try {
+                            socket.emit('audio_data', pcmData.buffer);
+                        } catch (err) {
+                            logDebug('Error sending audio data: ' + err);
+                        }
+                    };
+                    
+                    // Connect processor
+                    audioSource.connect(processor);
+                    processor.connect(audioContext.destination);
+                    
+                    // Notify server to start audio TX
+                    socket.emit('start_audio_tx');
+                    
+                    isAudioTransmitting = true;
+                    updateAudioUI();
+                    logDebug('Audio transmission started');
+                })
+                .catch(function(err) {
+                    logDebug('Error accessing microphone: ' + err);
+                    alert('Error accessing microphone: ' + err.message);
+                    updateAudioStatus('Error: ' + err.message);
+                });
+        }
+        
+        function stopAudioTransmission() {
+            if (!isAudioTransmitting) {
+                return;
+            }
+            
+            // Notify server to stop audio TX
+            if (socket && socket.connected) {
+                socket.emit('stop_audio_tx');
+            }
+            
+            // Stop audio processing
+            if (processor) {
+                processor.disconnect();
+                processor = null;
+            }
+            
+            if (audioSource) {
+                audioSource.disconnect();
+                audioSource = null;
+            }
+            
+            if (audioContext) {
+                audioContext.close().catch(function(err) {
+                    logDebug('Error closing audio context: ' + err);
+                });
+                audioContext = null;
+            }
+            
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(function(track) {
+                    track.stop();
+                });
+                mediaStream = null;
+            }
+            
+            isAudioTransmitting = false;
+            isMuted = false;
+            updateAudioUI();
+            logDebug('Audio transmission stopped');
+        }
+        
+        function toggleMute() {
+            if (!isAudioTransmitting || !socket || !socket.connected) {
+                return;
+            }
+            
+            isMuted = !isMuted;
+            
+            if (isMuted) {
+                socket.emit('mute_tx');
+            } else {
+                socket.emit('unmute_tx');
+            }
+            
+            updateAudioUI();
+            logDebug('Audio ' + (isMuted ? 'muted' : 'unmuted'));
+        }
+        
+        function updateAudioUI() {
+            var muteBtn = document.getElementById('muteUnmuteBtn');
+            var startStopBtn = document.getElementById('startStopAudioBtn');
+            var audioStatus = document.getElementById('audio-status');
+            
+            if (isAudioTransmitting) {
+                startStopBtn.textContent = 'Stop Audio TX';
+                startStopBtn.style.backgroundColor = '#f44336';
+                
+                if (isMuted) {
+                    muteBtn.textContent = 'UNMUTE';
+                    muteBtn.style.backgroundColor = '#f44336';
+                    audioStatus.textContent = 'MUTED';
+                    audioStatus.style.backgroundColor = '#ff9800';
+                } else {
+                    muteBtn.textContent = 'MUTE';
+                    muteBtn.style.backgroundColor = '#4CAF50';
+                    audioStatus.textContent = 'TRANSMITTING';
+                    audioStatus.style.backgroundColor = '#4CAF50';
+                }
+                
+                muteBtn.disabled = false;
+            } else {
+                startStopBtn.textContent = 'Start Audio TX';
+                startStopBtn.style.backgroundColor = '#2196F3';
+                muteBtn.textContent = 'MUTE';
+                muteBtn.style.backgroundColor = '#cccccc';
+                muteBtn.disabled = true;
+                audioStatus.textContent = 'Ready';
+                audioStatus.style.backgroundColor = '#f0f0f0';
+            }
+        }
+        
+        function updateAudioStatus(message) {
+            var audioStatus = document.getElementById('audio-status');
+            audioStatus.textContent = message;
+        }
+        
+        // Enumerate audio devices on page load
+        function initAudioDevices() {
+            if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                // Request permission first (required for device labels)
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(function(stream) {
+                        enumerateAudioDevices();
+                        // Stop the stream immediately after enumeration
+                        stream.getTracks().forEach(function(track) {
+                            track.stop();
+                        });
+                    })
+                    .catch(function(err) {
+                        logDebug('Error requesting microphone permission: ' + err);
+                        enumerateAudioDevices(); // Still try to enumerate without labels
+                    });
+            }
+        }
+        
+        // Initialize audio devices when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initAudioDevices);
+        } else {
+            initAudioDevices();
         }
     </script>
 </body>

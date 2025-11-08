@@ -53,6 +53,9 @@ const connectedClients = new Set();
 let lastHeartbeat = Date.now();
 const serverStartTime = Date.now();
 
+// Audio session management (one active session at a time)
+let activeAudioSessionId = null;
+
 // Serve web client
 app.get('/', (req, res) => {
     const webClientPath = path.join(__dirname, 'lib', 'web_api_client.html');
@@ -220,7 +223,80 @@ io.on('connection', (socket) => {
             qtrigClientId = null;
             console.log("QTrigdoppler client disconnected!");
         }
+        // Clean up audio session if this client was active
+        if (socket.id === activeAudioSessionId) {
+            activeAudioSessionId = null;
+            if (qtrigClientId) {
+                io.to(qtrigClientId).emit('cmd_stop_audio_tx');
+            }
+        }
         console.log(`Client disconnected: ${socket.id} (Total: ${connectedClients.size})`);
+    });
+    
+    // Audio streaming handlers from browser clients
+    socket.on('start_audio_tx', () => {
+        // Only allow one active audio session at a time
+        if (activeAudioSessionId && activeAudioSessionId !== socket.id) {
+            socket.emit('audio_error', { error: 'Another audio session is already active' });
+            return;
+        }
+        
+        if (qtrigClientId) {
+            activeAudioSessionId = socket.id;
+            io.to(qtrigClientId).emit('cmd_start_audio_tx');
+            console.log(`Audio TX started by client ${socket.id}`);
+        } else {
+            socket.emit('audio_error', { error: 'QTrigdoppler client not connected' });
+        }
+    });
+    
+    socket.on('stop_audio_tx', () => {
+        if (socket.id === activeAudioSessionId) {
+            activeAudioSessionId = null;
+            if (qtrigClientId) {
+                io.to(qtrigClientId).emit('cmd_stop_audio_tx');
+            }
+            console.log(`Audio TX stopped by client ${socket.id}`);
+        }
+    });
+    
+    socket.on('audio_data', (data) => {
+        // Only relay audio if this is the active session
+        if (socket.id === activeAudioSessionId && qtrigClientId) {
+            // Relay binary audio data to QTrigdoppler client
+            io.to(qtrigClientId).emit('cmd_audio_data', data);
+        }
+    });
+    
+    socket.on('mute_tx', () => {
+        if (socket.id === activeAudioSessionId && qtrigClientId) {
+            io.to(qtrigClientId).emit('cmd_mute_tx');
+        }
+    });
+    
+    socket.on('unmute_tx', () => {
+        if (socket.id === activeAudioSessionId && qtrigClientId) {
+            io.to(qtrigClientId).emit('cmd_unmute_tx');
+        }
+    });
+    
+    // Audio status updates from QTrigdoppler client
+    socket.on('audio_tx_status', (data) => {
+        // Broadcast status to all clients (or just the active audio session)
+        if (activeAudioSessionId) {
+            io.to(activeAudioSessionId).emit('audio_tx_status', data);
+        }
+        // Also broadcast to all clients for UI updates
+        io.emit('audio_tx_status', data);
+    });
+    
+    socket.on('audio_error', (data) => {
+        // Send error to active audio session if any
+        if (activeAudioSessionId) {
+            io.to(activeAudioSessionId).emit('audio_error', data);
+        }
+        // Also broadcast to all clients
+        io.emit('audio_error', data);
     });
 });
 
