@@ -3725,10 +3725,19 @@ class MainWindow(QMainWindow):
                 # Test 2: Check capabilities endpoint
                 try:
                     capabilities_response = requests.get(f"{base_url}/capabilities", timeout=5)
-                    if capabilities_response.status_code != 200:
+                    if capabilities_response.status_code == 404:
                         return {
                             'success': False,
-                            'message': f"Server does not support capabilities endpoint (status {capabilities_response.status_code})",
+                            'message': f"Server does not support Remote Audio capabilities endpoint",
+                            'details': ["• The /capabilities endpoint is not available on this server",
+                                       "• This server version does not support Remote Audio features",
+                                       "• Update the Node.js server (remote_server.js) to the latest version",
+                                       "• The server needs the /capabilities endpoint added"]
+                        }
+                    elif capabilities_response.status_code != 200:
+                        return {
+                            'success': False,
+                            'message': f"Server returned error for capabilities endpoint (status {capabilities_response.status_code})",
                             'details': ["• Server may be running an older version",
                                        "• Update the Node.js server to latest version"]
                         }
